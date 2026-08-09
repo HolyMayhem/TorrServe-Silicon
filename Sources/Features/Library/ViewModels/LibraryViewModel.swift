@@ -2,124 +2,7 @@ import AppKit
 import Foundation
 import UniformTypeIdentifiers
 
-private let libraryPlayerKey = "LibraryPreferredPlayer"
-private let libraryCustomPlayerPathKey = "LibraryCustomPlayerPath"
-private let libraryPlayerSetupCompletedKey = "LibraryPlayerSetupCompleted"
-private let libraryDisplayModeKey = "LibraryDisplayMode"
 
-enum LibraryDisplayMode: String, CaseIterable, Identifiable {
-    case compact
-    case posters
-    case cards
-
-    var id: String { rawValue }
-
-    func title(language: AppLanguage) -> String {
-        switch self {
-        case .compact:
-            return language == .russian ? "Список" : "List"
-        case .posters:
-            return language == .russian ? "Постеры" : "Posters"
-        case .cards:
-            return language == .russian ? "Карточки" : "Cards"
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .compact: return "sidebar.left"
-        case .posters: return "square.grid.2x2"
-        case .cards: return "rectangle.grid.1x2"
-        }
-    }
-}
-
-enum ExternalPlayerChoice: String, CaseIterable, Identifiable {
-    case quickTime
-    case iina
-    case vlc
-    case infuse
-    case systemDefault
-    case custom
-
-    var id: String { rawValue }
-
-    func title(language: AppLanguage) -> String {
-        switch self {
-        case .quickTime:
-            return "QuickTime"
-        case .iina:
-            return "IINA"
-        case .vlc:
-            return "VLC"
-        case .infuse:
-            return "Infuse"
-        case .systemDefault:
-            return language == .russian ? "По умолчанию macOS" : "macOS Default"
-        case .custom:
-            return language == .russian ? "Другое приложение…" : "Other app…"
-        }
-    }
-
-    var bundleIdentifier: String? {
-        switch self {
-        case .quickTime: return "com.apple.QuickTimePlayerX"
-        case .iina: return "com.colliderli.iina"
-        case .vlc: return "org.videolan.vlc"
-        case .infuse: return "com.firecore.infuse"
-        case .systemDefault, .custom: return nil
-        }
-    }
-
-    var downloadURL: URL? {
-        switch self {
-        case .iina:
-            return URL(string: "https://iina.io/download/")
-        case .vlc:
-            return URL(string: "https://www.videolan.org/vlc/download-macosx.html")
-        case .infuse:
-            return URL(string: "https://apps.apple.com/app/infuse/id1136220934")
-        default:
-            return nil
-        }
-    }
-}
-
-struct DetectedPlayer: Identifiable, Equatable {
-    let choice: ExternalPlayerChoice
-    let applicationURL: URL?
-
-    var id: String { choice.id }
-    var isInstalled: Bool { applicationURL != nil }
-}
-
-enum PlayerDetector {
-    static let featuredChoices: [ExternalPlayerChoice] = [.iina, .vlc, .infuse]
-
-    static func detectFeaturedPlayers() -> [DetectedPlayer] {
-        featuredChoices.map { choice in
-            DetectedPlayer(
-                choice: choice,
-                applicationURL: choice.bundleIdentifier.flatMap {
-                    NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0)
-                }
-            )
-        }
-    }
-
-    static func applicationURL(for choice: ExternalPlayerChoice) -> URL? {
-        guard let bundleIdentifier = choice.bundleIdentifier else { return nil }
-        return NSWorkspace.shared.urlForApplication(
-            withBundleIdentifier: bundleIdentifier
-        )
-    }
-}
-
-struct LibraryAlert: Identifiable {
-    let id = UUID()
-    let title: String
-    let message: String
-}
 
 @MainActor
 final class LibraryViewModel: ObservableObject {
@@ -145,7 +28,7 @@ final class LibraryViewModel: ObservableObject {
 
     var onPlayerChanged: ((ExternalPlayerChoice) -> Void)?
 
-    private let api: NativeTorrServerAPI
+    let api: NativeTorrServerAPI
     private let metadataStore: LibraryMetadataStore
     private let metadataResolver: MetadataResolver
     private let metadataSettings: MetadataSettingsStore
@@ -427,99 +310,6 @@ final class LibraryViewModel: ObservableObject {
         remove(torrents)
     }
 
-    func play(
-        file: NativeTorrentFile,
-        language: AppLanguage
-    ) {
-        guard let torrent = selectedTorrent else { return }
-        play(torrent: torrent, file: file, using: playerChoice, language: language)
-    }
-
-    func playFirstFile(
-        in torrent: NativeTorrent,
-        using choice: ExternalPlayerChoice? = nil,
-        language: AppLanguage
-    ) {
-        guard let file = torrent.playableFiles.first else { return }
-        play(torrent: torrent, file: file, using: choice ?? playerChoice, language: language)
-    }
-
-    @discardableResult
-    func playSelectedFirstFile(language: AppLanguage) -> Bool {
-        guard let torrent = selectedTorrent,
-              !torrent.playableFiles.isEmpty else {
-            return false
-        }
-        playFirstFile(in: torrent, language: language)
-        return true
-    }
-
-    func play(
-        torrent: NativeTorrent,
-        file: NativeTorrentFile,
-        using choice: ExternalPlayerChoice,
-        language: AppLanguage
-    ) {
-        guard let streamURL = api.streamURL(torrent: torrent, file: file) else { return }
-
-        Task {
-            await api.beginPreloading(
-                torrentHash: torrent.hash,
-                fileID: file.id
-            )
-        }
-
-        do {
-            try ExternalPlayerLauncher.open(
-                streamURL,
-                using: choice,
-                customPlayerPath: customPlayerPath
-            )
-        } catch {
-            alert = LibraryAlert(
-                title: language == .russian
-                    ? "Не удалось открыть плеер"
-                    : "Could not open player",
-                message: error.localizedDescription
-            )
-        }
-    }
-
-    func setPlayer(
-        _ choice: ExternalPlayerChoice,
-        language: AppLanguage
-    ) {
-        if choice == .custom {
-            chooseCustomPlayer(language: language)
-            return
-        }
-
-        playerChoice = choice
-        UserDefaults.standard.set(choice.rawValue, forKey: libraryPlayerKey)
-        UserDefaults.standard.set(true, forKey: libraryPlayerSetupCompletedKey)
-        showsPlayerSetup = false
-        refreshDetectedPlayers()
-        onPlayerChanged?(choice)
-    }
-
-    func dismissPlayerSetup() {
-        UserDefaults.standard.set(true, forKey: libraryPlayerSetupCompletedKey)
-        showsPlayerSetup = false
-    }
-
-    func download(_ choice: ExternalPlayerChoice) {
-        guard let url = choice.downloadURL else { return }
-        NSWorkspace.shared.open(url)
-    }
-
-    func copyStreamURL(for torrent: NativeTorrent) {
-        guard
-            let file = torrent.playableFiles.first,
-            let url = api.streamURL(torrent: torrent, file: file)
-        else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(url.absoluteString, forType: .string)
-    }
 
     func openSource(for torrent: NativeTorrent) {
         guard
@@ -547,29 +337,6 @@ final class LibraryViewModel: ObservableObject {
         }
     }
 
-    func chooseCustomPlayer(language: AppLanguage) {
-        let panel = NSOpenPanel()
-        panel.title = language == .russian
-            ? "Выберите медиаплеер"
-            : "Choose media player"
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = [.applicationBundle]
-        panel.directoryURL = URL(fileURLWithPath: "/Applications")
-
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        customPlayerPath = url.path
-        playerChoice = .custom
-        UserDefaults.standard.set(
-            ExternalPlayerChoice.custom.rawValue,
-            forKey: libraryPlayerKey
-        )
-        UserDefaults.standard.set(url.path, forKey: libraryCustomPlayerPathKey)
-        UserDefaults.standard.set(true, forKey: libraryPlayerSetupCompletedKey)
-        showsPlayerSetup = false
-        onPlayerChanged?(.custom)
-    }
 
     private func refreshImmediately(selectingHash: String?) async throws {
         let values = try await api.listTorrents()
@@ -706,66 +473,6 @@ final class LibraryViewModel: ObservableObject {
             guard !normalized.isEmpty, !seen.contains(normalized) else { return false }
             seen.insert(normalized)
             return true
-        }
-    }
-}
-
-enum ExternalPlayerLauncher {
-    static func open(
-        _ streamURL: URL,
-        using choice: ExternalPlayerChoice,
-        customPlayerPath: String
-    ) throws {
-        if choice == .systemDefault {
-            guard NSWorkspace.shared.open(streamURL) else {
-                throw AppError("macOS could not open the stream URL.")
-            }
-            return
-        }
-
-        let applicationURL: URL?
-        switch choice {
-        case .quickTime:
-            applicationURL = NSWorkspace.shared.urlForApplication(
-                withBundleIdentifier: "com.apple.QuickTimePlayerX"
-            )
-        case .iina:
-            applicationURL = NSWorkspace.shared.urlForApplication(
-                withBundleIdentifier: "com.colliderli.iina"
-            )
-        case .vlc:
-            applicationURL = NSWorkspace.shared.urlForApplication(
-                withBundleIdentifier: "org.videolan.vlc"
-            )
-        case .infuse:
-            applicationURL = NSWorkspace.shared.urlForApplication(
-                withBundleIdentifier: "com.firecore.infuse"
-            )
-        case .custom:
-            applicationURL = customPlayerPath.isEmpty
-                ? nil
-                : URL(fileURLWithPath: customPlayerPath)
-        case .systemDefault:
-            applicationURL = nil
-        }
-
-        guard
-            let applicationURL,
-            FileManager.default.fileExists(atPath: applicationURL.path)
-        else {
-            throw AppError("The selected media player is not installed.")
-        }
-
-        let configuration = NSWorkspace.OpenConfiguration()
-        configuration.activates = true
-        NSWorkspace.shared.open(
-            [streamURL],
-            withApplicationAt: applicationURL,
-            configuration: configuration
-        ) { _, error in
-            if let error {
-                NSLog("Could not open stream in player: %@", error.localizedDescription)
-            }
         }
     }
 }
