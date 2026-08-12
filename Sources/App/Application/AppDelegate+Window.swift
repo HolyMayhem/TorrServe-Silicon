@@ -8,7 +8,7 @@ extension AppDelegate {
     func buildWindow() {
         window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1080, height: 680),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+            styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
@@ -143,12 +143,14 @@ extension AppDelegate {
         let initialContentSize = NSSize(width: 1080, height: 680)
         serverContentSize = initialContentSize
         window.setContentSize(initialContentSize)
-        window.contentMinSize = NSSize(width: 900, height: 560)
-        window.contentMaxSize = NSSize(width: 2400, height: 1600)
+        window.contentMinSize = initialContentSize
+        window.contentMaxSize = initialContentSize
+        window.standardWindowButton(.zoomButton)?.isEnabled = false
     }
 
-    func resizeWindow(for section: AppSection) {
-        _ = section
+    func resizeWindow(for _: AppSection) {
+        window.styleMask.remove(.resizable)
+        window.standardWindowButton(.zoomButton)?.isEnabled = false
     }
 
     func buildMainMenu() {

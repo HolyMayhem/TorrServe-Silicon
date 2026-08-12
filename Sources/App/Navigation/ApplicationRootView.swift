@@ -14,7 +14,6 @@ struct ApplicationRootView: View {
             set: { section in
                 guard let section, section != mainModel.selectedSection else { return }
                 mainModel.selectedSection = section
-                mainModel.onSectionChanged?(section)
             }
         )
     }
@@ -26,15 +25,10 @@ struct ApplicationRootView: View {
                 libraryModel: libraryModel,
                 selection: selection
             )
-            .navigationSplitViewColumnWidth(260)
+            .frame(width: 210)
+            .navigationSplitViewColumnWidth(min: 210, ideal: 210, max: 210)
         } detail: {
-            NavigationStack {
-                detailContent
-                    .navigationTitle(mainModel.selectedSection.title(language: mainModel.language))
-                    .toolbar {
-                        toolbarContent
-                    }
-            }
+            detailContent
         }
         .frame(minWidth: 900, minHeight: 560)
         .sheet(isPresented: $libraryModel.showsPlayerSetup) {
@@ -48,6 +42,12 @@ struct ApplicationRootView: View {
                 mainModel.selectedSection = .library
             }
         }
+        .onChange(of: mainModel.selectedSection) { _, section in
+            mainModel.onSectionChanged?(section)
+        }
+        .onAppear {
+            mainModel.onSectionChanged?(mainModel.selectedSection)
+        }
     }
 
     @ViewBuilder
@@ -58,132 +58,23 @@ struct ApplicationRootView: View {
                 mainModel: mainModel,
                 model: libraryModel
             )
-            .padding(16)
+            .padding(.horizontal, 16)
+            .padding(.top, 6)
+            .padding(.bottom, 16)
+            .ignoresSafeArea(.container, edges: .top)
         case .search:
             SearchView(
                 mainModel: mainModel,
                 model: searchModel
             )
-            .padding(16)
+            .padding(.horizontal, 16)
+            .padding(.top, 6)
+            .padding(.bottom, 16)
         case .server:
             MainWindowView(model: mainModel)
-                .padding(16)
         case .settings:
             SettingsView(model: mainModel)
-                .padding(.horizontal, 18)
         }
     }
 
-    @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
-        switch mainModel.selectedSection {
-        case .library:
-            ToolbarItemGroup {
-                Button {
-                    libraryModel.chooseTorrentFiles(language: mainModel.language)
-                } label: {
-                    Label(
-                        mainModel.language == .russian ? "Добавить torrent-файл" : "Add torrent file",
-                        systemImage: "doc.badge.plus"
-                    )
-                }
-                .disabled(libraryModel.isAdding || !mainModel.canStop)
-                .help(mainModel.language == .russian ? "Добавить torrent-файл" : "Add torrent file")
-
-                Button {
-                    libraryModel.showsMagnetSheet = true
-                } label: {
-                    Label(
-                        mainModel.language == .russian ? "Добавить magnet-ссылку" : "Add magnet link",
-                        systemImage: "link.badge.plus"
-                    )
-                }
-                .disabled(libraryModel.isAdding || !mainModel.canStop)
-                .help(mainModel.language == .russian ? "Добавить magnet-ссылку" : "Add magnet link")
-
-                Picker("", selection: $libraryModel.displayMode) {
-                    ForEach(LibraryDisplayMode.allCases) { mode in
-                        Label(
-                            mode.title(language: mainModel.language),
-                            systemImage: mode.systemImage
-                        )
-                        .tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .onChange(of: libraryModel.displayMode) { _, mode in
-                    libraryModel.setDisplayMode(mode)
-                }
-                .help(mainModel.language == .russian ? "Переключить вид библиотеки" : "Change library view")
-
-                Button {
-                    libraryModel.refresh()
-                } label: {
-                    Label(
-                        mainModel.language == .russian ? "Обновить" : "Refresh",
-                        systemImage: "arrow.clockwise"
-                    )
-                }
-                .disabled(libraryModel.isRefreshing || !mainModel.canStop)
-            }
-
-        case .search:
-            ToolbarItemGroup {
-                Button {
-                    searchModel.search(language: mainModel.language)
-                } label: {
-                    Label(
-                        mainModel.language == .russian ? "Искать" : "Search",
-                        systemImage: "magnifyingglass"
-                    )
-                }
-                .disabled(
-                    searchModel.isSearching
-                        || searchModel.query.trimmingCharacters(
-                            in: .whitespacesAndNewlines
-                        ).isEmpty
-                )
-
-                Button {
-                    searchModel.showsSettings = true
-                } label: {
-                    Label("Jackett", systemImage: "gearshape.2")
-                }
-            }
-
-        case .server:
-            ToolbarItemGroup {
-                Button {
-                    mainModel.onRefreshStorage?()
-                } label: {
-                    Label(
-                        mainModel.language == .russian ? "Обновить" : "Refresh",
-                        systemImage: "arrow.clockwise"
-                    )
-                }
-                .disabled(mainModel.isRefreshingStorage)
-
-                Button {
-                    mainModel.onOpenWeb?()
-                } label: {
-                    Label("Web UI", systemImage: "safari")
-                }
-                .disabled(!mainModel.canOpenWeb)
-                .help(mainModel.language == .russian ? "Открыть Web UI" : "Open Web UI")
-            }
-
-        case .settings:
-            ToolbarItemGroup {
-                Button {
-                    mainModel.onDownload?()
-                } label: {
-                    Label(
-                        mainModel.language == .russian ? "Скачать TorrServer" : "Download TorrServer",
-                        systemImage: "arrow.down.circle"
-                    )
-                }
-                .disabled(!mainModel.canDownload)
-            }
-        }
-    }
 }

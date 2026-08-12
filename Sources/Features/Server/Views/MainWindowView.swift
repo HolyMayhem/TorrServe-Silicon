@@ -1,58 +1,146 @@
 import AppKit
 import SwiftUI
 
-
 struct MainWindowView: View {
     @ObservedObject var model: MainWindowModel
     @State private var showsClearCacheConfirmation = false
     @State private var showsDiagnostics = false
-    @State private var showsMetadataSettings = false
 
     private var texts: Texts {
         Texts(language: model.language)
     }
 
-    var body: some View {
-        VStack(spacing: 10) {
-            executableSection
-            actionSection
+    private var screenTitle: String {
+        model.language == .russian ? "Настройки сервера" : "Server Settings"
+    }
 
-            HStack(alignment: .top, spacing: 10) {
-                storageSection
-                    .frame(maxWidth: .infinity)
-                playerHelpSection
-                    .frame(maxWidth: .infinity)
+    var body: some View {
+        ScrollView {
+            VStack(spacing: SettingsScreenLayout.sectionSpacing) {
+                SettingsScreenTitle(title: screenTitle)
+
+                SettingsIntroCard(
+                    title: screenTitle,
+                    message: model.language == .russian
+                        ? "Управляйте сервером, исполняемым файлом, хранилищем и приложениями для воспроизведения."
+                        : "Manage the server, executable, storage, and playback apps.",
+                    systemImage: "network",
+                    tint: .green
+                )
+
+                serverOverviewSection
+                executableSection
+
+                HStack(alignment: .top, spacing: 10) {
+                    storageSection
+                        .frame(maxWidth: .infinity)
+                    playerSection
+                        .frame(maxWidth: .infinity)
+                }
+                .frame(height: 174)
+            }
+            .padding(.horizontal, SettingsScreenLayout.formContentInset)
+            .padding(.top, SettingsScreenLayout.scrollContentTopPadding)
+            .padding(.bottom, 12)
+        }
+        .settingsScrollEdgeFade()
+        .frame(maxWidth: SettingsScreenLayout.contentMaxWidth)
+        .padding(.horizontal, SettingsScreenLayout.horizontalPadding)
+        .padding(.top, SettingsScreenLayout.topPadding)
+        .padding(.bottom, SettingsScreenLayout.bottomPadding)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .ignoresSafeArea(.container, edges: [.top, .bottom])
+    }
+
+    private var serverOverviewSection: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(model.statusKind.color.opacity(0.14))
+                    Image(systemName: serverStatusIcon)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(model.statusKind.color)
+                }
+                .frame(width: 42, height: 42)
+                .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("TorrServer")
+                        .font(.headline)
+                    Text(serverStatusDetail)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 12)
+
+                serverPowerControl
+            }
+
+            Divider()
+
+            HStack(spacing: 18) {
+                serverInfo(
+                    title: model.language == .russian ? "Адрес" : "Address",
+                    value: "localhost:8090",
+                    systemImage: "network"
+                )
+
+                serverInfo(
+                    title: model.language == .russian ? "Скорость" : "Speed",
+                    value: speedText,
+                    systemImage: "arrow.down"
+                )
+
+                Spacer(minLength: 8)
+
+                Button {
+                    model.onOpenWeb?()
+                } label: {
+                    Label(texts.webUI, systemImage: "safari")
+                }
+                .buttonStyle(.bordered)
+                .disabled(!model.canOpenWeb)
+                .help(texts.openWebUI)
+
+                diagnosticsButton
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .sheet(isPresented: $showsMetadataSettings) {
-            MetadataSettingsSheet(
-                language: model.language,
-                provider: model.metadataProvider,
-                initialAPIKey: model.metadataProvider == .tmdb
-                    ? model.tmdbAPIKey
-                    : model.omdbAPIKey,
-                initialTranslationMode: model.overviewTranslationMode,
-                save: { value, translationMode in
-                    if model.metadataProvider == .tmdb {
-                        model.tmdbAPIKey = value
-                    } else {
-                        model.omdbAPIKey = value
-                    }
-                    model.onMetadataAPIKeyChanged?(model.metadataProvider, value)
-                    if model.overviewTranslationMode != translationMode {
-                        model.overviewTranslationMode = translationMode
-                        model.onOverviewTranslationModeChanged?(translationMode)
-                    }
-                    showsMetadataSettings = false
-                },
-                cancel: { showsMetadataSettings = false }
-            )
+        .serverSettingsPanel()
+        .help(model.statusTooltip.isEmpty ? serverStatusDetail : model.statusTooltip)
+    }
+
+    @ViewBuilder
+    private var serverPowerControl: some View {
+        if model.statusKind == .working {
+            HStack(spacing: 8) {
+                ProgressView()
+                    .controlSize(.small)
+                Text(serverStatusDetail)
+                    .font(.callout)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 30)
+        } else {
+            Button {
+                model.canStop ? model.onStop?() : model.onStart?()
+            } label: {
+                Label(
+                    model.canStop ? texts.stop : texts.start,
+                    systemImage: model.canStop ? "stop.fill" : "play.fill"
+                )
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(model.canStop ? Color.red : Color.accentColor)
+            .disabled(!(model.canStart || model.canStop))
+            .help(model.canStop ? texts.stop : texts.start)
         }
     }
 
     private var executableSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 9) {
             Label(
                 model.language == .russian ? "Исполняемый файл" : "Executable",
                 systemImage: "terminal.fill"
@@ -70,197 +158,29 @@ struct MainWindowView: View {
                 )
             )
             .textFieldStyle(.roundedBorder)
-            .controlSize(.large)
             .disabled(!model.canEditPath)
 
-            HStack(spacing: 10) {
-                GlassActionButton(
-                    title: texts.choose,
-                    systemImage: "folder",
-                    isEnabled: model.canBrowse,
-                    action: { model.onChoose?() }
-                )
+            HStack(spacing: 8) {
+                Spacer()
 
-                GlassActionButton(
-                    title: texts.downloadArm,
-                    systemImage: "arrow.down.circle",
-                    isEnabled: model.canDownload,
-                    action: { model.onDownload?() }
-                )
-            }
-        }
-        .glassSection()
-    }
-
-    private var actionSection: some View {
-        GeometryReader { geometry in
-            let circleSize: CGFloat = 40
-            let spacing: CGFloat = 10
-            let buttonWidth = max(
-                (geometry.size.width - circleSize - spacing * 2) / 2,
-                120
-            )
-
-            HStack(spacing: spacing) {
-                StartStopCircleButton(model: model, texts: texts)
-
-                ServerActionCapsuleButton(
-                    title: texts.webUI,
-                    systemImage: "safari",
-                    isEnabled: model.canOpenWeb,
-                    action: { model.onOpenWeb?() }
-                )
-                .frame(width: buttonWidth, height: circleSize)
-
-                diagnosticsButton
-                    .frame(width: buttonWidth, height: circleSize)
-            }
-        }
-        .frame(height: 40)
-        .padding(.horizontal, 4)
-    }
-
-    private var settingsSection: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Label(
-                model.language == .russian ? "Настройки" : "Settings",
-                systemImage: "switch.2"
-            )
-            .font(.headline)
-
-            HStack(alignment: .top, spacing: 18) {
-                VStack(spacing: 0) {
-                    GlassToggleRow(
-                        title: texts.launchAtLogin,
-                        systemImage: "person.crop.circle.badge.clock",
-                        isOn: model.launchAtLogin,
-                        onChange: { model.onLaunchAtLoginChanged?($0) }
-                    )
-
-                    GlassToggleRow(
-                        title: texts.autoStartServer,
-                        systemImage: "bolt.circle",
-                        isOn: model.autoStartServer,
-                        onChange: { model.onAutoStartChanged?($0) }
-                    )
-
-                    GlassToggleRow(
-                        title: texts.showSpeed,
-                        systemImage: "speedometer",
-                        isOn: model.showSpeed,
-                        onChange: { model.onShowSpeedChanged?($0) }
-                    )
-
-                    GlassToggleRow(
-                        title: texts.hideDockIcon,
-                        systemImage: "menubar.dock.rectangle",
-                        isOn: model.hideDockIcon,
-                        onChange: { model.onHideDockIconChanged?($0) }
-                    )
-
-                    GlassToggleRow(
-                        title: texts.notifications,
-                        systemImage: "bell.badge",
-                        isOn: model.notificationsEnabled,
-                        isEnabled: !model.notificationsAuthorizationPending,
-                        onChange: { model.onNotificationsChanged?($0) }
-                    )
+                Button {
+                    model.onChoose?()
+                } label: {
+                    Label(texts.choose, systemImage: "folder")
                 }
-                .frame(maxWidth: .infinity)
+                .buttonStyle(.bordered)
+                .disabled(!model.canBrowse)
 
-                Divider()
-                    .frame(height: 145)
-
-                VStack(spacing: 0) {
-                    HStack {
-                        Label(texts.speedFormat, systemImage: "speedometer")
-                            .font(.system(size: 13, weight: .medium))
-
-                        Spacer()
-
-                        GlassSpeedUnitPicker(
-                            unit: model.speedUnit,
-                            automaticTitle: texts.automaticSpeed,
-                            megabytesTitle: texts.megabytesSpeed,
-                            megabitsTitle: texts.megabitsSpeed,
-                            onChange: { model.onSpeedUnitChanged?($0) }
-                        )
-                    }
-                    .frame(height: 29)
-
-                    HStack {
-                        Label(texts.languageLabel, systemImage: "globe")
-                            .font(.system(size: 13, weight: .medium))
-
-                        Spacer()
-
-                        GlassLanguagePicker(
-                            language: model.language,
-                            russianTitle: texts.russian,
-                            englishTitle: texts.english,
-                            onChange: { model.onLanguageChanged?($0) }
-                        )
-                    }
-                    .frame(height: 29)
-
-                    HStack {
-                        Label(texts.jackettSearch, systemImage: "magnifyingglass.circle")
-                            .font(.system(size: 13, weight: .medium))
-
-                        Spacer()
-
-                        GlassJackettPicker(
-                            isEnabled: model.jackettEnabled,
-                            onChange: { model.onJackettEnabledChanged?($0) }
-                        )
-                    }
-                    .frame(height: 29)
-
-                    HStack {
-                        Label(texts.metadataProvider, systemImage: "photo.on.rectangle.angled")
-                            .font(.system(size: 13, weight: .medium))
-
-                        Spacer()
-
-                        GlassMetadataProviderPicker(
-                            provider: model.metadataProvider,
-                            onChange: { model.onMetadataProviderChanged?($0) }
-                        )
-                    }
-                    .frame(height: 29)
-
-                    HStack {
-                        Label(texts.metadataAPIKey, systemImage: "key")
-                            .font(.system(size: 13, weight: .medium))
-
-                        Spacer()
-
-                        Button {
-                            showsMetadataSettings = true
-                        } label: {
-                            let apiKey = model.metadataProvider == .tmdb
-                                ? model.tmdbAPIKey
-                                : model.omdbAPIKey
-                            Label(
-                                apiKey.isEmpty
-                                    ? texts.metadataConfigure
-                                    : texts.metadataConfigured,
-                                systemImage: apiKey.isEmpty
-                                    ? "key"
-                                    : "checkmark.circle.fill"
-                            )
-                            .font(.system(size: 11.5, weight: .medium))
-                        }
-                        .buttonStyle(.borderless)
-                    }
-                    .frame(height: 29)
-
-                    Spacer(minLength: 0)
+                Button {
+                    model.onDownload?()
+                } label: {
+                    Label(texts.downloadArm, systemImage: "arrow.down.circle")
                 }
-                .frame(maxWidth: .infinity)
+                .buttonStyle(.bordered)
+                .disabled(!model.canDownload)
             }
         }
-        .glassSection()
+        .serverSettingsPanel()
     }
 
     private var diagnosticsButton: some View {
@@ -271,114 +191,145 @@ struct MainWindowView: View {
                 model.language == .russian ? "Диагностика" : "Diagnostics",
                 systemImage: "stethoscope"
             )
-            .font(.system(size: 13, weight: .medium))
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .contentShape(Capsule())
         }
-        .buttonStyle(.plain)
-        .serverActionSurface()
-        .help(model.latestDiagnostic.message)
+        .buttonStyle(.bordered)
+        .help(model.latestDiagnostic.message.isEmpty
+            ? (model.language == .russian ? "Проверить TorrServer" : "Check TorrServer")
+            : model.latestDiagnostic.message)
         .popover(isPresented: $showsDiagnostics, arrowEdge: .bottom) {
             DiagnosticsPopover(model: model)
         }
     }
 
-    private var playerHelpSection: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(texts.playerHelpTitle)
-                    .font(.system(size: 12.5, weight: .semibold))
-
-                Text(texts.playerHelpMessage)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-
-            HStack(spacing: 8) {
-                ForEach(model.detectedPlayers) { player in
-                    PlayerStatusButton(
-                        player: player,
-                        isPreferred: model.preferredPlayer == player.choice,
-                        language: model.language,
-                        select: { model.onSelectPlayer?(player.choice) },
-                        download: {
-                            switch player.choice {
-                            case .iina: model.onOpenIINADownload?()
-                            case .vlc: model.onOpenVLCDownload?()
-                            case .infuse: model.onOpenInfuseDownload?()
-                            default: break
-                            }
-                        }
-                    )
-                }
-            }
-        }
-        .serverBottomPanel()
-    }
-
     private var storageSection: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack {
-                    Label(
-                        model.language == .russian ? "Хранилище" : "Storage",
-                        systemImage: "internaldrive"
-                    )
-                    .font(.system(size: 12.5, weight: .semibold))
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Label(
+                    model.language == .russian ? "Хранилище" : "Storage",
+                    systemImage: "internaldrive"
+                )
+                .font(.headline)
 
-                    Spacer()
+                Spacer()
 
-                    Button(role: .destructive) {
-                        showsClearCacheConfirmation = true
-                    } label: {
-                        Label(
-                            model.language == .russian ? "Очистить" : "Clear",
-                            systemImage: "trash"
-                        )
+                Button {
+                    model.onRefreshStorage?()
+                } label: {
+                    if model.isRefreshingStorage {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
                     }
-                    .controlSize(.small)
-                    .disabled(model.isClearingCache || !model.canStop)
-                    .popover(isPresented: $showsClearCacheConfirmation) {
-                        clearCacheConfirmation
-                    }
-
-                    Button { model.onRefreshStorage?() } label: {
-                        if model.isRefreshingStorage {
-                            ProgressView().controlSize(.small)
-                        } else {
-                            Image(systemName: "arrow.clockwise")
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(model.isRefreshingStorage)
                 }
-
-                Text(texts.storageDescription)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                .buttonStyle(.borderless)
+                .disabled(model.isRefreshingStorage)
+                .help(model.language == .russian ? "Обновить" : "Refresh")
             }
 
-            HStack(spacing: 8) {
-                storageValue(
-                    title: model.language == .russian ? "Буфер TorrServer" : "TorrServer buffer",
+            Text(texts.storageDescription)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+
+            HStack(spacing: 7) {
+                storageMetric(
+                    title: model.language == .russian ? "Буфер" : "Buffer",
                     value: storageUsageText
                 )
-                storageValue(
-                    title: model.language == .russian ? "Кеш на диске" : "Disk cache",
-                    value: model.storage.diskCacheEnabled
-                        ? ByteCountFormatter.string(fromByteCount: model.storage.diskCacheSize, countStyle: .file)
-                        : (model.language == .russian ? "Выключен" : "Disabled")
+                storageMetric(
+                    title: model.language == .russian ? "Кеш" : "Cache",
+                    value: diskCacheText
                 )
-                storageValue(
-                    title: model.language == .russian ? "Свободно" : "Free space",
-                    value: ByteCountFormatter.string(fromByteCount: model.storage.freeDiskSpace, countStyle: .file),
+                storageMetric(
+                    title: model.language == .russian ? "Свободно" : "Available",
+                    value: freeSpaceText,
                     warning: model.storage.isLowOnDiskSpace
                 )
             }
+
+            Spacer(minLength: 0)
+
+            HStack {
+                Spacer()
+                Button(role: .destructive) {
+                    showsClearCacheConfirmation = true
+                } label: {
+                    Label(
+                        model.language == .russian ? "Очистить кеш" : "Clear Cache",
+                        systemImage: "trash"
+                    )
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(model.isClearingCache || !model.canStop)
+                .popover(isPresented: $showsClearCacheConfirmation) {
+                    clearCacheConfirmation
+                }
+            }
         }
-        .serverBottomPanel()
+        .serverSettingsPanel()
+    }
+
+    private var playerSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(texts.playerHelpTitle, systemImage: "play.rectangle.on.rectangle")
+                .font(.headline)
+
+            Text(texts.playerHelpMessage)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+
+            VStack(spacing: 5) {
+                ForEach(model.detectedPlayers) { player in
+                    playerRow(player)
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .serverSettingsPanel()
+    }
+
+    private func playerRow(_ player: DetectedPlayer) -> some View {
+        let isPreferred = model.preferredPlayer == player.choice
+
+        return Button {
+            if player.isInstalled {
+                model.onSelectPlayer?(player.choice)
+            } else {
+                openDownload(for: player.choice)
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: playerIcon(for: player.choice))
+                    .foregroundStyle(isPreferred ? Color.green : Color.secondary)
+                    .frame(width: 18)
+
+                Text(player.choice.title(language: model.language))
+                    .font(.callout.weight(.medium))
+
+                Spacer()
+
+                Text(playerStatus(player, isPreferred: isPreferred))
+                    .font(.caption)
+                    .foregroundStyle(isPreferred ? Color.green : Color.secondary)
+
+                Image(systemName: isPreferred
+                    ? "checkmark.circle.fill"
+                    : (player.isInstalled ? "chevron.right" : "arrow.down.circle"))
+                    .foregroundStyle(isPreferred ? Color.green : Color.secondary)
+            }
+            .padding(.horizontal, 9)
+            .frame(height: 30)
+            .background(
+                Color.secondary.opacity(0.07),
+                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private var clearCacheConfirmation: some View {
@@ -407,22 +358,71 @@ struct MainWindowView: View {
         .frame(width: 300)
     }
 
-    private func storageValue(title: String, value: String, warning: Bool = false) -> some View {
+    private func serverInfo(title: String, value: String, systemImage: String) -> some View {
+        HStack(spacing: 7) {
+            Image(systemName: systemImage)
+                .foregroundStyle(.secondary)
+                .frame(width: 16)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Text(value)
+                    .font(.caption.monospacedDigit())
+                    .lineLimit(1)
+            }
+        }
+    }
+
+    private func storageMetric(title: String, value: String, warning: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
-                .font(.system(size: 9.5))
+                .font(.caption2)
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
-
             Text(value)
-                .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                .font(.caption.weight(.medium).monospacedDigit())
                 .foregroundStyle(warning ? Color.orange : Color.primary)
                 .lineLimit(1)
+                .minimumScaleFactor(0.75)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 9)
-        .padding(.vertical, 6)
-        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 9))
+        .frame(height: 42)
+        .background(
+            Color.secondary.opacity(0.07),
+            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+        )
+    }
+
+    private var serverStatusDetail: String {
+        if !model.statusText.isEmpty {
+            return model.statusText
+        }
+        switch model.statusKind {
+        case .running:
+            return model.language == .russian ? "Запущен" : "Running"
+        case .working:
+            return model.language == .russian ? "Выполняется операция…" : "Working…"
+        case .failed:
+            return model.language == .russian ? "Произошла ошибка" : "An error occurred"
+        case .stopped:
+            return model.language == .russian ? "Остановлен" : "Stopped"
+        }
+    }
+
+    private var serverStatusIcon: String {
+        switch model.statusKind {
+        case .running: return "checkmark"
+        case .working: return "hourglass"
+        case .failed: return "exclamationmark"
+        case .stopped: return "power"
+        }
+    }
+
+    private var speedText: String {
+        model.currentSpeedText.isEmpty
+            ? SpeedFormatter.string(bytesPerSecond: 0, unit: model.speedUnit)
+            : model.currentSpeedText
     }
 
     private var storageUsageText: String {
@@ -438,25 +438,63 @@ struct MainWindowView: View {
         return "\(used) / \(capacity)"
     }
 
-    private func resultColor(_ kind: DiagnosticResultKind) -> Color {
-        switch kind {
-        case .success: return .green
-        case .warning: return .orange
-        case .failure: return .red
-        default: return .secondary
+    private var diskCacheText: String {
+        model.storage.diskCacheEnabled
+            ? ByteCountFormatter.string(
+                fromByteCount: model.storage.diskCacheSize,
+                countStyle: .file
+            )
+            : (model.language == .russian ? "Выключен" : "Disabled")
+    }
+
+    private var freeSpaceText: String {
+        ByteCountFormatter.string(
+            fromByteCount: model.storage.freeDiskSpace,
+            countStyle: .file
+        )
+    }
+
+    private func playerStatus(_ player: DetectedPlayer, isPreferred: Bool) -> String {
+        if isPreferred {
+            return model.language == .russian ? "По умолчанию" : "Default"
+        }
+        if player.isInstalled {
+            return model.language == .russian ? "Установлен" : "Installed"
+        }
+        return model.language == .russian ? "Скачать" : "Download"
+    }
+
+    private func playerIcon(for choice: ExternalPlayerChoice) -> String {
+        switch choice {
+        case .iina: return "play.rectangle"
+        case .vlc: return "play.circle"
+        case .infuse: return "tv"
+        case .quickTime: return "play.square"
+        case .systemDefault: return "macwindow"
+        case .custom: return "app.badge"
         }
     }
 
-    private func diagnosticResultIcon(
-        _ kind: DiagnosticResultKind,
-        fallback: String = "stethoscope"
-    ) -> String {
-        switch kind {
-        case .checking: return "hourglass"
-        case .success: return "checkmark.circle.fill"
-        case .warning: return "exclamationmark.triangle.fill"
-        case .failure: return "xmark.circle.fill"
-        case .idle: return fallback
+    private func openDownload(for choice: ExternalPlayerChoice) {
+        switch choice {
+        case .iina: model.onOpenIINADownload?()
+        case .vlc: model.onOpenVLCDownload?()
+        case .infuse: model.onOpenInfuseDownload?()
+        default: break
         }
+    }
+}
+
+private extension View {
+    func serverSettingsPanel() -> some View {
+        padding(14)
+            .background(
+                SettingsVisualStyle.panelBackground,
+                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Color.primary.opacity(0.07), lineWidth: 1)
+            }
     }
 }
