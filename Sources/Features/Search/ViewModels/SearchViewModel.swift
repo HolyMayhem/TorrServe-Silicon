@@ -27,17 +27,14 @@ final class SearchViewModel: ObservableObject {
 
     private let jackett: JackettClient
     private let torrServer: NativeTorrServerAPI
-    private let metadataStore: LibraryMetadataStore
     private let credentialStore = JackettCredentialStore()
 
     init(
         jackett: JackettClient = JackettClient(),
-        torrServer: NativeTorrServerAPI = NativeTorrServerAPI(),
-        metadataStore: LibraryMetadataStore = .shared
+        torrServer: NativeTorrServerAPI = NativeTorrServerAPI()
     ) {
         self.jackett = jackett
         self.torrServer = torrServer
-        self.metadataStore = metadataStore
         serverURL = UserDefaults.standard.string(forKey: jackettServerURLKey)
             ?? "http://127.0.0.1:9117"
         let legacyAPIKey = UserDefaults.standard.string(forKey: jackettAPIKeyKey)
@@ -216,16 +213,6 @@ final class SearchViewModel: ObservableObject {
                 }
 
                 let hash = torrent.hash.isEmpty ? result.infoHash : torrent.hash
-                metadataStore.save(
-                    LibraryMetadata(
-                        title: result.title,
-                        posterURL: poster,
-                        summary: result.summary,
-                        source: result.tracker.isEmpty ? "Jackett" : result.tracker,
-                        sourceURL: result.detailsURL?.absoluteString
-                    ),
-                    for: hash
-                )
                 addedResultIDs.insert(result.id)
                 onTorrentAdded?(hash)
             } catch {

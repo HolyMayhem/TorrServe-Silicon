@@ -100,6 +100,31 @@ cp "$COMPILED_ICON_DIR/Assets.car" "$RESOURCES_DIR/Assets.car"
 cp "$TORRSERVER_CACHE_PATH" "$RESOURCES_DIR/$TORRSERVER_ASSET_NAME"
 chmod 755 "$RESOURCES_DIR/$TORRSERVER_ASSET_NAME"
 
+DEFAULT_METADATA_KEYS_FILE="$HOME/Library/Application Support/TorrServer/Settings/metadata.json"
+METADATA_KEYS_SOURCE="${METADATA_KEYS_FILE:-$DEFAULT_METADATA_KEYS_FILE}"
+if [[ -f "$METADATA_KEYS_SOURCE" ]]; then
+  TMDB_METADATA_KEY="$(plutil -extract tmdbAPIKey raw "$METADATA_KEYS_SOURCE" 2>/dev/null || true)"
+  OMDB_METADATA_KEY="$(plutil -extract omdbAPIKey raw "$METADATA_KEYS_SOURCE" 2>/dev/null || true)"
+  KINOPOISK_METADATA_KEY="$(plutil -extract kinopoiskAPIKey raw "$METADATA_KEYS_SOURCE" 2>/dev/null || true)"
+
+  if [[ -n "$TMDB_METADATA_KEY" || -n "$OMDB_METADATA_KEY" || -n "$KINOPOISK_METADATA_KEY" ]]; then
+    /usr/libexec/PlistBuddy -c "Add :TorrServeMetadataAPIKeys dict" "$CONTENTS_DIR/Info.plist"
+    if [[ -n "$TMDB_METADATA_KEY" ]]; then
+      /usr/libexec/PlistBuddy -c "Add :TorrServeMetadataAPIKeys:TMDB string $TMDB_METADATA_KEY" "$CONTENTS_DIR/Info.plist"
+    fi
+    if [[ -n "$OMDB_METADATA_KEY" ]]; then
+      /usr/libexec/PlistBuddy -c "Add :TorrServeMetadataAPIKeys:OMDB string $OMDB_METADATA_KEY" "$CONTENTS_DIR/Info.plist"
+    fi
+    if [[ -n "$KINOPOISK_METADATA_KEY" ]]; then
+      /usr/libexec/PlistBuddy -c "Add :TorrServeMetadataAPIKeys:Kinopoisk string $KINOPOISK_METADATA_KEY" "$CONTENTS_DIR/Info.plist"
+    fi
+  else
+    echo "Warning: built-in metadata keys are unavailable; custom-key mode will still work." >&2
+  fi
+else
+  echo "Warning: metadata key file not found; custom-key mode will still work." >&2
+fi
+
 chflags -R nohidden "$APP_PATH" 2>/dev/null || true
 SIGNED_APP_PATH="$SIGNING_DIR/$APP_NAME"
 ditto --norsrc "$APP_PATH" "$SIGNED_APP_PATH"

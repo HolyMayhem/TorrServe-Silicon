@@ -31,6 +31,19 @@ struct OMDBConfiguration: Equatable, Sendable {
     }
 }
 
+struct KinopoiskConfiguration: Equatable, Sendable {
+    let apiKey: String
+    let apiBaseURL: URL
+
+    init(
+        apiKey: String,
+        apiBaseURL: URL = URL(string: "https://kinopoiskapiunofficial.tech")!
+    ) {
+        self.apiKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.apiBaseURL = apiBaseURL
+    }
+}
+
 protocol TMDBConfigurationProviding: Sendable {
     func tmdbConfiguration() -> TMDBConfiguration?
 }
@@ -39,31 +52,68 @@ protocol OMDBConfigurationProviding: Sendable {
     func omdbConfiguration() -> OMDBConfiguration?
 }
 
+protocol KinopoiskConfigurationProviding: Sendable {
+    func kinopoiskConfiguration() -> KinopoiskConfiguration?
+}
+
 struct MetadataProviderSettings: Equatable, Sendable {
-    var selectedProvider: MetadataProvider
+    static let defaultCombinedOrder: [MetadataProvider] = [.omdb, .kinopoisk, .tmdb]
+
+    var selectedSource: MetadataSourceMode
+    var apiKeyMode: MetadataAPIKeyMode
+    var combinedOrder: [MetadataProvider]
     var tmdbAPIKey: String
     var omdbAPIKey: String
+    var kinopoiskAPIKey: String
     var overviewTranslationMode: OverviewTranslationMode
 
     func apiKey(for provider: MetadataProvider) -> String {
         switch provider {
         case .tmdb: return tmdbAPIKey
         case .omdb: return omdbAPIKey
+        case .kinopoisk: return kinopoiskAPIKey
         }
     }
 
-    func isConfigured(_ provider: MetadataProvider) -> Bool {
-        !apiKey(for: provider).isEmpty
+    var resolutionOrder: [MetadataProvider] {
+        selectedSource.singleProvider.map { [$0] }
+            ?? Self.normalizedOrder(combinedOrder)
+    }
+
+    static func normalizedOrder(_ providers: [MetadataProvider]) -> [MetadataProvider] {
+        var seen = Set<MetadataProvider>()
+        let unique = providers.filter { seen.insert($0).inserted }
+        return unique + defaultCombinedOrder.filter { !seen.contains($0) }
     }
 }
 
-final class MetadataSettingsStore: TMDBConfigurationProviding, OMDBConfigurationProviding, @unchecked Sendable {
+struct BuiltInMetadataAPIKeys: Equatable, Sendable {
+    let tmdb: String
+    let omdb: String
+    let kinopoisk: String
+
+    static let empty = BuiltInMetadataAPIKeys(tmdb: "", omdb: "", kinopoisk: "")
+
+    func apiKey(for provider: MetadataProvider) -> String {
+        switch provider {
+        case .tmdb: return tmdb
+        case .omdb: return omdb
+        case .kinopoisk: return kinopoisk
+        }
+    }
+}
+
+final class MetadataSettingsStore: TMDBConfigurationProviding, OMDBConfigurationProviding, KinopoiskConfigurationProviding, @unchecked Sendable {
     static let shared = MetadataSettingsStore()
 
     private struct Payload: Codable {
-        var selectedProvider: MetadataProvider
+        var selectedProvider: MetadataProvider?
+        var selectedSource: MetadataSourceMode?
+        var apiKeyMode: MetadataAPIKeyMode?
+        var combinedOrder: [MetadataProvider]?
         var tmdbAPIKey: String
         var omdbAPIKey: String
+        var kinopoiskAPIKey: String?
         var overviewTranslationMode: OverviewTranslationMode?
     }
 
@@ -74,12 +124,14 @@ final class MetadataSettingsStore: TMDBConfigurationProviding, OMDBConfiguration
     private let fileManager: FileManager
     private let fileURL: URL?
     private let legacyTMDBURL: URL?
+    private let builtInAPIKeys: BuiltInMetadataAPIKeys
     private let lock = NSLock()
 
     init(
         fileManager: FileManager = .default,
         fileURL: URL? = nil,
-        legacyTMDBURL: URL? = nil
+        legacyTMDBURL: URL? = nil,
+        builtInAPIKeys: BuiltInMetadataAPIKeys? = nil
     ) {
         self.fileManager = fileManager
         let directory = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)
@@ -88,28 +140,52 @@ final class MetadataSettingsStore: TMDBConfigurationProviding, OMDBConfiguration
             .appendingPathComponent("Settings", isDirectory: true)
         self.fileURL = fileURL ?? directory?.appendingPathComponent("metadata.json")
         self.legacyTMDBURL = legacyTMDBURL ?? directory?.appendingPathComponent("tmdb.json")
+        self.builtInAPIKeys = builtInAPIKeys ?? Self.loadBuiltInAPIKeys()
     }
 
     var settings: MetadataProviderSettings {
         lock.withLock {
             let payload = loadPayload()
             return MetadataProviderSettings(
-                selectedProvider: payload.selectedProvider,
+                selectedSource: payload.selectedSource
+                    ?? payload.selectedProvider.map(MetadataSourceMode.init(provider:))
+                    ?? .tmdb,
+                apiKeyMode: payload.apiKeyMode ?? .builtIn,
+                combinedOrder: MetadataProviderSettings.normalizedOrder(
+                    payload.combinedOrder ?? MetadataProviderSettings.defaultCombinedOrder
+                ),
                 tmdbAPIKey: payload.tmdbAPIKey,
                 omdbAPIKey: payload.omdbAPIKey,
+                kinopoiskAPIKey: payload.kinopoiskAPIKey ?? "",
                 overviewTranslationMode: payload.overviewTranslationMode ?? .automatic
             )
         }
     }
 
     func isConfigured(_ provider: MetadataProvider) -> Bool {
-        settings.isConfigured(provider)
+        !effectiveAPIKey(for: provider).isEmpty
     }
 
-    func save(selectedProvider: MetadataProvider) throws {
+    func save(selectedSource: MetadataSourceMode) throws {
         try lock.withLock {
             var payload = loadPayload()
-            payload.selectedProvider = selectedProvider
+            payload.selectedSource = selectedSource
+            try persist(payload)
+        }
+    }
+
+    func save(apiKeyMode: MetadataAPIKeyMode) throws {
+        try lock.withLock {
+            var payload = loadPayload()
+            payload.apiKeyMode = apiKeyMode
+            try persist(payload)
+        }
+    }
+
+    func save(combinedOrder: [MetadataProvider]) throws {
+        try lock.withLock {
+            var payload = loadPayload()
+            payload.combinedOrder = MetadataProviderSettings.normalizedOrder(combinedOrder)
             try persist(payload)
         }
     }
@@ -121,6 +197,7 @@ final class MetadataSettingsStore: TMDBConfigurationProviding, OMDBConfiguration
             switch provider {
             case .tmdb: payload.tmdbAPIKey = value
             case .omdb: payload.omdbAPIKey = value
+            case .kinopoisk: payload.kinopoiskAPIKey = value
             }
             try persist(payload)
         }
@@ -135,15 +212,29 @@ final class MetadataSettingsStore: TMDBConfigurationProviding, OMDBConfiguration
     }
 
     func tmdbConfiguration() -> TMDBConfiguration? {
-        let value = settings.tmdbAPIKey
+        let value = effectiveAPIKey(for: .tmdb)
         guard !value.isEmpty else { return nil }
         return TMDBConfiguration(apiKey: value)
     }
 
     func omdbConfiguration() -> OMDBConfiguration? {
-        let value = settings.omdbAPIKey
+        let value = effectiveAPIKey(for: .omdb)
         guard !value.isEmpty else { return nil }
         return OMDBConfiguration(apiKey: value)
+    }
+
+    func kinopoiskConfiguration() -> KinopoiskConfiguration? {
+        let value = effectiveAPIKey(for: .kinopoisk)
+        guard !value.isEmpty else { return nil }
+        return KinopoiskConfiguration(apiKey: value)
+    }
+
+    private func effectiveAPIKey(for provider: MetadataProvider) -> String {
+        let currentSettings = settings
+        let value = currentSettings.apiKeyMode == .builtIn
+            ? builtInAPIKeys.apiKey(for: provider)
+            : currentSettings.apiKey(for: provider)
+        return value.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func loadPayload() -> Payload {
@@ -162,10 +253,27 @@ final class MetadataSettingsStore: TMDBConfigurationProviding, OMDBConfiguration
             legacyKey = ""
         }
         return Payload(
-            selectedProvider: .tmdb,
+            selectedProvider: nil,
+            selectedSource: .tmdb,
+            apiKeyMode: .builtIn,
+            combinedOrder: MetadataProviderSettings.defaultCombinedOrder,
             tmdbAPIKey: legacyKey,
             omdbAPIKey: "",
+            kinopoiskAPIKey: "",
             overviewTranslationMode: .automatic
+        )
+    }
+
+    private static func loadBuiltInAPIKeys(bundle: Bundle = .main) -> BuiltInMetadataAPIKeys {
+        guard let values = bundle.object(
+            forInfoDictionaryKey: "TorrServeMetadataAPIKeys"
+        ) as? [String: String] else {
+            return .empty
+        }
+        return BuiltInMetadataAPIKeys(
+            tmdb: values["TMDB"] ?? "",
+            omdb: values["OMDB"] ?? "",
+            kinopoisk: values["Kinopoisk"] ?? ""
         )
     }
 

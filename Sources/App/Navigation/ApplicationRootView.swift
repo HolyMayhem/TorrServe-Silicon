@@ -8,6 +8,8 @@ struct ApplicationRootView: View {
 
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
+    private let mainContentInset: CGFloat = 15
+
     private var selection: Binding<AppSection?> {
         Binding(
             get: { mainModel.selectedSection },
@@ -58,18 +60,15 @@ struct ApplicationRootView: View {
                 mainModel: mainModel,
                 model: libraryModel
             )
-            .padding(.horizontal, 16)
-            .padding(.top, 6)
-            .padding(.bottom, 16)
+            .padding(mainContentInset)
             .ignoresSafeArea(.container, edges: .top)
         case .search:
             SearchView(
                 mainModel: mainModel,
                 model: searchModel
             )
-            .padding(.horizontal, 16)
-            .padding(.top, 6)
-            .padding(.bottom, 16)
+            .padding(mainContentInset)
+            .ignoresSafeArea(.container, edges: .top)
         case .server:
             MainWindowView(model: mainModel)
         case .settings:

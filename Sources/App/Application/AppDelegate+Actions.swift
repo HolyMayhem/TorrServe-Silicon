@@ -226,14 +226,36 @@ extension AppDelegate {
         }
     }
 
-    func setMetadataProvider(_ provider: MetadataProvider) {
+    func setMetadataSource(_ source: MetadataSourceMode) {
         do {
-            try metadataSettings.save(selectedProvider: provider)
-            mainWindowModel.metadataProvider = provider
+            try metadataSettings.save(selectedSource: source)
+            mainWindowModel.metadataSource = source
             libraryModel.metadataConfigurationChanged()
         } catch {
             showAlert(title: "Metadata", message: error.localizedDescription)
-            mainWindowModel.metadataProvider = metadataSettings.settings.selectedProvider
+            mainWindowModel.metadataSource = metadataSettings.settings.selectedSource
+        }
+    }
+
+    func setMetadataAPIKeyMode(_ mode: MetadataAPIKeyMode) {
+        do {
+            try metadataSettings.save(apiKeyMode: mode)
+            mainWindowModel.metadataAPIKeyMode = mode
+            libraryModel.metadataConfigurationChanged()
+        } catch {
+            showAlert(title: "Metadata", message: error.localizedDescription)
+            mainWindowModel.metadataAPIKeyMode = metadataSettings.settings.apiKeyMode
+        }
+    }
+
+    func setCombinedMetadataOrder(_ providers: [MetadataProvider]) {
+        do {
+            try metadataSettings.save(combinedOrder: providers)
+            mainWindowModel.combinedMetadataOrder = metadataSettings.settings.combinedOrder
+            libraryModel.metadataConfigurationChanged()
+        } catch {
+            showAlert(title: "Metadata", message: error.localizedDescription)
+            mainWindowModel.combinedMetadataOrder = metadataSettings.settings.combinedOrder
         }
     }
 
@@ -243,12 +265,14 @@ extension AppDelegate {
             let settings = metadataSettings.settings
             mainWindowModel.tmdbAPIKey = settings.tmdbAPIKey
             mainWindowModel.omdbAPIKey = settings.omdbAPIKey
+            mainWindowModel.kinopoiskAPIKey = settings.kinopoiskAPIKey
             libraryModel.metadataConfigurationChanged()
         } catch {
             showAlert(title: provider.displayName, message: error.localizedDescription)
             let settings = metadataSettings.settings
             mainWindowModel.tmdbAPIKey = settings.tmdbAPIKey
             mainWindowModel.omdbAPIKey = settings.omdbAPIKey
+            mainWindowModel.kinopoiskAPIKey = settings.kinopoiskAPIKey
         }
     }
 

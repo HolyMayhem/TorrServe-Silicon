@@ -72,15 +72,15 @@ struct LibraryMetadata: Codable, Equatable {
         language: String
     ) -> LibraryMetadata {
         let metadata = resolved.metadata
-        let replacesMetadataSource = source.isEmpty || source == "TMDB" || source == "OMDb"
         return LibraryMetadata(
             title: metadata.localizedTitle.isEmpty ? title : metadata.localizedTitle,
             posterURL: metadata.posterURL?.absoluteString ?? posterURL,
             summary: metadata.overview.isEmpty ? summary : metadata.overview,
-            source: replacesMetadataSource ? metadata.provider.displayName : source,
-            sourceURL: replacesMetadataSource
-                ? metadata.provider.sourceURL(id: metadata.id, kind: metadata.kind)?.absoluteString
-                : sourceURL,
+            source: metadata.provider.displayName,
+            sourceURL: metadata.provider.sourceURL(
+                id: metadata.id,
+                kind: metadata.kind
+            )?.absoluteString,
             tmdbID: metadata.provider == .tmdb ? Int(metadata.id) : nil,
             metadataProvider: metadata.provider,
             metadataProviderID: metadata.id,
@@ -182,6 +182,8 @@ final class LibraryMetadataStore {
         else {
             return [:]
         }
-        return values
+        return values.filter { _, metadata in
+            metadata.metadataProvider != nil && metadata.metadataProviderID != nil
+        }
     }
 }

@@ -42,9 +42,12 @@ final class MainWindowModel: ObservableObject {
     @Published var notificationsEnabled = false
     @Published var notificationsAuthorizationPending = false
     @Published var jackettEnabled = true
-    @Published var metadataProvider = MetadataProvider.tmdb
+    @Published var metadataSource = MetadataSourceMode.tmdb
+    @Published var metadataAPIKeyMode = MetadataAPIKeyMode.builtIn
+    @Published var combinedMetadataOrder = MetadataProviderSettings.defaultCombinedOrder
     @Published var tmdbAPIKey = ""
     @Published var omdbAPIKey = ""
+    @Published var kinopoiskAPIKey = ""
     @Published var overviewTranslationMode = OverviewTranslationMode.automatic
     @Published var speedUnit: SpeedDisplayUnit = .automatic
     @Published var selectedSection: AppSection = .library
@@ -74,7 +77,9 @@ final class MainWindowModel: ObservableObject {
     var onHideDockIconChanged: ((Bool) -> Void)?
     var onNotificationsChanged: ((Bool) -> Void)?
     var onJackettEnabledChanged: ((Bool) -> Void)?
-    var onMetadataProviderChanged: ((MetadataProvider) -> Void)?
+    var onMetadataSourceChanged: ((MetadataSourceMode) -> Void)?
+    var onMetadataAPIKeyModeChanged: ((MetadataAPIKeyMode) -> Void)?
+    var onCombinedMetadataOrderChanged: (([MetadataProvider]) -> Void)?
     var onMetadataAPIKeyChanged: ((MetadataProvider, String) -> Void)?
     var onOverviewTranslationModeChanged: ((OverviewTranslationMode) -> Void)?
     var onSpeedUnitChanged: ((SpeedDisplayUnit) -> Void)?

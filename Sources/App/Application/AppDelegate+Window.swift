@@ -28,9 +28,12 @@ extension AppDelegate {
             forKey: jackettSearchEnabledKey
         )
         let metadataProviderSettings = metadataSettings.settings
-        mainWindowModel.metadataProvider = metadataProviderSettings.selectedProvider
+        mainWindowModel.metadataSource = metadataProviderSettings.selectedSource
+        mainWindowModel.metadataAPIKeyMode = metadataProviderSettings.apiKeyMode
+        mainWindowModel.combinedMetadataOrder = metadataProviderSettings.combinedOrder
         mainWindowModel.tmdbAPIKey = metadataProviderSettings.tmdbAPIKey
         mainWindowModel.omdbAPIKey = metadataProviderSettings.omdbAPIKey
+        mainWindowModel.kinopoiskAPIKey = metadataProviderSettings.kinopoiskAPIKey
         mainWindowModel.overviewTranslationMode = metadataProviderSettings.overviewTranslationMode
         mainWindowModel.onPathChanged = { [weak self] _ in
             guard let self else { return }
@@ -63,8 +66,14 @@ extension AppDelegate {
         mainWindowModel.onJackettEnabledChanged = { [weak self] enabled in
             self?.setJackettEnabled(enabled)
         }
-        mainWindowModel.onMetadataProviderChanged = { [weak self] provider in
-            self?.setMetadataProvider(provider)
+        mainWindowModel.onMetadataSourceChanged = { [weak self] source in
+            self?.setMetadataSource(source)
+        }
+        mainWindowModel.onMetadataAPIKeyModeChanged = { [weak self] mode in
+            self?.setMetadataAPIKeyMode(mode)
+        }
+        mainWindowModel.onCombinedMetadataOrderChanged = { [weak self] providers in
+            self?.setCombinedMetadataOrder(providers)
         }
         mainWindowModel.onMetadataAPIKeyChanged = { [weak self] provider, value in
             self?.setMetadataAPIKey(value, provider: provider)

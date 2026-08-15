@@ -3,11 +3,13 @@ import Foundation
 enum MetadataProvider: String, Codable, CaseIterable, Sendable {
     case tmdb
     case omdb
+    case kinopoisk
 
     var displayName: String {
         switch self {
         case .tmdb: return "TMDB"
         case .omdb: return "OMDb"
+        case .kinopoisk: return "КиноПоиск"
         }
     }
 
@@ -17,8 +19,48 @@ enum MetadataProvider: String, Codable, CaseIterable, Sendable {
             return URL(string: "https://www.themoviedb.org/\(kind.rawValue)/\(id)")
         case .omdb:
             return URL(string: "https://www.imdb.com/title/\(id)")
+        case .kinopoisk:
+            return URL(string: "https://www.kinopoisk.ru/film/\(id)/")
         }
     }
+}
+
+enum MetadataSourceMode: String, Codable, CaseIterable, Sendable {
+    case omdb
+    case kinopoisk
+    case tmdb
+    case combined
+
+    var displayName: String {
+        switch self {
+        case .omdb: return "OMDb"
+        case .kinopoisk: return "КиноПоиск"
+        case .tmdb: return "TMDB"
+        case .combined: return "Комбинированные"
+        }
+    }
+
+    var singleProvider: MetadataProvider? {
+        switch self {
+        case .omdb: return .omdb
+        case .kinopoisk: return .kinopoisk
+        case .tmdb: return .tmdb
+        case .combined: return nil
+        }
+    }
+
+    init(provider: MetadataProvider) {
+        switch provider {
+        case .omdb: self = .omdb
+        case .kinopoisk: self = .kinopoisk
+        case .tmdb: self = .tmdb
+        }
+    }
+}
+
+enum MetadataAPIKeyMode: String, Codable, CaseIterable, Sendable {
+    case builtIn
+    case custom
 }
 
 enum MediaKind: String, Codable, CaseIterable, Sendable {

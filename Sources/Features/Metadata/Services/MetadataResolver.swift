@@ -7,7 +7,11 @@ actor MetadataResolver {
 
     init(
         candidateGenerator: MediaTitleCandidateGenerating = MediaTitleCandidateGenerator(),
-        services: [any MetadataServicing] = [TMDBService(), OMDBService()],
+        services: [any MetadataServicing] = [
+            TMDBService(),
+            OMDBService(),
+            KinopoiskService()
+        ],
         cache: MetadataCache = .shared
     ) {
         self.candidateGenerator = candidateGenerator

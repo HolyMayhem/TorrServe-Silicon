@@ -98,21 +98,29 @@ final class MetadataSettingsStoreTests: XCTestCase {
         let fileURL = directory.appendingPathComponent("metadata.json")
         let store = MetadataSettingsStore(
             fileURL: fileURL,
-            legacyTMDBURL: directory.appendingPathComponent("legacy.json")
+            legacyTMDBURL: directory.appendingPathComponent("legacy.json"),
+            builtInAPIKeys: .empty
         )
 
         try store.save(apiKey: "tmdb-key", for: .tmdb)
         try store.save(apiKey: "omdb-key", for: .omdb)
-        try store.save(selectedProvider: .omdb)
+        try store.save(apiKey: "kinopoisk-key", for: .kinopoisk)
+        try store.save(selectedSource: .combined)
+        try store.save(apiKeyMode: .custom)
+        try store.save(combinedOrder: [.kinopoisk, .tmdb, .omdb])
         try store.save(overviewTranslationMode: .original)
 
         let reloaded = MetadataSettingsStore(
             fileURL: fileURL,
-            legacyTMDBURL: directory.appendingPathComponent("legacy.json")
+            legacyTMDBURL: directory.appendingPathComponent("legacy.json"),
+            builtInAPIKeys: .empty
         ).settings
-        XCTAssertEqual(reloaded.selectedProvider, .omdb)
+        XCTAssertEqual(reloaded.selectedSource, .combined)
+        XCTAssertEqual(reloaded.apiKeyMode, .custom)
+        XCTAssertEqual(reloaded.combinedOrder, [.kinopoisk, .tmdb, .omdb])
         XCTAssertEqual(reloaded.tmdbAPIKey, "tmdb-key")
         XCTAssertEqual(reloaded.omdbAPIKey, "omdb-key")
+        XCTAssertEqual(reloaded.kinopoiskAPIKey, "kinopoisk-key")
         XCTAssertEqual(reloaded.overviewTranslationMode, .original)
     }
 
@@ -127,10 +135,40 @@ final class MetadataSettingsStoreTests: XCTestCase {
 
         let settings = MetadataSettingsStore(
             fileURL: fileURL,
-            legacyTMDBURL: directory.appendingPathComponent("legacy.json")
+            legacyTMDBURL: directory.appendingPathComponent("legacy.json"),
+            builtInAPIKeys: .empty
         ).settings
 
         XCTAssertEqual(settings.overviewTranslationMode, .automatic)
+        XCTAssertEqual(settings.kinopoiskAPIKey, "")
+        XCTAssertEqual(settings.selectedSource, .omdb)
+        XCTAssertEqual(settings.apiKeyMode, .builtIn)
+        XCTAssertEqual(settings.combinedOrder, [.omdb, .kinopoisk, .tmdb])
+    }
+
+    func testBuiltInAndCustomKeyModesUseDifferentKeys() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = MetadataSettingsStore(
+            fileURL: directory.appendingPathComponent("metadata.json"),
+            legacyTMDBURL: directory.appendingPathComponent("legacy.json"),
+            builtInAPIKeys: BuiltInMetadataAPIKeys(
+                tmdb: "built-in-tmdb",
+                omdb: "built-in-omdb",
+                kinopoisk: "built-in-kinopoisk"
+            )
+        )
+
+        XCTAssertEqual(store.tmdbConfiguration()?.apiKey, "built-in-tmdb")
+        XCTAssertEqual(store.omdbConfiguration()?.apiKey, "built-in-omdb")
+        XCTAssertEqual(store.kinopoiskConfiguration()?.apiKey, "built-in-kinopoisk")
+
+        try store.save(apiKey: "custom-omdb", for: .omdb)
+        try store.save(apiKeyMode: .custom)
+
+        XCTAssertEqual(store.omdbConfiguration()?.apiKey, "custom-omdb")
+        XCTAssertNil(store.tmdbConfiguration())
     }
 }
 

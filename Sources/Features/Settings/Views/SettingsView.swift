@@ -1,7 +1,10 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @ObservedObject var model: MainWindowModel
+
+    private let pickerColumnWidth: CGFloat = 220
 
     private var texts: Texts { Texts(language: model.language) }
 
@@ -84,7 +87,8 @@ struct SettingsView: View {
                     Text(texts.megabitsSpeed).tag(SpeedDisplayUnit.megabits)
                 }
                 .labelsHidden()
-                .frame(width: 190)
+                .fixedSize()
+                .frame(width: pickerColumnWidth, alignment: .trailing)
                 .onChange(of: model.speedUnit) { _, unit in
                     model.onSpeedUnitChanged?(unit)
                 }
@@ -96,7 +100,8 @@ struct SettingsView: View {
                     Text(texts.english).tag(AppLanguage.english)
                 }
                 .labelsHidden()
-                .frame(width: 190)
+                .fixedSize()
+                .frame(width: pickerColumnWidth, alignment: .trailing)
                 .onChange(of: model.language) { _, language in
                     model.onLanguageChanged?(language)
                 }
@@ -108,7 +113,8 @@ struct SettingsView: View {
                     Text("Off").tag(false)
                 }
                 .labelsHidden()
-                .frame(width: 190)
+                .fixedSize()
+                .frame(width: pickerColumnWidth, alignment: .trailing)
                 .onChange(of: model.jackettEnabled) { _, isEnabled in
                     model.onJackettEnabledChanged?(isEnabled)
                 }
@@ -119,52 +125,57 @@ struct SettingsView: View {
     private var metadataSection: some View {
         settingsSection(
             title: model.language == .russian ? "Метаданные" : "Metadata",
-            footer: model.language == .russian
-                ? "Ключи хранятся локально и используются только для получения постеров и описаний."
-                : "Keys are stored locally and used only to fetch posters and descriptions."
+            footer: metadataFooter
         ) {
+            settingRow(model.language == .russian ? "Ключи API" : "API keys") {
+                Picker("", selection: $model.metadataAPIKeyMode) {
+                    Text(model.language == .russian ? "Встроенные" : "Built-in")
+                        .tag(MetadataAPIKeyMode.builtIn)
+                    Text(model.language == .russian ? "Свои" : "Custom")
+                        .tag(MetadataAPIKeyMode.custom)
+                }
+                .labelsHidden()
+                .fixedSize()
+                .frame(width: pickerColumnWidth, alignment: .trailing)
+                .onChange(of: model.metadataAPIKeyMode) { _, mode in
+                    withAnimation(.easeInOut(duration: 0.22)) {
+                        model.onMetadataAPIKeyModeChanged?(mode)
+                    }
+                }
+            }
+
+            if model.metadataAPIKeyMode == .custom {
+                Divider()
+                apiKeyRow("TMDB API Key", provider: .tmdb, value: $model.tmdbAPIKey)
+                Divider()
+                apiKeyRow("OMDb API Key", provider: .omdb, value: $model.omdbAPIKey)
+                Divider()
+                apiKeyRow("КиноПоиск API Key", provider: .kinopoisk, value: $model.kinopoiskAPIKey)
+            }
+
+            Divider()
             settingRow(texts.metadataProvider) {
-                Picker("", selection: $model.metadataProvider) {
-                    ForEach(MetadataProvider.allCases, id: \.self) { provider in
-                        Text(provider.displayName).tag(provider)
+                Picker("", selection: $model.metadataSource) {
+                    ForEach(MetadataSourceMode.allCases, id: \.self) { source in
+                        Text(metadataSourceTitle(source)).tag(source)
                     }
                 }
                 .labelsHidden()
-                .frame(width: 190)
-                .onChange(of: model.metadataProvider) { _, provider in
-                    model.onMetadataProviderChanged?(provider)
+                .fixedSize()
+                .frame(width: pickerColumnWidth, alignment: .trailing)
+                .onChange(of: model.metadataSource) { _, source in
+                    withAnimation(.easeInOut(duration: 0.22)) {
+                        model.onMetadataSourceChanged?(source)
+                    }
                 }
             }
-            Divider()
-            settingRow("TMDB API Key") {
-                SecureField(
-                    "",
-                    text: Binding(
-                        get: { model.tmdbAPIKey },
-                        set: { value in
-                            model.tmdbAPIKey = value
-                            model.onMetadataAPIKeyChanged?(.tmdb, value)
-                        }
-                    )
-                )
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 320)
+
+            if model.metadataSource == .combined {
+                Divider()
+                combinedOrderRow
+                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
-            Divider()
-            settingRow("OMDb API Key") {
-                SecureField(
-                    "",
-                    text: Binding(
-                        get: { model.omdbAPIKey },
-                        set: { value in
-                            model.omdbAPIKey = value
-                            model.onMetadataAPIKeyChanged?(.omdb, value)
-                        }
-                    )
-                )
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 320)
-            }
+
             Divider()
             settingRow(model.language == .russian ? "Перевод описаний" : "Overview translation") {
                 Picker("", selection: $model.overviewTranslationMode) {
@@ -174,12 +185,73 @@ struct SettingsView: View {
                         .tag(OverviewTranslationMode.original)
                 }
                 .labelsHidden()
-                .frame(width: 190)
+                .fixedSize()
+                .frame(width: pickerColumnWidth, alignment: .trailing)
                 .onChange(of: model.overviewTranslationMode) { _, mode in
                     model.onOverviewTranslationModeChanged?(mode)
                 }
             }
         }
+    }
+
+    private var combinedOrderRow: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Text(model.language == .russian ? "Порядок поиска" : "Lookup order")
+                .font(.subheadline.weight(.medium))
+
+            MetadataProviderOrderView(
+                providers: model.combinedMetadataOrder,
+                language: model.language
+            ) { providers in
+                model.combinedMetadataOrder = providers
+                model.onCombinedMetadataOrderChanged?(providers)
+            }
+
+            Text(model.language == .russian
+                ? "Если источник не найдёт материал, приложение автоматически перейдёт к следующему. Перетащите источники, чтобы изменить приоритет."
+                : "If a source cannot find the title, the app automatically tries the next one. Drag sources to change priority.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.vertical, 10)
+    }
+
+    private func apiKeyRow(
+        _ title: String,
+        provider: MetadataProvider,
+        value: Binding<String>
+    ) -> some View {
+        settingRow(title) {
+            SecureField(
+                "",
+                text: Binding(
+                    get: { value.wrappedValue },
+                    set: { newValue in
+                        value.wrappedValue = newValue
+                        model.onMetadataAPIKeyChanged?(provider, newValue)
+                    }
+                )
+            )
+            .textFieldStyle(.roundedBorder)
+            .frame(width: 320)
+        }
+    }
+
+    private func metadataSourceTitle(_ source: MetadataSourceMode) -> String {
+        guard source == .combined else { return source.displayName }
+        return model.language == .russian ? "Комбинированные" : "Combined"
+    }
+
+    private var metadataFooter: String {
+        if model.metadataAPIKeyMode == .builtIn {
+            return model.language == .russian
+                ? "Приложение использует встроенные ключи. В комбинированном режиме источники проверяются по указанному порядку."
+                : "The app uses its built-in keys. Combined mode checks providers in the displayed order."
+        }
+        return model.language == .russian
+            ? "Собственные ключи хранятся локально и используются только для получения постеров и описаний."
+            : "Custom keys are stored locally and used only to fetch posters and descriptions."
     }
 
     private func toggleRow(
@@ -242,6 +314,89 @@ struct SettingsView: View {
                 callback?(value)
             }
         )
+    }
+}
+
+private struct MetadataProviderOrderView: View {
+    let providers: [MetadataProvider]
+    let language: AppLanguage
+    let onChange: ([MetadataProvider]) -> Void
+    @State private var draggedProvider: MetadataProvider?
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(Array(providers.enumerated()), id: \.element) { index, provider in
+                providerChip(provider)
+
+                if index < providers.count - 1 {
+                    Image(systemName: "arrow.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func providerChip(_ provider: MetadataProvider) -> some View {
+        Text(provider.displayName)
+            .font(.caption.weight(.semibold))
+            .lineLimit(1)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 7)
+            .background(Color.secondary.opacity(0.12), in: Capsule())
+            .overlay {
+                Capsule().stroke(Color.primary.opacity(0.08), lineWidth: 1)
+            }
+            .contentShape(Capsule())
+            .onDrag {
+                draggedProvider = provider
+                return NSItemProvider(object: provider.rawValue as NSString)
+            }
+            .onDrop(
+                of: [UTType.plainText],
+                delegate: MetadataProviderDropDelegate(
+                    destination: provider,
+                    providers: providers,
+                    draggedProvider: $draggedProvider,
+                    onChange: onChange
+                )
+            )
+            .help(language == .russian
+                ? "Перетащите, чтобы изменить приоритет"
+                : "Drag to change priority")
+            .accessibilityLabel(provider.displayName)
+    }
+}
+
+private struct MetadataProviderDropDelegate: DropDelegate {
+    let destination: MetadataProvider
+    let providers: [MetadataProvider]
+    @Binding var draggedProvider: MetadataProvider?
+    let onChange: ([MetadataProvider]) -> Void
+
+    func performDrop(info: DropInfo) -> Bool {
+        guard let draggedProvider,
+              draggedProvider != destination,
+              let sourceIndex = providers.firstIndex(of: draggedProvider),
+              let destinationIndex = providers.firstIndex(of: destination) else {
+            self.draggedProvider = nil
+            return false
+        }
+
+        var updated = providers
+        updated.remove(at: sourceIndex)
+        updated.insert(draggedProvider, at: min(destinationIndex, updated.endIndex))
+        self.draggedProvider = nil
+        withAnimation(.easeInOut(duration: 0.18)) {
+            onChange(MetadataProviderSettings.normalizedOrder(updated))
+        }
+        return true
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
     }
 }
 

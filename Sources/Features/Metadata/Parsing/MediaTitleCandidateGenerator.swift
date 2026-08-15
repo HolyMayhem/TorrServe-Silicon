@@ -178,6 +178,9 @@ struct MediaTitleCandidateGenerator: MediaTitleCandidateGenerating {
         case .tmdb:
             if language.hasPrefix("ru"), hasCyrillic && !hasLatin { return 24 }
             if hasLatin && !hasCyrillic { return 16 }
+        case .kinopoisk:
+            if hasCyrillic && !hasLatin { return 32 }
+            if hasLatin && !hasCyrillic { return 24 }
         }
         return 0
     }

@@ -217,8 +217,7 @@ struct LibraryPoster: View {
     let metadata: LibraryMetadata?
 
     var body: some View {
-        let metadataPoster = metadata?.posterURL ?? ""
-        let value = metadataPoster.isEmpty ? torrent.poster : metadataPoster
+        let value = metadata?.posterURL ?? ""
         CachedRemoteImage(
             url: value.isEmpty ? nil : URL(string: value),
             contentMode: .fill,

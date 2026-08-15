@@ -75,9 +75,7 @@ struct MetadataSettingsSheet: View {
             HStack {
                 Link(
                     language == .russian ? "Получить API Key" : "Get an API Key",
-                    destination: provider == .tmdb
-                        ? URL(string: "https://www.themoviedb.org/settings/api")!
-                        : URL(string: "https://www.omdbapi.com/apikey.aspx")!
+                    destination: apiKeyURL
                 )
 
                 Spacer()
@@ -109,6 +107,21 @@ struct MetadataSettingsSheet: View {
             return language == .russian
                 ? "OMDb предоставляет постеры и данные IMDb, но не поддерживает локализацию и фоновые изображения."
                 : "OMDb provides posters and IMDb data, but does not provide localization or backdrop images."
+        case .kinopoisk:
+            return language == .russian
+                ? "Данные предоставляются неофициальным API КиноПоиска. Доступность и лимиты зависят от тарифа API."
+                : "Data is provided by the unofficial Kinopoisk API. Availability and limits depend on its API plan."
+        }
+    }
+
+    private var apiKeyURL: URL {
+        switch provider {
+        case .tmdb:
+            return URL(string: "https://www.themoviedb.org/settings/api")!
+        case .omdb:
+            return URL(string: "https://www.omdbapi.com/apikey.aspx")!
+        case .kinopoisk:
+            return URL(string: "https://kinopoiskapiunofficial.tech/profile")!
         }
     }
 }

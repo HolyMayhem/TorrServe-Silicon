@@ -366,26 +366,27 @@ final class LibraryViewModel: ObservableObject {
         )
     }
 
-    private var selectedMetadataProvider: MetadataProvider {
-        metadataSettings.settings.selectedProvider
+    private var selectedMetadataProviders: [MetadataProvider] {
+        metadataSettings.settings.resolutionOrder.filter(metadataSettings.isConfigured)
     }
 
-    private var metadataLanguageCode: String {
-        selectedMetadataProvider == .tmdb
-            ? (metadataLanguage == .russian ? "ru-RU" : "en-US")
-            : "en-US"
+    private func metadataLanguageCode(for provider: MetadataProvider) -> String {
+        provider == .omdb
+            ? "en-US"
+            : (metadataLanguage == .russian ? "ru-RU" : "en-US")
     }
 
     private func resolveMetadataIfNeeded(for values: [NativeTorrent]) {
-        let provider = selectedMetadataProvider
-        guard metadataSettings.isConfigured(provider) else { return }
+        let providers = selectedMetadataProviders
+        guard !providers.isEmpty else { return }
         for torrent in values {
             let hash = torrent.hash.lowercased()
             guard !hash.isEmpty else { continue }
             if let metadata = metadataByHash[hash],
-               metadata.metadataProvider == provider,
+               let provider = metadata.metadataProvider,
+               providers.contains(provider),
                metadata.metadataProviderID != nil,
-               metadata.metadataLanguage == metadataLanguageCode {
+               metadata.metadataLanguage == metadataLanguageCode(for: provider) {
                 continue
             }
             resolveMetadata(for: torrent)
@@ -396,8 +397,8 @@ final class LibraryViewModel: ObservableObject {
         for torrent: NativeTorrent,
         forceRefresh: Bool = false
     ) {
-        let provider = selectedMetadataProvider
-        guard metadataSettings.isConfigured(provider) else { return }
+        let providers = selectedMetadataProviders
+        guard !providers.isEmpty else { return }
         let hash = torrent.hash.lowercased()
         guard !hash.isEmpty else { return }
         guard metadataResolutionTasks[hash] == nil else { return }
@@ -408,7 +409,6 @@ final class LibraryViewModel: ObservableObject {
         }
 
         let candidates = metadataCandidates(for: torrent)
-        let language = metadataLanguageCode
         let revision = metadataConfigurationRevision
         resolvingMetadataHashes.insert(hash)
         metadataResolutionTasks[hash] = Task { [weak self] in
@@ -419,40 +419,54 @@ final class LibraryViewModel: ObservableObject {
                     metadataResolutionTasks[hash] = nil
                 }
             }
-            let outcome = await metadataResolver.resolve(
-                candidates: candidates,
-                provider: provider,
-                language: language,
-                forceRefresh: forceRefresh
-            )
-            guard !Task.isCancelled, metadataConfigurationRevision == revision else { return }
+            var providerWasUnavailable = false
 
-            switch outcome {
-            case .resolved(let resolved):
-                let metadataValue = resolved.metadata
-                let existing = metadataStore.metadata(for: hash) ?? LibraryMetadata(
-                    title: torrent.displayTitle,
-                    posterURL: torrent.poster,
-                    summary: "",
-                    source: metadataValue.provider.displayName,
-                    sourceURL: metadataValue.provider.sourceURL(
-                        id: metadataValue.id,
-                        kind: metadataValue.kind
-                    )?.absoluteString
+            for provider in providers {
+                let language = metadataLanguageCode(for: provider)
+                let outcome = await metadataResolver.resolve(
+                    candidates: candidates,
+                    provider: provider,
+                    language: language,
+                    forceRefresh: forceRefresh
                 )
-                let metadata = existing.merging(
-                    resolved: resolved,
-                    language: language
-                )
-                metadataStore.save(metadata, for: hash)
-                metadataByHash[hash] = metadata
-                metadataRetryAfter[hash] = nil
+                guard !Task.isCancelled,
+                      metadataConfigurationRevision == revision else { return }
 
-            case .notFound:
-                metadataRetryAfter[hash] = Date().addingTimeInterval(60 * 60 * 24)
+                switch outcome {
+                case .resolved(let resolved):
+                    let metadataValue = resolved.metadata
+                    let existing = metadataStore.metadata(for: hash) ?? LibraryMetadata(
+                        title: torrent.displayTitle,
+                        posterURL: "",
+                        summary: "",
+                        source: metadataValue.provider.displayName,
+                        sourceURL: metadataValue.provider.sourceURL(
+                            id: metadataValue.id,
+                            kind: metadataValue.kind
+                        )?.absoluteString
+                    )
+                    let metadata = existing.merging(
+                        resolved: resolved,
+                        language: language
+                    )
+                    metadataStore.save(metadata, for: hash)
+                    metadataByHash[hash] = metadata
+                    metadataRetryAfter[hash] = nil
+                    return
 
-            case .unavailable:
+                case .notFound:
+                    continue
+
+                case .unavailable:
+                    providerWasUnavailable = true
+                    continue
+                }
+            }
+
+            if providerWasUnavailable {
                 metadataRetryAfter[hash] = Date().addingTimeInterval(60 * 15)
+            } else {
+                metadataRetryAfter[hash] = Date().addingTimeInterval(60 * 60 * 24)
             }
         }
     }

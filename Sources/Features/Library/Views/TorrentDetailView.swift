@@ -168,8 +168,7 @@ struct TorrentDetailView: View {
     @ViewBuilder
     private var poster: some View {
         let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
-        let metadataPoster = metadata?.posterURL ?? ""
-        let posterValue = metadataPoster.isEmpty ? torrent.poster : metadataPoster
+        let posterValue = metadata?.posterURL ?? ""
 
         if let url = URL(string: posterValue), !posterValue.isEmpty {
             CachedRemoteImage(url: url, contentMode: .fill, placeholderSystemImage: "film")
@@ -284,14 +283,7 @@ struct TorrentDetailView: View {
     }
 
     private var metadataSourceName: String? {
-        if let provider = metadata?.metadataProvider {
-            return provider.displayName
-        }
-        guard let source = metadata?.source.trimmingCharacters(in: .whitespacesAndNewlines),
-              !source.isEmpty else {
-            return nil
-        }
-        return source
+        metadata?.metadataProvider?.displayName
     }
 }
 
