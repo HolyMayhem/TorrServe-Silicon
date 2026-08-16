@@ -1,6 +1,6 @@
 import Foundation
 
-enum MetadataProvider: String, Codable, CaseIterable, Sendable {
+enum MetadataProvider: String, Codable, CaseIterable, Hashable, Sendable {
     case tmdb
     case omdb
     case kinopoisk

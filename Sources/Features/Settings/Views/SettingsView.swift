@@ -1,5 +1,4 @@
 import SwiftUI
-import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @ObservedObject var model: MainWindowModel
@@ -127,6 +126,29 @@ struct SettingsView: View {
             title: model.language == .russian ? "Метаданные" : "Metadata",
             footer: metadataFooter
         ) {
+            settingRow(texts.metadataProvider) {
+                Picker("", selection: $model.metadataSource) {
+                    ForEach(MetadataSourceMode.allCases, id: \.self) { source in
+                        Text(metadataSourceTitle(source)).tag(source)
+                    }
+                }
+                .labelsHidden()
+                .fixedSize()
+                .frame(width: pickerColumnWidth, alignment: .trailing)
+                .onChange(of: model.metadataSource) { _, source in
+                    withAnimation(.easeInOut(duration: 0.22)) {
+                        model.onMetadataSourceChanged?(source)
+                    }
+                }
+            }
+
+            if model.metadataSource == .combined {
+                Divider()
+                combinedOrderRow
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+
+            Divider()
             settingRow(model.language == .russian ? "Ключи API" : "API keys") {
                 Picker("", selection: $model.metadataAPIKeyMode) {
                     Text(model.language == .russian ? "Встроенные" : "Built-in")
@@ -151,29 +173,6 @@ struct SettingsView: View {
                 apiKeyRow("OMDb API Key", provider: .omdb, value: $model.omdbAPIKey)
                 Divider()
                 apiKeyRow("КиноПоиск API Key", provider: .kinopoisk, value: $model.kinopoiskAPIKey)
-            }
-
-            Divider()
-            settingRow(texts.metadataProvider) {
-                Picker("", selection: $model.metadataSource) {
-                    ForEach(MetadataSourceMode.allCases, id: \.self) { source in
-                        Text(metadataSourceTitle(source)).tag(source)
-                    }
-                }
-                .labelsHidden()
-                .fixedSize()
-                .frame(width: pickerColumnWidth, alignment: .trailing)
-                .onChange(of: model.metadataSource) { _, source in
-                    withAnimation(.easeInOut(duration: 0.22)) {
-                        model.onMetadataSourceChanged?(source)
-                    }
-                }
-            }
-
-            if model.metadataSource == .combined {
-                Divider()
-                combinedOrderRow
-                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
 
             Divider()
@@ -223,18 +222,90 @@ struct SettingsView: View {
         value: Binding<String>
     ) -> some View {
         settingRow(title) {
-            SecureField(
-                "",
-                text: Binding(
-                    get: { value.wrappedValue },
-                    set: { newValue in
-                        value.wrappedValue = newValue
-                        model.onMetadataAPIKeyChanged?(provider, newValue)
-                    }
+            HStack(spacing: 8) {
+                apiKeyTestStatus(provider)
+
+                Button(model.language == .russian ? "Тест" : "Test") {
+                    model.onTestMetadataAPIKey?(provider, value.wrappedValue)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
+                .fixedSize()
+                .disabled(
+                    value.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        || model.metadataAPIKeyTestStates[provider] == .testing
                 )
-            )
-            .textFieldStyle(.roundedBorder)
-            .frame(width: 320)
+
+                SecureField(
+                    "",
+                    text: Binding(
+                        get: { value.wrappedValue },
+                        set: { newValue in
+                            value.wrappedValue = newValue
+                            model.onMetadataAPIKeyChanged?(provider, newValue)
+                        }
+                    )
+                )
+                .textFieldStyle(.roundedBorder)
+                .controlSize(.regular)
+                .frame(width: 300)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func apiKeyTestStatus(_ provider: MetadataProvider) -> some View {
+        let state = model.metadataAPIKeyTestStates[provider] ?? .idle
+        Group {
+            switch state {
+            case .idle:
+                Color.clear
+            case .testing:
+                ProgressView()
+                    .controlSize(.small)
+                    .help(model.language == .russian ? "Проверка ключа" : "Testing key")
+            case .valid:
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                    .help(model.language == .russian ? "Ключ работает" : "The key works")
+            case .invalid:
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.red)
+                    .help(model.language == .russian ? "Ключ не принят сервисом" : "The service rejected this key")
+            case .rateLimited:
+                Image(systemName: "clock.badge.exclamationmark.fill")
+                    .foregroundStyle(.orange)
+                    .help(model.language == .russian
+                        ? "Ключ принят, но лимит запросов OMDb исчерпан. Повторите проверку позже."
+                        : "The key was accepted, but the OMDb request limit has been reached. Try again later.")
+            case .unavailable:
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                    .help(model.language == .russian
+                        ? "Не удалось связаться с сервисом. Попробуйте позже."
+                        : "Could not contact the service. Try again later.")
+            }
+        }
+        .frame(width: 16, height: 16)
+        .accessibilityLabel(apiKeyTestAccessibilityLabel(state))
+    }
+
+    private func apiKeyTestAccessibilityLabel(_ state: MetadataAPIKeyTestState) -> String {
+        switch state {
+        case .idle:
+            return model.language == .russian ? "Ключ не проверен" : "Key not tested"
+        case .testing:
+            return model.language == .russian ? "Ключ проверяется" : "Testing key"
+        case .valid:
+            return model.language == .russian ? "Ключ работает" : "Key is valid"
+        case .invalid:
+            return model.language == .russian ? "Ключ не работает" : "Key is invalid"
+        case .rateLimited:
+            return model.language == .russian
+                ? "Ключ принят, лимит запросов исчерпан"
+                : "Key accepted, request limit reached"
+        case .unavailable:
+            return model.language == .russian ? "Сервис недоступен" : "Service unavailable"
         }
     }
 
@@ -314,89 +385,6 @@ struct SettingsView: View {
                 callback?(value)
             }
         )
-    }
-}
-
-private struct MetadataProviderOrderView: View {
-    let providers: [MetadataProvider]
-    let language: AppLanguage
-    let onChange: ([MetadataProvider]) -> Void
-    @State private var draggedProvider: MetadataProvider?
-
-    var body: some View {
-        HStack(spacing: 8) {
-            ForEach(Array(providers.enumerated()), id: \.element) { index, provider in
-                providerChip(provider)
-
-                if index < providers.count - 1 {
-                    Image(systemName: "arrow.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                        .accessibilityHidden(true)
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func providerChip(_ provider: MetadataProvider) -> some View {
-        Text(provider.displayName)
-            .font(.caption.weight(.semibold))
-            .lineLimit(1)
-            .padding(.horizontal, 11)
-            .padding(.vertical, 7)
-            .background(Color.secondary.opacity(0.12), in: Capsule())
-            .overlay {
-                Capsule().stroke(Color.primary.opacity(0.08), lineWidth: 1)
-            }
-            .contentShape(Capsule())
-            .onDrag {
-                draggedProvider = provider
-                return NSItemProvider(object: provider.rawValue as NSString)
-            }
-            .onDrop(
-                of: [UTType.plainText],
-                delegate: MetadataProviderDropDelegate(
-                    destination: provider,
-                    providers: providers,
-                    draggedProvider: $draggedProvider,
-                    onChange: onChange
-                )
-            )
-            .help(language == .russian
-                ? "Перетащите, чтобы изменить приоритет"
-                : "Drag to change priority")
-            .accessibilityLabel(provider.displayName)
-    }
-}
-
-private struct MetadataProviderDropDelegate: DropDelegate {
-    let destination: MetadataProvider
-    let providers: [MetadataProvider]
-    @Binding var draggedProvider: MetadataProvider?
-    let onChange: ([MetadataProvider]) -> Void
-
-    func performDrop(info: DropInfo) -> Bool {
-        guard let draggedProvider,
-              draggedProvider != destination,
-              let sourceIndex = providers.firstIndex(of: draggedProvider),
-              let destinationIndex = providers.firstIndex(of: destination) else {
-            self.draggedProvider = nil
-            return false
-        }
-
-        var updated = providers
-        updated.remove(at: sourceIndex)
-        updated.insert(draggedProvider, at: min(destinationIndex, updated.endIndex))
-        self.draggedProvider = nil
-        withAnimation(.easeInOut(duration: 0.18)) {
-            onChange(MetadataProviderSettings.normalizedOrder(updated))
-        }
-        return true
-    }
-
-    func dropUpdated(info: DropInfo) -> DropProposal? {
-        DropProposal(operation: .move)
     }
 }
 

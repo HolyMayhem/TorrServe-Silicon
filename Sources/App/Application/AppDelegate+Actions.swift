@@ -238,6 +238,7 @@ extension AppDelegate {
     }
 
     func setMetadataAPIKeyMode(_ mode: MetadataAPIKeyMode) {
+        mainWindowModel.metadataKeysDiagnostic = .idle
         do {
             try metadataSettings.save(apiKeyMode: mode)
             mainWindowModel.metadataAPIKeyMode = mode
@@ -260,6 +261,8 @@ extension AppDelegate {
     }
 
     func setMetadataAPIKey(_ value: String, provider: MetadataProvider) {
+        mainWindowModel.metadataAPIKeyTestStates[provider] = .idle
+        mainWindowModel.metadataKeysDiagnostic = .idle
         do {
             try metadataSettings.save(apiKey: value, for: provider)
             let settings = metadataSettings.settings
@@ -276,10 +279,114 @@ extension AppDelegate {
         }
     }
 
+    func testMetadataAPIKey(_ value: String, provider: MetadataProvider) {
+        let apiKey = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !apiKey.isEmpty else {
+            mainWindowModel.metadataAPIKeyTestStates[provider] = .invalid
+            return
+        }
+        guard mainWindowModel.metadataAPIKeyTestStates[provider] != .testing else {
+            return
+        }
+
+        mainWindowModel.metadataAPIKeyTestStates[provider] = .testing
+        Task { [weak self] in
+            guard let self else { return }
+            let result = await metadataAPIKeyValidator.validate(
+                provider: provider,
+                apiKey: apiKey
+            )
+            guard !Task.isCancelled else { return }
+            guard currentMetadataAPIKey(for: provider)
+                .trimmingCharacters(in: .whitespacesAndNewlines) == apiKey else {
+                return
+            }
+
+            switch result {
+            case .valid:
+                mainWindowModel.metadataAPIKeyTestStates[provider] = .valid
+            case .invalid:
+                mainWindowModel.metadataAPIKeyTestStates[provider] = .invalid
+            case .rateLimited:
+                mainWindowModel.metadataAPIKeyTestStates[provider] = .rateLimited
+            case .unavailable:
+                mainWindowModel.metadataAPIKeyTestStates[provider] = .unavailable
+            }
+        }
+    }
+
+    func testAllMetadataAPIKeys() {
+        guard !mainWindowModel.isTestingAllMetadataAPIKeys else { return }
+
+        mainWindowModel.isTestingAllMetadataAPIKeys = true
+        mainWindowModel.metadataKeysDiagnostic = DiagnosticResult(kind: .checking, message: "")
+        for provider in MetadataProvider.allCases {
+            mainWindowModel.metadataAPIKeyTestStates[provider] = .testing
+        }
+
+        Task { [weak self] in
+            guard let self else { return }
+            var results: [MetadataProvider: MetadataAPIKeyValidationResult] = [:]
+
+            for provider in MetadataProvider.allCases {
+                let apiKey = self.metadataSettings.activeAPIKey(for: provider)
+                results[provider] = await self.metadataAPIKeyValidator.validate(
+                    provider: provider,
+                    apiKey: apiKey
+                )
+            }
+
+            for provider in MetadataProvider.allCases {
+                switch results[provider] ?? .unavailable {
+                case .valid:
+                    self.mainWindowModel.metadataAPIKeyTestStates[provider] = .valid
+                case .invalid:
+                    self.mainWindowModel.metadataAPIKeyTestStates[provider] = .invalid
+                case .rateLimited:
+                    self.mainWindowModel.metadataAPIKeyTestStates[provider] = .rateLimited
+                case .unavailable:
+                    self.mainWindowModel.metadataAPIKeyTestStates[provider] = .unavailable
+                }
+            }
+
+            let acceptedCount = results.values.filter {
+                $0 == .valid || $0 == .rateLimited
+            }.count
+            let hasInvalidKey = results.values.contains(.invalid)
+            let hasUnavailableProvider = results.values.contains(.unavailable)
+            let language = self.currentLanguage
+            let result = DiagnosticResult(
+                kind: hasInvalidKey
+                    ? .failure
+                    : (hasUnavailableProvider || acceptedCount < MetadataProvider.allCases.count
+                        ? .warning
+                        : .success),
+                message: language == .russian
+                    ? "Проверено ключей: \(acceptedCount) из \(MetadataProvider.allCases.count)."
+                    : "API keys accepted: \(acceptedCount) of \(MetadataProvider.allCases.count)."
+            )
+            self.mainWindowModel.metadataKeysDiagnostic = result
+            self.mainWindowModel.latestDiagnostic = result
+            self.mainWindowModel.isTestingAllMetadataAPIKeys = false
+        }
+    }
+
+    private func currentMetadataAPIKey(for provider: MetadataProvider) -> String {
+        switch provider {
+        case .tmdb:
+            return mainWindowModel.tmdbAPIKey
+        case .omdb:
+            return mainWindowModel.omdbAPIKey
+        case .kinopoisk:
+            return mainWindowModel.kinopoiskAPIKey
+        }
+    }
+
     func setOverviewTranslationMode(_ mode: OverviewTranslationMode) {
         do {
             try metadataSettings.save(overviewTranslationMode: mode)
             mainWindowModel.overviewTranslationMode = mode
+            libraryModel.metadataConfigurationChanged()
         } catch {
             showAlert(title: "Metadata", message: error.localizedDescription)
             mainWindowModel.overviewTranslationMode = metadataSettings.settings.overviewTranslationMode

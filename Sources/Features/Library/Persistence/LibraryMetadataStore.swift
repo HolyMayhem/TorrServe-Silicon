@@ -172,6 +172,10 @@ final class LibraryMetadataStore {
         defaults.set(data, forKey: defaultsKey)
     }
 
+    func removeAll() {
+        defaults.removeObject(forKey: defaultsKey)
+    }
+
     func allMetadata() -> [String: LibraryMetadata] {
         guard
             let data = defaults.data(forKey: defaultsKey),

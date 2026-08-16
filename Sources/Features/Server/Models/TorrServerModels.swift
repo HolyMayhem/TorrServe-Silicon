@@ -220,9 +220,12 @@ struct TorrServerCacheState: Decodable {
 
 struct TorrServerStorageSettings {
     let cacheSize: Int64
+    let readerReadAhead: Int
+    let preloadCache: Int
     let useDisk: Bool
     let torrentsSavePath: String
     let removeCacheOnDrop: Bool
+    private let rawData: Data
 
     init(data: Data) throws {
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
@@ -235,10 +238,76 @@ struct TorrServerStorageSettings {
         }
 
         cacheSize = (value(["cacheSize", "CacheSize"]) as? NSNumber)?.int64Value ?? 0
+        readerReadAhead = (value([
+            "readerReadAHead", "ReaderReadAHead"
+        ]) as? NSNumber)?.intValue ?? 95
+        preloadCache = (value([
+            "preloadCache", "PreloadCache"
+        ]) as? NSNumber)?.intValue ?? 50
         useDisk = (value(["useDisk", "UseDisk"]) as? NSNumber)?.boolValue ?? false
         torrentsSavePath = value(["torrentsSavePath", "TorrentsSavePath"]) as? String ?? ""
         removeCacheOnDrop = (value([
             "removeCacheOnDrop", "RemoveCacheOnDrop"
         ]) as? NSNumber)?.boolValue ?? false
+        rawData = data
+    }
+
+    var draft: TorrServerSettingsDraft {
+        TorrServerSettingsDraft(
+            cacheSizeMB: max(Int(cacheSize / 1_048_576), 1),
+            readerReadAhead: readerReadAhead,
+            preloadCache: preloadCache,
+            useDisk: useDisk,
+            torrentsSavePath: torrentsSavePath,
+            removeCacheOnDrop: removeCacheOnDrop
+        ).normalized
+    }
+
+    func payload(applying draft: TorrServerSettingsDraft) throws -> [String: Any] {
+        guard var object = try JSONSerialization.jsonObject(with: rawData) as? [String: Any] else {
+            throw AppError("TorrServer returned invalid settings data.")
+        }
+
+        let normalized = draft.normalized
+        object["CacheSize"] = Int64(normalized.cacheSizeMB) * 1_048_576
+        object["ReaderReadAHead"] = normalized.readerReadAhead
+        object["PreloadCache"] = normalized.preloadCache
+        object["UseDisk"] = normalized.useDisk
+        object["TorrentsSavePath"] = normalized.torrentsSavePath
+        object["RemoveCacheOnDrop"] = normalized.removeCacheOnDrop
+        return object
+    }
+}
+
+struct TorrServerSettingsDraft: Equatable {
+    var cacheSizeMB = 64
+    var readerReadAhead = 95
+    var preloadCache = 50
+    var useDisk = false
+    var torrentsSavePath = ""
+    var removeCacheOnDrop = false
+
+    static let defaults = TorrServerSettingsDraft()
+
+    var normalized: TorrServerSettingsDraft {
+        var copy = self
+        copy.cacheSizeMB = min(max(copy.cacheSizeMB, 16), 4_096)
+        copy.readerReadAhead = min(max(copy.readerReadAhead, 5), 100)
+        copy.preloadCache = min(max(copy.preloadCache, 0), 100)
+        copy.torrentsSavePath = copy.torrentsSavePath.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        return copy
+    }
+
+    var trailingCachePercent: Int {
+        100 - normalized.readerReadAhead
+    }
+
+    var preloadSizeMB: Int {
+        Int(
+            (Double(normalized.cacheSizeMB) * Double(normalized.preloadCache) / 100)
+                .rounded()
+        )
     }
 }

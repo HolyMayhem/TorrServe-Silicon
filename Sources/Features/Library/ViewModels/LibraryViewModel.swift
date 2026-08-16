@@ -184,7 +184,13 @@ final class LibraryViewModel: ObservableObject {
         metadataResolutionTasks.removeAll()
         resolvingMetadataHashes.removeAll()
         metadataRetryAfter.removeAll()
-        resolveMetadataIfNeeded(for: torrents)
+        metadataStore.removeAll()
+        metadataByHash = [:]
+
+        guard !selectedMetadataProviders.isEmpty else { return }
+        for torrent in torrents {
+            resolveMetadata(for: torrent, forceRefresh: true)
+        }
     }
 
     func refresh(selectingHash: String) {

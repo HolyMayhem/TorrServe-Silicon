@@ -165,7 +165,6 @@ extension AppDelegate {
         guard !mainWindowModel.isStoppingExternalProcesses else { return }
         let revision = diagnosticsRevision
         let language = currentLanguage
-        let requestedPIDs = Set(mainWindowModel.processScan.processes.map(\.pid))
         mainWindowModel.isStoppingExternalProcesses = true
         mainWindowModel.latestDiagnostic = DiagnosticResult(
             kind: .checking,
@@ -174,6 +173,11 @@ extension AppDelegate {
 
         Task { [weak self] in
             guard let self else { return }
+            let initialScan = await self.diagnosticsService.scanTorrServerProcesses(
+                managedPID: self.processController.runningPID,
+                language: language
+            )
+            let requestedPIDs = Set(initialScan.processes.map(\.pid))
             let result = await self.diagnosticsService.stopExternalProcesses(
                 requestedPIDs: requestedPIDs,
                 managedPID: self.processController.runningPID,

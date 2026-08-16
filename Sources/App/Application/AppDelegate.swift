@@ -78,6 +78,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     let libraryClient = TorrServerLibraryClient()
     let notificationController = NotificationController()
     let diagnosticsService = TorrServerDiagnosticsService()
+    let nativeTorrServerAPI = NativeTorrServerAPI()
+    let metadataAPIKeyValidator = MetadataAPIKeyValidator()
     let metadataSettings = MetadataSettingsStore.shared
     let mainWindowModel = MainWindowModel()
     let libraryModel = LibraryViewModel()
@@ -105,6 +107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     var menuBarAnimationPhase: CGFloat = 0
     var diagnosticsRevision = 0
     var isNotificationAuthorizationPending = false
+    var loadedTorrServerSettings: TorrServerStorageSettings?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         registerDefaultSettings()

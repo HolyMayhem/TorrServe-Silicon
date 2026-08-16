@@ -166,6 +166,10 @@ final class MetadataSettingsStore: TMDBConfigurationProviding, OMDBConfiguration
         !effectiveAPIKey(for: provider).isEmpty
     }
 
+    func activeAPIKey(for provider: MetadataProvider) -> String {
+        effectiveAPIKey(for: provider)
+    }
+
     func save(selectedSource: MetadataSourceMode) throws {
         try lock.withLock {
             var payload = loadPayload()

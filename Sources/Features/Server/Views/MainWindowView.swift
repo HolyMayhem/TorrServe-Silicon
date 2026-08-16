@@ -4,7 +4,6 @@ import SwiftUI
 struct MainWindowView: View {
     @ObservedObject var model: MainWindowModel
     @State private var showsClearCacheConfirmation = false
-    @State private var showsDiagnostics = false
 
     private var texts: Texts {
         Texts(language: model.language)
@@ -28,16 +27,17 @@ struct MainWindowView: View {
                     tint: .green
                 )
 
-                serverOverviewSection
-                executableSection
-
                 HStack(alignment: .top, spacing: 10) {
+                    serverOverviewSection
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                     storageSection
-                        .frame(maxWidth: .infinity)
-                    playerSection
-                        .frame(maxWidth: .infinity)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                .frame(height: 174)
+                .frame(height: 178)
+
+                executableSection
+                ServerDiagnosticsSection(model: model)
+                playerSection
             }
             .padding(.horizontal, SettingsScreenLayout.formContentInset)
             .padding(.top, SettingsScreenLayout.scrollContentTopPadding)
@@ -105,9 +105,9 @@ struct MainWindowView: View {
                 .disabled(!model.canOpenWeb)
                 .help(texts.openWebUI)
 
-                diagnosticsButton
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .serverSettingsPanel()
         .help(model.statusTooltip.isEmpty ? serverStatusDetail : model.statusTooltip)
     }
@@ -183,24 +183,6 @@ struct MainWindowView: View {
         .serverSettingsPanel()
     }
 
-    private var diagnosticsButton: some View {
-        Button {
-            showsDiagnostics.toggle()
-        } label: {
-            Label(
-                model.language == .russian ? "Диагностика" : "Diagnostics",
-                systemImage: "stethoscope"
-            )
-        }
-        .buttonStyle(.bordered)
-        .help(model.latestDiagnostic.message.isEmpty
-            ? (model.language == .russian ? "Проверить TorrServer" : "Check TorrServer")
-            : model.latestDiagnostic.message)
-        .popover(isPresented: $showsDiagnostics, arrowEdge: .bottom) {
-            DiagnosticsPopover(model: model)
-        }
-    }
-
     private var storageSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -268,6 +250,7 @@ struct MainWindowView: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .serverSettingsPanel()
     }
 
@@ -485,7 +468,7 @@ struct MainWindowView: View {
     }
 }
 
-private extension View {
+extension View {
     func serverSettingsPanel() -> some View {
         padding(14)
             .background(

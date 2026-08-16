@@ -68,6 +68,19 @@ final class NativeTorrServerAPI {
         return try TorrServerStorageSettings(data: data)
     }
 
+    func updateSettings(
+        _ draft: TorrServerSettingsDraft,
+        basedOn currentSettings: TorrServerStorageSettings
+    ) async throws {
+        _ = try await post(
+            path: "settings",
+            body: [
+                "action": "set",
+                "sets": try currentSettings.payload(applying: draft)
+            ]
+        )
+    }
+
     func checkHealth() async throws {
         var request = URLRequest(url: baseURL.appendingPathComponent("echo"))
         request.timeoutInterval = 3

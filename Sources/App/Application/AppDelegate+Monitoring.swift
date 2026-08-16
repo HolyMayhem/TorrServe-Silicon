@@ -62,6 +62,8 @@ extension AppDelegate {
                 menuStatus: hasPath ? texts.stopped : texts.torrServerNotSelected,
                 statusIconColor: .systemGray
             )
+            loadedTorrServerSettings = nil
+            mainWindowModel.hasLoadedServerSettings = false
 
         case .running(let pid):
             applyUIState(
@@ -78,6 +80,10 @@ extension AppDelegate {
                 statusIconColor: .systemGreen
             )
             refreshStorage()
+            if mainWindowModel.selectedSection == .server,
+               !mainWindowModel.hasLoadedServerSettings {
+                loadTorrServerSettings()
+            }
 
         case .stopping:
             applyUIState(

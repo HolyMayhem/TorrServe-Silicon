@@ -20,6 +20,15 @@ enum MainStatusKind: Equatable {
     }
 }
 
+enum MetadataAPIKeyTestState: Equatable {
+    case idle
+    case testing
+    case valid
+    case invalid
+    case rateLimited
+    case unavailable
+}
+
 final class MainWindowModel: ObservableObject {
     @Published var path = ""
     @Published var language: AppLanguage = .systemDefault
@@ -48,6 +57,9 @@ final class MainWindowModel: ObservableObject {
     @Published var tmdbAPIKey = ""
     @Published var omdbAPIKey = ""
     @Published var kinopoiskAPIKey = ""
+    @Published var metadataAPIKeyTestStates: [MetadataProvider: MetadataAPIKeyTestState] = [:]
+    @Published var metadataKeysDiagnostic = DiagnosticResult.idle
+    @Published var isTestingAllMetadataAPIKeys = false
     @Published var overviewTranslationMode = OverviewTranslationMode.automatic
     @Published var speedUnit: SpeedDisplayUnit = .automatic
     @Published var selectedSection: AppSection = .library
@@ -63,6 +75,11 @@ final class MainWindowModel: ObservableObject {
     @Published var processScan = TorrServerProcessScan.empty
     @Published var executableDiagnostic = DiagnosticResult.idle
     @Published var latestDiagnostic = DiagnosticResult.idle
+    @Published var serverSettingsDraft = TorrServerSettingsDraft.defaults
+    @Published var serverSettingsResult = DiagnosticResult.idle
+    @Published var isLoadingServerSettings = false
+    @Published var isSavingServerSettings = false
+    @Published var hasLoadedServerSettings = false
 
     var onPathChanged: ((String) -> Void)?
     var onChoose: (() -> Void)?
@@ -81,6 +98,8 @@ final class MainWindowModel: ObservableObject {
     var onMetadataAPIKeyModeChanged: ((MetadataAPIKeyMode) -> Void)?
     var onCombinedMetadataOrderChanged: (([MetadataProvider]) -> Void)?
     var onMetadataAPIKeyChanged: ((MetadataProvider, String) -> Void)?
+    var onTestMetadataAPIKey: ((MetadataProvider, String) -> Void)?
+    var onTestAllMetadataAPIKeys: (() -> Void)?
     var onOverviewTranslationModeChanged: ((OverviewTranslationMode) -> Void)?
     var onSpeedUnitChanged: ((SpeedDisplayUnit) -> Void)?
     var onLanguageChanged: ((AppLanguage) -> Void)?
@@ -98,4 +117,7 @@ final class MainWindowModel: ObservableObject {
     var onCheckExecutable: (() -> Void)?
     var onCopyDiagnosticReport: (() -> Void)?
     var onSaveDiagnosticReport: (() -> Void)?
+    var onLoadServerSettings: (() -> Void)?
+    var onSaveServerSettings: (() -> Void)?
+    var onChooseServerCacheFolder: (() -> Void)?
 }

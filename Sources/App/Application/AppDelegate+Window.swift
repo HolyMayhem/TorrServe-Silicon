@@ -78,6 +78,12 @@ extension AppDelegate {
         mainWindowModel.onMetadataAPIKeyChanged = { [weak self] provider, value in
             self?.setMetadataAPIKey(value, provider: provider)
         }
+        mainWindowModel.onTestMetadataAPIKey = { [weak self] provider, value in
+            self?.testMetadataAPIKey(value, provider: provider)
+        }
+        mainWindowModel.onTestAllMetadataAPIKeys = { [weak self] in
+            self?.testAllMetadataAPIKeys()
+        }
         mainWindowModel.onOverviewTranslationModeChanged = { [weak self] mode in
             self?.setOverviewTranslationMode(mode)
         }
@@ -88,7 +94,11 @@ extension AppDelegate {
             self?.setLanguage(language)
         }
         mainWindowModel.onSectionChanged = { [weak self] section in
-            self?.resizeWindow(for: section)
+            guard let self else { return }
+            self.resizeWindow(for: section)
+            if section == .server {
+                self.loadTorrServerSettings()
+            }
         }
         mainWindowModel.onOpenIINADownload = {
             NSWorkspace.shared.open(iinaDownloadURL)
@@ -134,6 +144,15 @@ extension AppDelegate {
         }
         mainWindowModel.onSaveDiagnosticReport = { [weak self] in
             self?.saveDiagnosticReport()
+        }
+        mainWindowModel.onLoadServerSettings = { [weak self] in
+            self?.loadTorrServerSettings()
+        }
+        mainWindowModel.onSaveServerSettings = { [weak self] in
+            self?.saveTorrServerSettings()
+        }
+        mainWindowModel.onChooseServerCacheFolder = { [weak self] in
+            self?.chooseServerCacheFolder()
         }
         searchModel.onTorrentAdded = { [weak self] hash in
             self?.libraryModel.refresh(selectingHash: hash)
