@@ -178,7 +178,7 @@ struct ServerCacheSettingsSection: View {
 
                     Toggle("", isOn: useDiskBinding)
                         .labelsHidden()
-                        .toggleStyle(LiquidGlassToggleStyle(width: 46, height: 26))
+                        .toggleStyle(.switch)
                 }
                 .padding(.leading, 10)
                 .padding(.trailing, 6)
@@ -230,7 +230,7 @@ struct ServerCacheSettingsSection: View {
                             }
                         )
                     )
-                    .toggleStyle(LiquidGlassToggleStyle())
+                    .toggleStyle(.switch)
                 }
             } else {
                 Label(
