@@ -76,10 +76,16 @@ final class MainWindowModel: ObservableObject {
     @Published var executableDiagnostic = DiagnosticResult.idle
     @Published var latestDiagnostic = DiagnosticResult.idle
     @Published var serverSettingsDraft = TorrServerSettingsDraft.defaults
+    @Published var savedServerSettingsDraft = TorrServerSettingsDraft.defaults
     @Published var serverSettingsResult = DiagnosticResult.idle
     @Published var isLoadingServerSettings = false
     @Published var isSavingServerSettings = false
     @Published var hasLoadedServerSettings = false
+
+    var hasUnsavedServerSettings: Bool {
+        hasLoadedServerSettings
+            && serverSettingsDraft.normalized != savedServerSettingsDraft.normalized
+    }
 
     var onPathChanged: ((String) -> Void)?
     var onChoose: (() -> Void)?
