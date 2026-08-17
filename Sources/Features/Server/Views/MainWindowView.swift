@@ -35,6 +35,7 @@ struct MainWindowView: View {
                 }
                 .frame(height: 178)
 
+                ServerCacheSettingsSection(model: model)
                 executableSection
                 ServerDiagnosticsSection(model: model)
                 playerSection
