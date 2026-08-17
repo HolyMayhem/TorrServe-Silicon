@@ -5,6 +5,7 @@ struct AppSidebarView: View {
     @ObservedObject var mainModel: MainWindowModel
     @ObservedObject var libraryModel: LibraryViewModel
     @Binding var selection: AppSection?
+    let isCompact: Bool
 
     private var primarySections: [AppSection] {
         mainModel.jackettEnabled
@@ -13,6 +14,20 @@ struct AppSidebarView: View {
     }
 
     var body: some View {
+        Group {
+            if isCompact {
+                compactSidebar
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+            } else {
+                expandedSidebar
+                    .transition(.opacity)
+            }
+        }
+        .background(.thinMaterial)
+        .animation(.easeInOut(duration: 0.16), value: isCompact)
+    }
+
+    private var expandedSidebar: some View {
         VStack(spacing: 0) {
             Text("TorrServe")
                 .font(.system(size: 42, weight: .bold, design: .rounded))
@@ -56,7 +71,112 @@ struct AppSidebarView: View {
             )
             .padding(14)
         }
-        .background(.thinMaterial)
+    }
+
+    private var compactSidebar: some View {
+        VStack(spacing: 0) {
+            Color.clear
+                .frame(height: 66)
+                .accessibilityHidden(true)
+
+            VStack(spacing: 9) {
+                ForEach(primarySections) { section in
+                    CompactSidebarButton(
+                        section: section,
+                        language: mainModel.language,
+                        isSelected: selection == section
+                    ) {
+                        selection = section
+                    }
+                }
+
+                Divider()
+                    .frame(width: 34)
+                    .padding(.vertical, 7)
+
+                CompactSidebarButton(
+                    section: .settings,
+                    language: mainModel.language,
+                    isSelected: selection == .settings
+                ) {
+                    selection = .settings
+                }
+
+                CompactSidebarButton(
+                    section: .server,
+                    language: mainModel.language,
+                    isSelected: selection == .server
+                ) {
+                    selection = .server
+                }
+            }
+
+            Spacer(minLength: 12)
+
+            Divider()
+
+            CompactServerStatusView(mainModel: mainModel)
+                .padding(.vertical, 14)
+        }
+    }
+}
+
+private struct CompactSidebarButton: View {
+    let section: AppSection
+    let language: AppLanguage
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: section.systemImage)
+                .font(.system(size: 20, weight: .medium))
+                .symbolRenderingMode(.hierarchical)
+                .frame(width: 48, height: 48)
+                .foregroundStyle(isSelected ? Color.white : Color.primary)
+                .background {
+                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        .fill(isSelected ? Color.accentColor : Color.clear)
+                }
+                .contentShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .help(section.sidebarTitle(language: language))
+        .accessibilityLabel(section.sidebarTitle(language: language))
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+private struct CompactServerStatusView: View {
+    @ObservedObject var mainModel: MainWindowModel
+
+    private var texts: Texts { Texts(language: mainModel.language) }
+
+    var body: some View {
+        Button {
+            mainModel.canStop ? mainModel.onStop?() : mainModel.onStart?()
+        } label: {
+            ZStack {
+                Circle()
+                    .fill(mainModel.statusKind.color.opacity(0.12))
+                Circle()
+                    .stroke(mainModel.statusKind.color.opacity(0.42), lineWidth: 1)
+
+                if mainModel.statusKind == .working {
+                    ProgressView()
+                        .controlSize(.mini)
+                } else {
+                    Image(systemName: mainModel.canStop ? "stop.fill" : "play.fill")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(mainModel.statusKind.color)
+                }
+            }
+            .frame(width: 42, height: 42)
+        }
+        .buttonStyle(.plain)
+        .disabled(!(mainModel.canStart || mainModel.canStop))
+        .help(mainModel.canStop ? texts.stop : texts.start)
+        .accessibilityLabel(mainModel.canStop ? texts.stop : texts.start)
     }
 }
 
