@@ -31,16 +31,10 @@ final class SearchViewModel: ObservableObject {
 
     init(
         jackett: JackettClient = JackettClient(),
-        torrServer: NativeTorrServerAPI = NativeTorrServerAPI(),
-        loadsSavedConfiguration: Bool = true
+        torrServer: NativeTorrServerAPI = NativeTorrServerAPI()
     ) {
         self.jackett = jackett
         self.torrServer = torrServer
-        guard loadsSavedConfiguration else {
-            serverURL = "http://127.0.0.1:9117"
-            apiKey = "preview-key"
-            return
-        }
         serverURL = UserDefaults.standard.string(forKey: jackettServerURLKey)
             ?? "http://127.0.0.1:9117"
         let legacyAPIKey = UserDefaults.standard.string(forKey: jackettAPIKeyKey)

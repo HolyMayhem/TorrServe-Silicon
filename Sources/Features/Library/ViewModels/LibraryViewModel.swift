@@ -32,7 +32,6 @@ final class LibraryViewModel: ObservableObject {
     private let metadataStore: LibraryMetadataStore
     private let metadataResolver: MetadataResolver
     private let metadataSettings: MetadataSettingsStore
-    private let allowsAutomaticPolling: Bool
     private var refreshTimer: Timer?
     private var metadataResolutionTasks: [String: Task<Void, Never>] = [:]
     private var metadataRetryAfter: [String: Date] = [:]
@@ -43,14 +42,12 @@ final class LibraryViewModel: ObservableObject {
         api: NativeTorrServerAPI = NativeTorrServerAPI(),
         metadataStore: LibraryMetadataStore = .shared,
         metadataResolver: MetadataResolver = MetadataResolver(),
-        metadataSettings: MetadataSettingsStore = .shared,
-        allowsAutomaticPolling: Bool = true
+        metadataSettings: MetadataSettingsStore = .shared
     ) {
         self.api = api
         self.metadataStore = metadataStore
         self.metadataResolver = metadataResolver
         self.metadataSettings = metadataSettings
-        self.allowsAutomaticPolling = allowsAutomaticPolling
         playerChoice = ExternalPlayerChoice(
             rawValue: UserDefaults.standard.string(forKey: libraryPlayerKey) ?? ""
         ) ?? .quickTime
@@ -90,7 +87,6 @@ final class LibraryViewModel: ObservableObject {
     }
 
     func startPolling() {
-        guard allowsAutomaticPolling else { return }
         guard refreshTimer == nil else { return }
         refresh()
         refreshTimer = Timer.scheduledTimer(
@@ -102,20 +98,6 @@ final class LibraryViewModel: ObservableObject {
             }
         }
     }
-
-#if DEBUG
-    func configurePreview(
-        torrents: [NativeTorrent],
-        metadata: [String: LibraryMetadata],
-        selectedTorrentID: String?
-    ) {
-        self.torrents = torrents
-        metadataByHash = metadata
-        self.selectedTorrentID = selectedTorrentID
-        selectedTorrentIDs = selectedTorrentID.map { [$0] } ?? []
-        showsPlayerSetup = false
-    }
-#endif
 
     func stopPolling() {
         refreshTimer?.invalidate()
