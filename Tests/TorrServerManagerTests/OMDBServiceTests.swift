@@ -1,6 +1,6 @@
 import Foundation
 import XCTest
-@testable import TorrServerManager
+@testable import TorrServerKit
 
 final class OMDBServiceTests: XCTestCase {
     func testSearchNormalizesSeriesResult() async throws {

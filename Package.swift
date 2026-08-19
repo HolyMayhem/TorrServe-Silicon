@@ -10,17 +10,26 @@ let package = Package(
     products: [
         .executable(
             name: "TorrServerManager",
-            targets: ["TorrServerManager"]
+            targets: ["TorrServerLauncher"]
+        ),
+        .library(
+            name: "TorrServerUI",
+            targets: ["TorrServerKit"]
         )
     ],
     targets: [
-        .executableTarget(
-            name: "TorrServerManager",
+        .target(
+            name: "TorrServerKit",
             path: "Sources"
+        ),
+        .executableTarget(
+            name: "TorrServerLauncher",
+            dependencies: ["TorrServerKit"],
+            path: "Launcher"
         ),
         .testTarget(
             name: "TorrServerManagerTests",
-            dependencies: ["TorrServerManager"],
+            dependencies: ["TorrServerKit"],
             path: "Tests/TorrServerManagerTests"
         )
     ]

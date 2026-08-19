@@ -1,6 +1,6 @@
 import Foundation
 import XCTest
-@testable import TorrServerManager
+@testable import TorrServerKit
 
 final class LibraryMetadataStoreTests: XCTestCase {
     func testTrackerMetadataIsNotExposedAsLibraryMetadata() {
