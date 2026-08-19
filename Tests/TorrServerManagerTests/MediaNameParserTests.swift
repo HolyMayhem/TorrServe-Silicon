@@ -1,5 +1,5 @@
 import XCTest
-@testable import TorrServerKit
+@testable import TorrServerManager
 
 final class MediaNameParserTests: XCTestCase {
     private let parser = MediaNameParser()

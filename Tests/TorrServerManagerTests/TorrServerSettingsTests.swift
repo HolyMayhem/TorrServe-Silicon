@@ -1,6 +1,6 @@
 import Foundation
 import XCTest
-@testable import TorrServerKit
+@testable import TorrServerManager
 
 final class TorrServerSettingsTests: XCTestCase {
     func testParsesEditableCacheSettings() throws {

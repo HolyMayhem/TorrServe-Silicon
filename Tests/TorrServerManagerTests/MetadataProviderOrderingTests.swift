@@ -1,5 +1,5 @@
 import XCTest
-@testable import TorrServerKit
+@testable import TorrServerManager
 
 final class MetadataProviderOrderingTests: XCTestCase {
     private let defaultOrder: [MetadataProvider] = [.omdb, .kinopoisk, .tmdb]
