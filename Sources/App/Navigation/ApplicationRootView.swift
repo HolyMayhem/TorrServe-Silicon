@@ -104,3 +104,9 @@ struct ApplicationRootView: View {
     }
 
 }
+
+#if DEBUG
+#Preview("TorrServe — Interactive") {
+    TorrServePreviewRoot()
+}
+#endif
