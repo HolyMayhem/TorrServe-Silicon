@@ -33,9 +33,11 @@ extension AppDelegate {
                 self.mainWindowModel.savedServerSettingsDraft = settings.draft
                 self.mainWindowModel.hasLoadedServerSettings = true
                 self.mainWindowModel.serverSettingsResult = .idle
+                self.clearServerConnectionIssue()
             } catch {
                 self.loadedTorrServerSettings = nil
                 self.mainWindowModel.hasLoadedServerSettings = false
+                self.mainWindowModel.serverConnectionIssue = error.localizedDescription
                 self.mainWindowModel.serverSettingsResult = DiagnosticResult(
                     kind: .failure,
                     message: self.currentLanguage == .russian
@@ -98,8 +100,10 @@ extension AppDelegate {
                         ? "Настройки сохранены."
                         : "Settings saved."
                 )
+                self.clearServerConnectionIssue()
                 self.refreshStorage()
             } catch {
+                self.mainWindowModel.serverConnectionIssue = error.localizedDescription
                 self.mainWindowModel.serverSettingsResult = DiagnosticResult(
                     kind: .failure,
                     message: self.currentLanguage == .russian

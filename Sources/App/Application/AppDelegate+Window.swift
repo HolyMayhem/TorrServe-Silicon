@@ -118,6 +118,9 @@ extension AppDelegate {
         libraryModel.onPlayerChanged = { [weak self] _ in
             self?.refreshPlayerAvailability()
         }
+        libraryModel.onServerConnectionIssueChanged = { [weak self] issue in
+            self?.handleServerConnectionIssue(issue)
+        }
         mainWindowModel.onRefreshStorage = { [weak self] in
             self?.refreshStorage()
         }

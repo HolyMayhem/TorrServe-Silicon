@@ -49,6 +49,7 @@ extension AppDelegate {
 
         switch state {
         case .stopped:
+            clearServerConnectionIssue()
             applyUIState(
                 dotColor: .systemGray,
                 statusText: hasPath ? texts.stopped : texts.chooseOrDownload,
@@ -86,6 +87,7 @@ extension AppDelegate {
             }
 
         case .stopping:
+            clearServerConnectionIssue()
             applyUIState(
                 dotColor: .systemOrange,
                 statusText: texts.stopping,
@@ -101,6 +103,7 @@ extension AppDelegate {
             )
 
         case .failed(let message):
+            clearServerConnectionIssue()
             applyUIState(
                 dotColor: .systemRed,
                 statusText: texts.error(message),
@@ -115,6 +118,27 @@ extension AppDelegate {
                 statusIconColor: .systemGray
             )
         }
+    }
+
+    func handleServerConnectionIssue(_ issue: String?) {
+        guard let issue, !issue.isEmpty else {
+            clearServerConnectionIssue()
+            return
+        }
+
+        guard processController.isRunning else {
+            clearServerConnectionIssue()
+            return
+        }
+
+        consecutiveServerConnectionFailures += 1
+        guard consecutiveServerConnectionFailures >= 2 else { return }
+        mainWindowModel.serverConnectionIssue = issue
+    }
+
+    func clearServerConnectionIssue() {
+        consecutiveServerConnectionFailures = 0
+        mainWindowModel.serverConnectionIssue = nil
     }
 
     func updateSpeedMonitor(for state: TorrServerProcessController.State) {

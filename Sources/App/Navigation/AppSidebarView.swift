@@ -158,9 +158,9 @@ private struct CompactServerStatusView: View {
         } label: {
             ZStack {
                 Circle()
-                    .fill(mainModel.statusKind.color.opacity(0.12))
+                    .fill(mainModel.effectiveStatusKind.color.opacity(0.12))
                 Circle()
-                    .stroke(mainModel.statusKind.color.opacity(0.42), lineWidth: 1)
+                    .stroke(mainModel.effectiveStatusKind.color.opacity(0.42), lineWidth: 1)
 
                 if mainModel.statusKind == .working {
                     ProgressView()
@@ -168,14 +168,14 @@ private struct CompactServerStatusView: View {
                 } else {
                     Image(systemName: mainModel.canStop ? "stop.fill" : "play.fill")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(mainModel.statusKind.color)
+                        .foregroundStyle(mainModel.effectiveStatusKind.color)
                 }
             }
             .frame(width: 42, height: 42)
         }
         .buttonStyle(.plain)
         .disabled(!(mainModel.canStart || mainModel.canStop))
-        .help(mainModel.canStop ? texts.stop : texts.start)
+        .help(mainModel.serverConnectionIssue ?? (mainModel.canStop ? texts.stop : texts.start))
         .accessibilityLabel(mainModel.canStop ? texts.stop : texts.start)
     }
 }
@@ -184,12 +184,40 @@ struct SidebarNavigationItem: View {
     let section: AppSection
     let language: AppLanguage
 
+    private var displayTitle: String {
+        guard language == .russian else {
+            return section.sidebarTitle(language: language)
+        }
+
+        switch section {
+        case .settings:
+            return "Общие\nнастройки"
+        case .server:
+            return "Настройки\nсервера"
+        case .library, .search:
+            return section.sidebarTitle(language: language)
+        }
+    }
+
+    private var rowHeight: CGFloat {
+        language == .russian && (section == .settings || section == .server)
+            ? 52
+            : 40
+    }
+
     var body: some View {
-        Label(section.sidebarTitle(language: language), systemImage: section.systemImage)
+        Label {
+            Text(displayTitle)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+        } icon: {
+            Image(systemName: section.systemImage)
+        }
             .font(.system(size: 15, weight: .medium))
             .symbolRenderingMode(.hierarchical)
             .imageScale(.large)
-            .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: rowHeight, alignment: .leading)
             .contentShape(Rectangle())
             .tag(section)
             .accessibilityLabel(section.sidebarTitle(language: language))
@@ -238,6 +266,9 @@ struct ServerStatusSidebarView: View {
     }
 
     private var statusTitle: String {
+        if mainModel.serverConnectionIssue != nil {
+            return mainModel.language == .russian ? "Нет подключения" : "No connection"
+        }
         switch mainModel.statusKind {
         case .running:
             return mainModel.language == .russian ? "Запущен" : "Running"
@@ -254,7 +285,7 @@ struct ServerStatusSidebarView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
                 Circle()
-                    .fill(mainModel.statusKind.color)
+                    .fill(mainModel.effectiveStatusKind.color)
                     .frame(width: 10, height: 10)
                     .accessibilityHidden(true)
 
@@ -282,11 +313,11 @@ struct ServerStatusSidebarView: View {
                     }
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(mainModel.statusKind.color)
+                .foregroundStyle(mainModel.effectiveStatusKind.color)
                 .background(.thinMaterial, in: Circle())
                 .overlay {
                     Circle()
-                        .stroke(mainModel.statusKind.color.opacity(0.35), lineWidth: 1)
+                        .stroke(mainModel.effectiveStatusKind.color.opacity(0.35), lineWidth: 1)
                 }
                 .contentShape(Circle())
                 .disabled(!(mainModel.canStart || mainModel.canStop))
@@ -329,6 +360,7 @@ struct ServerStatusSidebarView: View {
         }
         .padding(12)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .help(mainModel.serverConnectionIssue ?? statusTitle)
     }
 
     private func compactMetric(

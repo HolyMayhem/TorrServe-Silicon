@@ -58,10 +58,10 @@ struct MainWindowView: View {
             HStack(spacing: 12) {
                 ZStack {
                     Circle()
-                        .fill(model.statusKind.color.opacity(0.14))
+                        .fill(model.effectiveStatusKind.color.opacity(0.14))
                     Image(systemName: serverStatusIcon)
                         .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(model.statusKind.color)
+                        .foregroundStyle(model.effectiveStatusKind.color)
                 }
                 .frame(width: 42, height: 42)
                 .accessibilityHidden(true)
@@ -110,7 +110,10 @@ struct MainWindowView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .serverSettingsPanel()
-        .help(model.statusTooltip.isEmpty ? serverStatusDetail : model.statusTooltip)
+        .help(
+            model.serverConnectionIssue
+                ?? (model.statusTooltip.isEmpty ? serverStatusDetail : model.statusTooltip)
+        )
     }
 
     @ViewBuilder
@@ -379,6 +382,11 @@ struct MainWindowView: View {
     }
 
     private var serverStatusDetail: String {
+        if model.serverConnectionIssue != nil {
+            return model.language == .russian
+                ? "Не удалось подключиться к TorrServer"
+                : "Could not connect to TorrServer"
+        }
         if !model.statusText.isEmpty {
             return model.statusText
         }
@@ -395,7 +403,7 @@ struct MainWindowView: View {
     }
 
     private var serverStatusIcon: String {
-        switch model.statusKind {
+        switch model.effectiveStatusKind {
         case .running: return "checkmark"
         case .working: return "hourglass"
         case .failed: return "exclamationmark"

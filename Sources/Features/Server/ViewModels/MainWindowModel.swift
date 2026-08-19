@@ -35,6 +35,7 @@ final class MainWindowModel: ObservableObject {
     @Published var statusText = ""
     @Published var statusTooltip = ""
     @Published var statusKind: MainStatusKind = .stopped
+    @Published var serverConnectionIssue: String?
     @Published var currentSpeedText = ""
 
     @Published var canStart = false
@@ -81,6 +82,10 @@ final class MainWindowModel: ObservableObject {
     @Published var isLoadingServerSettings = false
     @Published var isSavingServerSettings = false
     @Published var hasLoadedServerSettings = false
+
+    var effectiveStatusKind: MainStatusKind {
+        serverConnectionIssue == nil ? statusKind : .failed
+    }
 
     var hasUnsavedServerSettings: Bool {
         hasLoadedServerSettings

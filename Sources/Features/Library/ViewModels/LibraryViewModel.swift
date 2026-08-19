@@ -25,8 +25,10 @@ final class LibraryViewModel: ObservableObject {
     @Published private(set) var pendingDeletionTorrentIDs: Set<String> = []
     @Published private(set) var metadataByHash: [String: LibraryMetadata] = [:]
     @Published private(set) var resolvingMetadataHashes: Set<String> = []
+    @Published private(set) var serverConnectionIssue: String?
 
     var onPlayerChanged: ((ExternalPlayerChoice) -> Void)?
+    var onServerConnectionIssueChanged: ((String?) -> Void)?
 
     let api: NativeTorrServerAPI
     private let metadataStore: LibraryMetadataStore
@@ -129,10 +131,9 @@ final class LibraryViewModel: ObservableObject {
                 if let selectedTorrentID = self.selectedTorrentID {
                     self.selectedTorrentIDs.insert(selectedTorrentID)
                 }
+                setServerConnectionIssue(nil)
             } catch {
-                if !silently {
-                    showError(error)
-                }
+                setServerConnectionIssue(error.localizedDescription)
             }
         }
     }
@@ -370,6 +371,13 @@ final class LibraryViewModel: ObservableObject {
             title: "TorrServer",
             message: error.localizedDescription
         )
+    }
+
+    private func setServerConnectionIssue(_ message: String?) {
+        if serverConnectionIssue != message {
+            serverConnectionIssue = message
+        }
+        onServerConnectionIssueChanged?(message)
     }
 
     private var selectedMetadataProviders: [MetadataProvider] {

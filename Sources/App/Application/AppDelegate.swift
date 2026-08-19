@@ -108,6 +108,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     var diagnosticsRevision = 0
     var isNotificationAuthorizationPending = false
     var loadedTorrServerSettings: TorrServerStorageSettings?
+    var consecutiveServerConnectionFailures = 0
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         registerDefaultSettings()
