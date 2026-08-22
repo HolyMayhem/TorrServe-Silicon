@@ -173,18 +173,13 @@ extension AppDelegate {
 
         Task { [weak self] in
             guard let self else { return }
-            let initialScan = await self.diagnosticsService.scanTorrServerProcesses(
-                managedPID: self.processController.runningPID,
-                language: language
-            )
-            let requestedPIDs = Set(initialScan.processes.map(\.pid))
-            let result = await self.diagnosticsService.stopExternalProcesses(
-                requestedPIDs: requestedPIDs,
-                managedPID: self.processController.runningPID,
+            let stoppedManagedServer = await self.stopManagedTorrServerIfNeeded()
+            let result = await self.diagnosticsService.stopAllDetectedProcesses(
+                alreadyStoppedCount: stoppedManagedServer ? 1 : 0,
                 language: language
             )
             let refreshedScan = await self.diagnosticsService.scanTorrServerProcesses(
-                managedPID: self.processController.runningPID,
+                managedPID: nil,
                 language: language
             )
             guard revision == self.diagnosticsRevision else { return }
@@ -193,6 +188,17 @@ extension AppDelegate {
             self.mainWindowModel.latestDiagnostic = result
             self.mainWindowModel.isStoppingExternalProcesses = false
         }
+    }
+
+    private func stopManagedTorrServerIfNeeded() async -> Bool {
+        guard processController.isRunning else { return false }
+
+        await withCheckedContinuation { continuation in
+            processController.stop {
+                continuation.resume()
+            }
+        }
+        return true
     }
 
     func checkTorrServerExecutable() {

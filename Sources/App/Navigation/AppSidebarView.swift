@@ -63,6 +63,17 @@ struct AppSidebarView: View {
             .listStyle(.sidebar)
             .scrollContentBackground(.hidden)
 
+            if let update = mainModel.torrServerUpdate {
+                SidebarUpdateNotice(
+                    update: update,
+                    language: mainModel.language
+                ) {
+                    selection = .server
+                }
+                .padding(.horizontal, 14)
+                .padding(.bottom, 10)
+            }
+
             Divider()
 
             ServerStatusSidebarView(
@@ -113,11 +124,75 @@ struct AppSidebarView: View {
 
             Spacer(minLength: 12)
 
+            if let update = mainModel.torrServerUpdate {
+                Button {
+                    selection = .server
+                } label: {
+                    Image(systemName: "arrow.down.circle.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(.orange)
+                        .frame(width: 36, height: 36)
+                        .background(Color.orange.opacity(0.12), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .help(mainModel.language == .russian
+                    ? "Доступна новая версия \(update.latestVersion)"
+                    : "New version available: \(update.latestVersion)")
+                .accessibilityLabel(mainModel.language == .russian
+                    ? "Доступна новая версия \(update.latestVersion)"
+                    : "New version available: \(update.latestVersion)")
+                .padding(.bottom, 8)
+            }
+
             Divider()
 
             CompactServerStatusView(mainModel: mainModel)
                 .padding(.vertical, 14)
         }
+    }
+}
+
+private struct SidebarUpdateNotice: View {
+    let update: TorrServerAvailableUpdate
+    let language: AppLanguage
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.down.circle.fill")
+                    .foregroundStyle(.orange)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(language == .russian ? "Доступно обновление" : "Update available")
+                        .font(.caption.weight(.semibold))
+                    Text(update.latestVersion)
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 4)
+
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(9)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                Color.orange.opacity(0.09),
+                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(Color.orange.opacity(0.14), lineWidth: 1)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(language == .russian
+            ? "Установлена \(update.installedVersion), доступна \(update.latestVersion)"
+            : "Installed \(update.installedVersion), available \(update.latestVersion)")
     }
 }
 
@@ -162,7 +237,18 @@ private struct CompactServerStatusView: View {
                 Circle()
                     .stroke(mainModel.effectiveStatusKind.color.opacity(0.42), lineWidth: 1)
 
-                if mainModel.statusKind == .working {
+                if let activity = mainModel.torrServerUpdateActivity {
+                    if activity.stage == .completed {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(.green)
+                    } else {
+                        ProgressView(value: activity.clampedProgress)
+                            .progressViewStyle(.circular)
+                            .controlSize(.mini)
+                            .tint(.blue)
+                    }
+                } else if mainModel.statusKind == .working {
                     ProgressView()
                         .controlSize(.mini)
                 } else {
@@ -174,8 +260,15 @@ private struct CompactServerStatusView: View {
             .frame(width: 42, height: 42)
         }
         .buttonStyle(.plain)
-        .disabled(!(mainModel.canStart || mainModel.canStop))
-        .help(mainModel.serverConnectionIssue ?? (mainModel.canStop ? texts.stop : texts.start))
+        .disabled(
+            mainModel.torrServerUpdateActivity != nil
+                || !(mainModel.canStart || mainModel.canStop)
+        )
+        .help(
+            mainModel.torrServerUpdateActivity?.detail(language: mainModel.language)
+                ?? mainModel.serverConnectionIssue
+                ?? (mainModel.canStop ? texts.stop : texts.start)
+        )
         .accessibilityLabel(mainModel.canStop ? texts.stop : texts.start)
     }
 }
@@ -266,6 +359,9 @@ struct ServerStatusSidebarView: View {
     }
 
     private var statusTitle: String {
+        if let activity = mainModel.torrServerUpdateActivity {
+            return activity.title(language: mainModel.language)
+        }
         if mainModel.serverConnectionIssue != nil {
             return mainModel.language == .russian ? "Нет подключения" : "No connection"
         }
@@ -302,7 +398,20 @@ struct ServerStatusSidebarView: View {
                 Button {
                     mainModel.canStop ? mainModel.onStop?() : mainModel.onStart?()
                 } label: {
-                    if mainModel.statusKind == .working {
+                    if let activity = mainModel.torrServerUpdateActivity {
+                        if activity.stage == .completed {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(.green)
+                                .frame(width: 30, height: 30)
+                        } else {
+                            ProgressView(value: activity.clampedProgress)
+                                .progressViewStyle(.circular)
+                                .controlSize(.mini)
+                                .tint(.blue)
+                                .frame(width: 30, height: 30)
+                        }
+                    } else if mainModel.statusKind == .working {
                         ProgressView()
                             .controlSize(.mini)
                             .frame(width: 30, height: 30)
@@ -320,43 +429,59 @@ struct ServerStatusSidebarView: View {
                         .stroke(mainModel.effectiveStatusKind.color.opacity(0.35), lineWidth: 1)
                 }
                 .contentShape(Circle())
-                .disabled(!(mainModel.canStart || mainModel.canStop))
-                .help(mainModel.canStop ? texts.stop : texts.start)
+                .disabled(
+                    mainModel.torrServerUpdateActivity != nil
+                        || !(mainModel.canStart || mainModel.canStop)
+                )
+                .help(
+                    mainModel.torrServerUpdateActivity?.detail(language: mainModel.language)
+                        ?? (mainModel.canStop ? texts.stop : texts.start)
+                )
                 .accessibilityLabel(mainModel.canStop ? texts.stop : texts.start)
             }
 
-            HStack(spacing: 10) {
-                compactMetric(
-                    value: speedText,
-                    systemImage: "arrow.down",
-                    help: speedHelp
-                )
+            if let activity = mainModel.torrServerUpdateActivity {
+                VStack(alignment: .leading, spacing: 7) {
+                    Text(activity.detail(language: mainModel.language))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    TorrServerUpdateProgressBar(progress: activity.clampedProgress)
+                }
+            } else {
+                HStack(spacing: 10) {
+                    compactMetric(
+                        value: speedText,
+                        systemImage: "arrow.down",
+                        help: speedHelp
+                    )
 
-                Divider()
-                    .frame(height: 14)
+                    Divider()
+                        .frame(height: 14)
 
-                compactMetric(
-                    value: materialCount.formatted(),
-                    systemImage: "film.stack",
-                    help: materialsHelp
-                )
+                    compactMetric(
+                        value: materialCount.formatted(),
+                        systemImage: "film.stack",
+                        help: materialsHelp
+                    )
 
-                Spacer(minLength: 0)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 2)
+
+                HStack(spacing: 6) {
+                    Image(systemName: "internaldrive")
+                        .foregroundStyle(.secondary)
+                    Text(cacheTitle)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(cacheText)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+                .font(.caption)
             }
-            .padding(.horizontal, 2)
-
-            HStack(spacing: 6) {
-                Image(systemName: "internaldrive")
-                    .foregroundStyle(.secondary)
-                Text(cacheTitle)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text(cacheText)
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
-            .font(.caption)
         }
         .padding(12)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))

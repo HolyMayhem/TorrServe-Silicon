@@ -124,42 +124,42 @@ final class TorrServerDiagnosticsService {
         }.value
     }
 
-    func stopExternalProcesses(
-        requestedPIDs: Set<Int32>,
-        managedPID: Int32?,
+    func stopAllDetectedProcesses(
+        alreadyStoppedCount: Int,
         language: AppLanguage
     ) async -> DiagnosticResult {
         let verified = await scanTorrServerProcesses(
-            managedPID: managedPID,
+            managedPID: nil,
             language: language
         )
-        let safeProcesses = verified.processes.filter {
-            requestedPIDs.isEmpty || requestedPIDs.contains($0.pid)
-        }
+        let safeProcesses = verified.processes
 
         guard !safeProcesses.isEmpty else {
             return DiagnosticResult(
                 kind: .success,
                 message: language == .russian
-                    ? "Внешние копии уже остановлены."
-                    : "External copies are already stopped."
+                    ? (alreadyStoppedCount > 0
+                        ? "Все экземпляры остановлены: \(alreadyStoppedCount)."
+                        : "Запущенных экземпляров TorrServer не найдено.")
+                    : (alreadyStoppedCount > 0
+                        ? "All instances stopped: \(alreadyStoppedCount)."
+                        : "No running TorrServer instances found.")
             )
         }
 
-        let signaledPIDs = await Task.detached(priority: .userInitiated) {
-            safeProcesses.compactMap { process -> Int32? in
-                Darwin.kill(process.pid, SIGTERM) == 0 ? process.pid : nil
+        await Task.detached(priority: .userInitiated) {
+            for process in safeProcesses {
+                Darwin.kill(process.pid, SIGTERM)
             }
         }.value
 
         try? await Task.sleep(nanoseconds: 1_500_000_000)
 
         let remaining = await scanTorrServerProcesses(
-            managedPID: managedPID,
+            managedPID: nil,
             language: language
         )
         let remainingPIDs = Set(remaining.processes.map(\.pid))
-            .intersection(signaledPIDs)
 
         if !remainingPIDs.isEmpty {
             await Task.detached(priority: .userInitiated) {
@@ -171,11 +171,10 @@ final class TorrServerDiagnosticsService {
         }
 
         let finalScan = await scanTorrServerProcesses(
-            managedPID: managedPID,
+            managedPID: nil,
             language: language
         )
         let failedPIDs = Set(finalScan.processes.map(\.pid))
-            .intersection(Set(safeProcesses.map(\.pid)))
 
         guard failedPIDs.isEmpty else {
             return DiagnosticResult(
@@ -186,12 +185,14 @@ final class TorrServerDiagnosticsService {
             )
         }
 
-        let stoppedCount = safeProcesses.count
+        let stoppedCount = Set(safeProcesses.map(\.pid))
+            .union(remainingPIDs)
+            .count + alreadyStoppedCount
         return DiagnosticResult(
             kind: .success,
             message: language == .russian
-                ? "Остановлено внешних процессов: \(stoppedCount). Порт 8090 освобождён от конфликтующих копий."
-                : "Stopped \(stoppedCount) external process(es). Port 8090 is free from conflicting copies."
+                ? "Все экземпляры остановлены: \(stoppedCount). Порт 8090 освобождён."
+                : "All instances stopped: \(stoppedCount). Port 8090 is free."
         )
     }
 

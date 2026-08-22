@@ -5,8 +5,12 @@ final class TorrServerDownloader {
         string: "https://api.github.com/repos/YouROK/TorrServer/releases/latest"
     )!
     private let assetName = torrServerExecutableName
+    private var progressObservation: NSKeyValueObservation?
 
-    func downloadLatestDarwinArm64(completion: @escaping (Result<URL, Error>) -> Void) {
+    func downloadLatestDarwinArm64(
+        onProgress: @escaping (Double) -> Void = { _ in },
+        completion: @escaping (Result<URL, Error>) -> Void
+    ) {
         URLSession.shared.dataTask(with: latestReleaseURL) { [assetName] data, _, error in
             if let error {
                 DispatchQueue.main.async { completion(.failure(error)) }
@@ -19,7 +23,11 @@ final class TorrServerDownloader {
                 }
 
                 let assetURL = try self.findAssetURL(named: assetName, in: data)
-                self.downloadAsset(from: assetURL, completion: completion)
+                self.downloadAsset(
+                    from: assetURL,
+                    onProgress: onProgress,
+                    completion: completion
+                )
             } catch {
                 DispatchQueue.main.async { completion(.failure(error)) }
             }
@@ -47,11 +55,12 @@ final class TorrServerDownloader {
 
     private func downloadAsset(
         from url: URL,
+        onProgress: @escaping (Double) -> Void,
         completion: @escaping (Result<URL, Error>) -> Void
     ) {
-        URLSession.shared.downloadTask(with: url) { temporaryURL, _, error in
+        let task = URLSession.shared.downloadTask(with: url) { temporaryURL, _, error in
             if let error {
-                DispatchQueue.main.async { completion(.failure(error)) }
+                self.finishDownload(.failure(error), completion: completion)
                 return
             }
 
@@ -77,11 +86,32 @@ final class TorrServerDownloader {
                     ofItemAtPath: destination.path
                 )
 
-                DispatchQueue.main.async { completion(.success(destination)) }
+                self.finishDownload(.success(destination), completion: completion)
             } catch {
-                DispatchQueue.main.async { completion(.failure(error)) }
+                self.finishDownload(.failure(error), completion: completion)
             }
-        }.resume()
+        }
+
+        progressObservation = task.progress.observe(
+            \.fractionCompleted,
+            options: [.initial, .new]
+        ) { _, change in
+            guard let value = change.newValue, value.isFinite else { return }
+            DispatchQueue.main.async {
+                onProgress(min(max(value, 0), 1))
+            }
+        }
+        task.resume()
+    }
+
+    private func finishDownload(
+        _ result: Result<URL, Error>,
+        completion: @escaping (Result<URL, Error>) -> Void
+    ) {
+        DispatchQueue.main.async {
+            self.progressObservation = nil
+            completion(result)
+        }
     }
 
     private func downloadDestinationURL() throws -> URL {

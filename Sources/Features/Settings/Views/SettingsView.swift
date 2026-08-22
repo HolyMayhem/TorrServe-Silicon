@@ -57,6 +57,12 @@ struct SettingsView: View {
             )
             Divider()
             toggleRow(
+                texts.autoUpdateTorrServer,
+                keyPath: \.autoUpdateTorrServer,
+                callback: model.onAutoUpdateTorrServerChanged
+            )
+            Divider()
+            toggleRow(
                 texts.showSpeed,
                 keyPath: \.showSpeed,
                 callback: model.onShowSpeedChanged
@@ -107,16 +113,34 @@ struct SettingsView: View {
             }
             Divider()
             settingRow(texts.jackettSearch) {
-                Picker("", selection: $model.jackettEnabled) {
-                    Text("Jackett").tag(true)
-                    Text("Off").tag(false)
+                HStack(spacing: 6) {
+                    if model.jackettEnabled {
+                        Button {
+                            model.onOpenJackettDashboard?()
+                        } label: {
+                            Image(systemName: "gearshape")
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .buttonStyle(.borderless)
+                        .help(model.language == .russian
+                            ? "Открыть веб-панель Jackett"
+                            : "Open Jackett web dashboard")
+                        .accessibilityLabel(model.language == .russian
+                            ? "Открыть веб-панель Jackett"
+                            : "Open Jackett web dashboard")
+                    }
+
+                    Picker("", selection: $model.jackettEnabled) {
+                        Text("Jackett").tag(true)
+                        Text("Off").tag(false)
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                    .onChange(of: model.jackettEnabled) { _, isEnabled in
+                        model.onJackettEnabledChanged?(isEnabled)
+                    }
                 }
-                .labelsHidden()
-                .fixedSize()
                 .frame(width: pickerColumnWidth, alignment: .trailing)
-                .onChange(of: model.jackettEnabled) { _, isEnabled in
-                    model.onJackettEnabledChanged?(isEnabled)
-                }
             }
         }
     }

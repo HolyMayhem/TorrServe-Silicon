@@ -39,9 +39,13 @@ extension AppDelegate {
             guard let self else { return }
             self.saveCurrentPath()
             self.updateUI(for: self.processController.state)
+            self.scheduleTorrServerUpdateCheck(clearingCurrentResult: true)
         }
         mainWindowModel.onChoose = { [weak self] in self?.chooseExecutable(nil) }
         mainWindowModel.onDownload = { [weak self] in self?.downloadLatestTorrServer(nil) }
+        mainWindowModel.onInstallTorrServerUpdate = { [weak self] in
+            self?.installAvailableTorrServerUpdate()
+        }
         mainWindowModel.onStart = { [weak self] in self?.startServer(nil) }
         mainWindowModel.onStop = { [weak self] in self?.stopServer(nil) }
         mainWindowModel.onOpenContacts = {
@@ -54,6 +58,9 @@ extension AppDelegate {
         mainWindowModel.onAutoStartChanged = { [weak self] enabled in
             self?.setAutoStartServer(enabled)
         }
+        mainWindowModel.onAutoUpdateTorrServerChanged = { [weak self] enabled in
+            self?.setAutoUpdateTorrServer(enabled)
+        }
         mainWindowModel.onShowSpeedChanged = { [weak self] enabled in
             self?.setSpeedInMenuBar(enabled)
         }
@@ -65,6 +72,11 @@ extension AppDelegate {
         }
         mainWindowModel.onJackettEnabledChanged = { [weak self] enabled in
             self?.setJackettEnabled(enabled)
+        }
+        mainWindowModel.onOpenJackettDashboard = { [weak self] in
+            guard let self,
+                  let url = self.searchModel.configuration.normalizedServerURL else { return }
+            NSWorkspace.shared.open(url)
         }
         mainWindowModel.onMetadataSourceChanged = { [weak self] source in
             self?.setMetadataSource(source)
@@ -98,6 +110,7 @@ extension AppDelegate {
             self.resizeWindow(for: section)
             if section == .server {
                 self.loadTorrServerSettings()
+                self.scheduleTorrServerUpdateCheck()
             }
         }
         mainWindowModel.onOpenIINADownload = {

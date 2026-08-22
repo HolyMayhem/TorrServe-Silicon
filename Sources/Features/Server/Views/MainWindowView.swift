@@ -33,7 +33,7 @@ struct MainWindowView: View {
                     storageSection
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                .frame(height: 178)
+                .frame(height: 128)
 
                 ServerCacheSettingsSection(model: model)
                 executableSection
@@ -82,30 +82,39 @@ struct MainWindowView: View {
 
             Divider()
 
-            HStack(spacing: 18) {
-                serverInfo(
-                    title: model.language == .russian ? "Адрес" : "Address",
-                    value: "localhost:8090",
-                    systemImage: "network"
-                )
+            if let activity = model.torrServerUpdateActivity {
+                serverUpdateProgress(activity)
+            } else {
+                HStack(spacing: 12) {
+                    serverInfo(
+                        title: model.language == .russian ? "Адрес" : "Address",
+                        value: "localhost:8090",
+                        systemImage: "network"
+                    )
 
-                serverInfo(
-                    title: model.language == .russian ? "Скорость" : "Speed",
-                    value: speedText,
-                    systemImage: "arrow.down"
-                )
+                    serverInfo(
+                        title: model.language == .russian ? "Скорость" : "Speed",
+                        value: speedText,
+                        systemImage: "arrow.down"
+                    )
 
-                Spacer(minLength: 8)
+                    serverInfo(
+                        title: model.language == .russian ? "Версия" : "Version",
+                        value: model.torrServerVersion ?? "—",
+                        systemImage: "shippingbox"
+                    )
 
-                Button {
-                    model.onOpenWeb?()
-                } label: {
-                    Label(texts.webUI, systemImage: "safari")
+                    Spacer(minLength: 4)
+
+                    Button {
+                        model.onOpenWeb?()
+                    } label: {
+                        Label(texts.webUI, systemImage: "safari")
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(!model.canOpenWeb)
+                    .help(texts.openWebUI)
                 }
-                .buttonStyle(.bordered)
-                .disabled(!model.canOpenWeb)
-                .help(texts.openWebUI)
-
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -118,7 +127,26 @@ struct MainWindowView: View {
 
     @ViewBuilder
     private var serverPowerControl: some View {
-        if model.statusKind == .working {
+        if let activity = model.torrServerUpdateActivity {
+            HStack(spacing: 6) {
+                if activity.stage == .completed {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                } else {
+                    Text(
+                        activity.clampedProgress.formatted(
+                            .percent.precision(.fractionLength(0))
+                        )
+                    )
+                    .monospacedDigit()
+                    .foregroundStyle(.blue)
+                }
+            }
+            .font(.callout.weight(.semibold))
+            .padding(.horizontal, 12)
+            .frame(height: 30)
+            .accessibilityLabel(activity.detail(language: model.language))
+        } else if model.statusKind == .working {
             HStack(spacing: 8) {
                 ProgressView()
                     .controlSize(.small)
@@ -165,6 +193,21 @@ struct MainWindowView: View {
             .disabled(!model.canEditPath)
 
             HStack(spacing: 8) {
+                if let update = model.torrServerUpdate {
+                    Label(
+                        model.language == .russian
+                            ? "Доступна новая версия \(update.latestVersion)"
+                            : "New version available: \(update.latestVersion)",
+                        systemImage: "arrow.down.circle.fill"
+                    )
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.orange)
+                    .lineLimit(1)
+                    .help(model.language == .russian
+                        ? "Установлена \(update.installedVersion), доступна \(update.latestVersion)"
+                        : "Installed \(update.installedVersion), available \(update.latestVersion)")
+                }
+
                 Spacer()
 
                 Button {
@@ -175,13 +218,7 @@ struct MainWindowView: View {
                 .buttonStyle(.bordered)
                 .disabled(!model.canBrowse)
 
-                Button {
-                    model.onDownload?()
-                } label: {
-                    Label(texts.downloadArm, systemImage: "arrow.down.circle")
-                }
-                .buttonStyle(.bordered)
-                .disabled(!model.canDownload)
+                executableDownloadButton
             }
         }
         .serverSettingsPanel()
@@ -197,6 +234,21 @@ struct MainWindowView: View {
                 .font(.headline)
 
                 Spacer()
+
+                Button(role: .destructive) {
+                    showsClearCacheConfirmation = true
+                } label: {
+                    Label(
+                        model.language == .russian ? "Очистить кеш" : "Clear Cache",
+                        systemImage: "trash"
+                    )
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(model.isClearingCache || !model.canStop)
+                .popover(isPresented: $showsClearCacheConfirmation) {
+                    clearCacheConfirmation
+                }
 
                 Button {
                     model.onRefreshStorage?()
@@ -232,26 +284,6 @@ struct MainWindowView: View {
                     value: freeSpaceText,
                     warning: model.storage.isLowOnDiskSpace
                 )
-            }
-
-            Spacer(minLength: 0)
-
-            HStack {
-                Spacer()
-                Button(role: .destructive) {
-                    showsClearCacheConfirmation = true
-                } label: {
-                    Label(
-                        model.language == .russian ? "Очистить кеш" : "Clear Cache",
-                        systemImage: "trash"
-                    )
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .disabled(model.isClearingCache || !model.canStop)
-                .popover(isPresented: $showsClearCacheConfirmation) {
-                    clearCacheConfirmation
-                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -357,7 +389,63 @@ struct MainWindowView: View {
                 Text(value)
                     .font(.caption.monospacedDigit())
                     .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
+        }
+    }
+
+    private func serverUpdateProgress(_ activity: TorrServerUpdateActivity) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: activity.stage == .completed
+                    ? "checkmark.circle.fill"
+                    : "arrow.down.circle.fill")
+                    .foregroundStyle(activity.stage == .completed ? Color.green : Color.blue)
+                Text(activity.detail(language: model.language))
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+            }
+
+            TorrServerUpdateProgressBar(progress: activity.clampedProgress)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var executableDownloadButton: some View {
+        if let activity = model.torrServerUpdateActivity {
+            Button {} label: {
+                Label(
+                    activity.kind == .update
+                        ? (model.language == .russian ? "Обновление…" : "Updating…")
+                        : texts.downloading,
+                    systemImage: "arrow.down.circle.fill"
+                )
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.blue)
+            .disabled(true)
+        } else if model.torrServerUpdate != nil {
+            Button {
+                model.onInstallTorrServerUpdate?()
+            } label: {
+                Label(
+                    model.language == .russian ? "Обновить" : "Update",
+                    systemImage: "arrow.triangle.2.circlepath"
+                )
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.blue)
+        } else {
+            Button {
+                model.onDownload?()
+            } label: {
+                Label(texts.downloadArm, systemImage: "arrow.down.circle")
+            }
+            .buttonStyle(.bordered)
+            .disabled(!model.canDownload)
         }
     }
 

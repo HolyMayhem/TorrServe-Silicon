@@ -28,8 +28,8 @@ struct DiagnosticsPopover: View {
                     Text(model.language == .russian ? "Диагностика TorrServer" : "TorrServer diagnostics")
                         .font(.headline)
                     Text(model.language == .russian
-                        ? "Проверка порта, внешних копий и исполняемого файла."
-                        : "Checks the port, external copies, and executable.")
+                        ? "Проверка порта, экземпляров TorrServer и исполняемого файла."
+                        : "Checks the port, TorrServer instances, and executable.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -70,11 +70,11 @@ struct DiagnosticsPopover: View {
 
                 DiagnosticCheckRow(
                     title: processTitle,
-                    fallbackMessage: model.language == .russian ? "Копии приложения и TorrServer вне текущего окна" : "App and TorrServer copies outside this window",
+                    fallbackMessage: model.language == .russian ? "Другие копии приложения и TorrServer" : "Other app and TorrServer copies",
                     checkTitle: model.language == .russian ? "Проверить" : "Check",
                     systemImage: "square.stack.3d.up",
                     result: model.processDiagnostic,
-                    isDisabled: isChecking,
+                    isDisabled: isChecking || model.isStoppingExternalProcesses,
                     action: { model.onFindTorrServer?() }
                 )
 
@@ -93,17 +93,15 @@ struct DiagnosticsPopover: View {
             .padding(.horizontal, 11)
             .background(Color.secondary.opacity(0.075), in: RoundedRectangle(cornerRadius: 13))
 
-            if !model.processScan.processes.isEmpty {
-                Button(role: .destructive) {
-                    model.onStopExternalProcesses?()
-                } label: {
-                    Label(stopExternalTitle, systemImage: "stop.circle")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
-                .disabled(isChecking || model.isStoppingExternalProcesses)
+            Button {
+                model.onStopExternalProcesses?()
+            } label: {
+                Label(stopAllTitle, systemImage: "stop.circle")
+                    .frame(maxWidth: .infinity)
             }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+            .disabled(isChecking || model.isStoppingExternalProcesses)
 
             HStack(spacing: 8) {
                 Button {
@@ -173,18 +171,17 @@ struct DiagnosticsPopover: View {
     private var processTitle: String {
         let count = model.processScan.processes.count
         guard count > 0 else {
-            return model.language == .russian ? "Внешние копии" : "External copies"
+            return model.language == .russian ? "Другие копии" : "Other copies"
         }
         return model.language == .russian
-            ? "Внешние копии · \(count)"
-            : "External copies · \(count)"
+            ? "Другие копии · \(count)"
+            : "Other copies · \(count)"
     }
 
-    private var stopExternalTitle: String {
-        let count = model.processScan.processes.count
+    private var stopAllTitle: String {
         return model.language == .russian
-            ? "Остановить внешние копии (\(count))"
-            : "Stop external copies (\(count))"
+            ? "Найти и остановить все копии"
+            : "Find and stop all copies"
     }
 
     private func resultColor(_ kind: DiagnosticResultKind) -> Color {

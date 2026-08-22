@@ -29,6 +29,76 @@ enum MetadataAPIKeyTestState: Equatable {
     case unavailable
 }
 
+struct TorrServerUpdateActivity: Equatable {
+    enum Kind: Equatable {
+        case download
+        case update
+    }
+
+    enum Stage: Equatable {
+        case preparing
+        case downloading
+        case installing
+        case restarting
+        case completed
+    }
+
+    let kind: Kind
+    let stage: Stage
+    let progress: Double
+    let targetVersion: String?
+
+    var clampedProgress: Double {
+        min(max(progress, 0), 1)
+    }
+
+    func title(language: AppLanguage) -> String {
+        switch stage {
+        case .completed:
+            return language == .russian ? "Готово" : "Complete"
+        case .preparing, .downloading, .installing, .restarting:
+            switch kind {
+            case .download:
+                return language == .russian ? "Скачивается" : "Downloading"
+            case .update:
+                return language == .russian ? "Обновляется" : "Updating"
+            }
+        }
+    }
+
+    func detail(language: AppLanguage) -> String {
+        let version = targetVersion.map { " \($0)" } ?? ""
+        switch stage {
+        case .preparing:
+            return language == .russian
+                ? "Подготовка загрузки\(version)…"
+                : "Preparing\(version)…"
+        case .downloading:
+            let percentage = Int((clampedProgress * 100).rounded())
+            return language == .russian
+                ? "Загрузка\(version) · \(percentage)%"
+                : "Downloading\(version) · \(percentage)%"
+        case .installing:
+            return language == .russian
+                ? "Установка\(version)…"
+                : "Installing\(version)…"
+        case .restarting:
+            return language == .russian
+                ? "Перезапуск TorrServer…"
+                : "Restarting TorrServer…"
+        case .completed:
+            if let targetVersion {
+                return language == .russian
+                    ? "\(targetVersion) установлена"
+                    : "\(targetVersion) installed"
+            }
+            return language == .russian
+                ? "TorrServer установлен"
+                : "TorrServer installed"
+        }
+    }
+}
+
 final class MainWindowModel: ObservableObject {
     @Published var path = ""
     @Published var language: AppLanguage = .systemDefault
@@ -44,9 +114,13 @@ final class MainWindowModel: ObservableObject {
     @Published var canDownload = true
     @Published var canOpenWeb = true
     @Published var canEditPath = true
+    @Published var torrServerVersion: String?
+    @Published var torrServerUpdate: TorrServerAvailableUpdate?
+    @Published var torrServerUpdateActivity: TorrServerUpdateActivity?
 
     @Published var launchAtLogin = false
     @Published var autoStartServer = false
+    @Published var autoUpdateTorrServer = false
     @Published var showSpeed = true
     @Published var hideDockIcon = false
     @Published var notificationsEnabled = false
@@ -95,16 +169,19 @@ final class MainWindowModel: ObservableObject {
     var onPathChanged: ((String) -> Void)?
     var onChoose: (() -> Void)?
     var onDownload: (() -> Void)?
+    var onInstallTorrServerUpdate: (() -> Void)?
     var onStart: (() -> Void)?
     var onStop: (() -> Void)?
     var onOpenContacts: (() -> Void)?
     var onOpenWeb: (() -> Void)?
     var onLaunchAtLoginChanged: ((Bool) -> Void)?
     var onAutoStartChanged: ((Bool) -> Void)?
+    var onAutoUpdateTorrServerChanged: ((Bool) -> Void)?
     var onShowSpeedChanged: ((Bool) -> Void)?
     var onHideDockIconChanged: ((Bool) -> Void)?
     var onNotificationsChanged: ((Bool) -> Void)?
     var onJackettEnabledChanged: ((Bool) -> Void)?
+    var onOpenJackettDashboard: (() -> Void)?
     var onMetadataSourceChanged: ((MetadataSourceMode) -> Void)?
     var onMetadataAPIKeyModeChanged: ((MetadataAPIKeyMode) -> Void)?
     var onCombinedMetadataOrderChanged: (([MetadataProvider]) -> Void)?

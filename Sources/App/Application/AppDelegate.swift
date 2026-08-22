@@ -10,6 +10,7 @@ import UserNotifications
 
 let savedPathKey = "TorrServerExecutablePath"
 let autoStartServerKey = "AutoStartServerOnLaunch"
+let autoUpdateTorrServerKey = "AutoUpdateTorrServer"
 let showSpeedInMenuBarKey = "ShowSpeedInMenuBar"
 let hideDockIconKey = "HideDockIcon"
 let languageKey = "AppLanguage"
@@ -29,6 +30,7 @@ func migrateLegacyPreferencesIfNeeded() {
         let keys = [
             savedPathKey,
             autoStartServerKey,
+            autoUpdateTorrServerKey,
             showSpeedInMenuBarKey,
             hideDockIconKey,
             languageKey,
@@ -78,6 +80,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     let libraryClient = TorrServerLibraryClient()
     let notificationController = NotificationController()
     let diagnosticsService = TorrServerDiagnosticsService()
+    let releaseChecker = TorrServerReleaseChecker()
     let nativeTorrServerAPI = NativeTorrServerAPI()
     let metadataAPIKeyValidator = MetadataAPIKeyValidator()
     let metadataSettings = MetadataSettingsStore.shared
@@ -94,6 +97,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     var popoverRefreshTimer: Timer?
     var menuBarMaterialTimer: Timer?
     var menuBarAnimationTimer: Timer?
+    var torrServerUpdateTimer: Timer?
+    var torrServerUpdateWorkItem: DispatchWorkItem?
+    var torrServerUpdateCheckRevision = 0
     var localPopoverEventMonitor: Any?
     var globalPopoverEventMonitor: Any?
 
@@ -132,6 +138,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         updateUI(for: .stopped)
         refreshPlayerAvailability()
         refreshStorage()
+        checkForTorrServerUpdate()
+        schedulePeriodicTorrServerUpdateChecks()
 
         window.center()
         window.makeKeyAndOrderFront(nil)
@@ -146,6 +154,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        scheduleTorrServerUpdateCheck()
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {

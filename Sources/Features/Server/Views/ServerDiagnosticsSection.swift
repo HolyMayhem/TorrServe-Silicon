@@ -5,7 +5,6 @@ struct ServerDiagnosticsSection: View {
 
     private let columns = [
         GridItem(.flexible(), spacing: 8),
-        GridItem(.flexible(), spacing: 8),
         GridItem(.flexible(), spacing: 8)
     ]
 
@@ -42,31 +41,12 @@ struct ServerDiagnosticsSection: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            HStack(spacing: 8) {
-                Button {
-                    model.onRunFullDiagnostics?()
-                } label: {
-                    Label(fullCheckTitle, systemImage: "waveform.path.ecg")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .disabled(isBusy)
+            primaryDiagnosticAction
 
-                Button {
-                    model.onTestAllMetadataAPIKeys?()
-                } label: {
-                    HStack(spacing: 7) {
-                        Image(systemName: diagnosticIcon(model.metadataKeysDiagnostic.kind))
-                            .foregroundStyle(diagnosticColor(model.metadataKeysDiagnostic.kind))
-                        Text(testKeysTitle)
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
-                .disabled(isBusy)
-            }
+            Text(language == .russian ? "ИНСТРУМЕНТЫ" : "TOOLS")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.tertiary)
+                .padding(.top, 1)
 
             LazyVGrid(columns: columns, spacing: 8) {
                 diagnosticAction(
@@ -77,17 +57,24 @@ struct ServerDiagnosticsSection: View {
                 )
 
                 diagnosticAction(
-                    title: processCleanupTitle,
-                    systemImage: "square.stack.3d.up",
-                    result: model.processDiagnostic,
-                    action: { model.onStopExternalProcesses?() }
-                )
-
-                diagnosticAction(
                     title: language == .russian ? "Проверить файл" : "Check executable",
                     systemImage: "checkmark.shield",
                     result: model.executableDiagnostic,
                     action: { model.onCheckExecutable?() }
+                )
+
+                diagnosticAction(
+                    title: testKeysTitle,
+                    systemImage: "key.horizontal",
+                    result: model.metadataKeysDiagnostic,
+                    action: { model.onTestAllMetadataAPIKeys?() }
+                )
+
+                diagnosticAction(
+                    title: processCleanupTitle,
+                    systemImage: "stop.circle",
+                    result: processCleanupResult,
+                    action: { model.onStopExternalProcesses?() }
                 )
 
                 diagnosticAction(
@@ -103,39 +90,75 @@ struct ServerDiagnosticsSection: View {
                 )
             }
 
-            HStack(spacing: 10) {
-                Button {
-                    model.onDownload?()
-                } label: {
-                    Label(
-                        language == .russian ? "Скачать свежий TorrServer" : "Download latest TorrServer",
-                        systemImage: "arrow.down.circle"
-                    )
-                }
-                .buttonStyle(.link)
-                .disabled(isBusy || !model.canDownload)
-
-                Spacer()
-
-                if !model.latestDiagnostic.message.isEmpty,
-                   model.latestDiagnostic.kind != .checking {
-                    Label(
-                        model.latestDiagnostic.message,
-                        systemImage: diagnosticIcon(model.latestDiagnostic.kind)
-                    )
-                    .font(.caption)
-                    .foregroundStyle(diagnosticColor(model.latestDiagnostic.kind))
-                    .lineLimit(2)
-                }
+            if !model.latestDiagnostic.message.isEmpty,
+               model.latestDiagnostic.kind != .checking {
+                diagnosticResultBanner(model.latestDiagnostic)
             }
+
+            Button {
+                model.onDownload?()
+            } label: {
+                Label(
+                    language == .russian ? "Скачать свежий TorrServer" : "Download latest TorrServer",
+                    systemImage: "arrow.down.circle"
+                )
+            }
+            .buttonStyle(.link)
+            .disabled(isBusy || !model.canDownload)
         }
         .serverSettingsPanel()
+    }
+
+    private var primaryDiagnosticAction: some View {
+        Button {
+            model.onRunFullDiagnostics?()
+        } label: {
+            HStack(spacing: 11) {
+                Image(systemName: "waveform.path.ecg")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 32, height: 32)
+                    .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 8))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(fullCheckTitle)
+                        .font(.callout.weight(.semibold))
+                    Text(language == .russian
+                        ? "Порт, процессы и исполняемый файл"
+                        : "Port, processes, and executable")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 8)
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 11)
+            .frame(maxWidth: .infinity)
+            .frame(height: 54)
+            .background(
+                Color.accentColor.opacity(0.09),
+                in: RoundedRectangle(cornerRadius: 11, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .stroke(Color.accentColor.opacity(0.16), lineWidth: 1)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(isBusy)
+        .opacity(isBusy ? 0.55 : 1)
     }
 
     private func diagnosticAction(
         title: String,
         systemImage: String,
         result: DiagnosticResult = .idle,
+        tint: Color = .secondary,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
@@ -143,7 +166,7 @@ struct ServerDiagnosticsSection: View {
                 Image(systemName: result.kind == .idle
                     ? systemImage
                     : diagnosticIcon(result.kind))
-                    .foregroundStyle(diagnosticColor(result.kind))
+                    .foregroundStyle(result.kind == .idle ? tint : diagnosticColor(result.kind))
                     .frame(width: 18)
 
                 Text(title)
@@ -160,11 +183,15 @@ struct ServerDiagnosticsSection: View {
             }
             .padding(.horizontal, 10)
             .frame(maxWidth: .infinity)
-            .frame(height: 36)
+            .frame(height: 42)
             .background(
-                Color.secondary.opacity(0.07),
-                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                tint.opacity(0.065),
+                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
             )
+            .overlay {
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .stroke(tint.opacity(0.1), lineWidth: 1)
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -172,6 +199,20 @@ struct ServerDiagnosticsSection: View {
         .opacity(isBusy ? 0.55 : 1)
         .help(result.message.isEmpty ? title : result.message)
         .accessibilityLabel(title)
+    }
+
+    private func diagnosticResultBanner(_ result: DiagnosticResult) -> some View {
+        Label(result.message, systemImage: diagnosticIcon(result.kind))
+            .font(.caption)
+            .foregroundStyle(diagnosticColor(result.kind))
+            .lineLimit(3)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(10)
+            .background(
+                diagnosticColor(result.kind).opacity(0.075),
+                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+            )
     }
 
     private var title: String {
@@ -193,15 +234,15 @@ struct ServerDiagnosticsSection: View {
     }
 
     private var processCleanupTitle: String {
-        let count = model.processScan.processes.count
-        guard count > 0 else {
-            return language == .russian
-                ? "Найти и остановить лишние копии"
-                : "Find and stop extra copies"
-        }
         return language == .russian
-            ? "Остановить лишние копии: \(count)"
-            : "Stop extra copies: \(count)"
+            ? "Найти и остановить все копии"
+            : "Find and stop all copies"
+    }
+
+    private var processCleanupResult: DiagnosticResult {
+        model.isStoppingExternalProcesses
+            ? DiagnosticResult(kind: .checking, message: "")
+            : model.processDiagnostic
     }
 
     private func diagnosticIcon(_ kind: DiagnosticResultKind) -> String {

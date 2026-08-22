@@ -31,17 +31,22 @@ extension AppDelegate {
         updateSpeedMonitor(for: state)
 
         if isDownloading {
+            let transferTitle = mainWindowModel.torrServerUpdateActivity?.title(
+                language: currentLanguage
+            ) ?? texts.downloading
             applyUIState(
                 dotColor: .systemOrange,
-                statusText: texts.downloading,
-                statusTooltip: texts.downloading,
+                statusText: transferTitle,
+                statusTooltip: mainWindowModel.torrServerUpdateActivity?.detail(
+                    language: currentLanguage
+                ) ?? texts.downloading,
                 canStart: false,
                 canStop: false,
                 canBrowse: false,
                 canDownload: false,
                 canOpenWeb: false,
                 canEditPath: false,
-                menuStatus: texts.downloading,
+                menuStatus: transferTitle,
                 statusIconColor: .systemGray
             )
             return
@@ -239,6 +244,9 @@ extension AppDelegate {
         mainWindowModel.canEditPath = canEditPath
         mainWindowModel.launchAtLogin = launchAtLoginController.isEnabled
         mainWindowModel.autoStartServer = UserDefaults.standard.bool(forKey: autoStartServerKey)
+        mainWindowModel.autoUpdateTorrServer = UserDefaults.standard.bool(
+            forKey: autoUpdateTorrServerKey
+        )
         mainWindowModel.showSpeed = isSpeedDisplayEnabled
         mainWindowModel.hideDockIcon = UserDefaults.standard.bool(forKey: hideDockIconKey)
         if !isNotificationAuthorizationPending {

@@ -42,6 +42,9 @@ struct Texts {
             ? "Запускать сервер при открытии приложения"
             : "Start server when app opens"
     }
+    var autoUpdateTorrServer: String {
+        language == .russian ? "Автообновление MatriX" : "Automatic MatriX updates"
+    }
     var showSpeed: String {
         language == .russian
             ? "Показывать скорость в меню баре"
