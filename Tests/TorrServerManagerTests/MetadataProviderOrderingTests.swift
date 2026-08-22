@@ -2,7 +2,7 @@ import XCTest
 @testable import TorrServerManager
 
 final class MetadataProviderOrderingTests: XCTestCase {
-    private let defaultOrder: [MetadataProvider] = [.omdb, .kinopoisk, .tmdb]
+    private let defaultOrder = MetadataProvider.lookupOrderProviders
 
     func testMovesFirstProviderToTheEnd() {
         let result = MetadataProviderOrdering.moving(
@@ -32,6 +32,7 @@ final class MetadataProviderOrderingTests: XCTestCase {
         )
 
         XCTAssertEqual(result, [.kinopoisk, .omdb, .tmdb])
-        XCTAssertEqual(Set(result), Set(MetadataProvider.allCases))
+        XCTAssertEqual(Set(result), Set(MetadataProvider.lookupOrderProviders))
+        XCTAssertFalse(result.contains(.anilist))
     }
 }

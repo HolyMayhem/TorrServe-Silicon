@@ -60,13 +60,21 @@ struct MediaTitleCandidateGenerator: MediaTitleCandidateGenerating {
         let suffix = year.map { " \($0)" } ?? ""
         let prefix = titlePrefix(from: source)
         let withoutParentheses = replacingParentheticalText(in: prefix, with: " ")
+        let withoutTrackerAnnotations = replacingTrackerAnnotations(
+            in: withoutParentheses,
+            with: " "
+        )
+        let cleanReleaseTitle = removingTrailingEpisodeNumber(
+            from: withoutTrackerAnnotations
+        )
 
         var values: [(String, Int)] = [
             (prefix + suffix, 0),
-            (withoutParentheses + suffix, 24)
+            (withoutParentheses + suffix, 24),
+            (cleanReleaseTitle + suffix, 36)
         ]
 
-        for part in splitAliases(withoutParentheses) {
+        for part in splitAliases(cleanReleaseTitle) {
             values.append((part + suffix, 60))
         }
 
@@ -98,7 +106,7 @@ struct MediaTitleCandidateGenerator: MediaTitleCandidateGenerating {
             .min() ?? filename.endIndex
         return String(filename[..<cutLocation])
             .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(
-                CharacterSet(charactersIn: "[]{}_-–—")
+                CharacterSet(charactersIn: "_-–—")
             ))
     }
 
@@ -137,13 +145,34 @@ struct MediaTitleCandidateGenerator: MediaTitleCandidateGenerating {
     }
 
     private func replacingParentheticalText(in value: String, with replacement: String) -> String {
-        guard let regex = try? NSRegularExpression(pattern: #"\([^)]*\)"#) else {
+        guard let regex = try? NSRegularExpression(pattern: #"\([^)]*(?:\)|$)"#) else {
             return value
         }
         return regex.stringByReplacingMatches(
             in: value,
             range: NSRange(value.startIndex..<value.endIndex, in: value),
             withTemplate: replacement
+        )
+    }
+
+    private func replacingTrackerAnnotations(in value: String, with replacement: String) -> String {
+        guard let regex = try? NSRegularExpression(
+            pattern: #"\[[^\]]*(?:\]|$)|\{[^\}]*(?:\}|$)"#
+        ) else {
+            return value
+        }
+        return regex.stringByReplacingMatches(
+            in: value,
+            range: NSRange(value.startIndex..<value.endIndex, in: value),
+            withTemplate: replacement
+        )
+    }
+
+    private func removingTrailingEpisodeNumber(from value: String) -> String {
+        value.replacingOccurrences(
+            of: #"\s+[-–—]\s*\d{1,4}\s*$"#,
+            with: "",
+            options: .regularExpression
         )
     }
 
@@ -181,6 +210,9 @@ struct MediaTitleCandidateGenerator: MediaTitleCandidateGenerating {
         case .kinopoisk:
             if hasCyrillic && !hasLatin { return 32 }
             if hasLatin && !hasCyrillic { return 24 }
+        case .anilist:
+            if hasLatin && !hasCyrillic { return 32 }
+            if hasCyrillic && !hasLatin { return -12 }
         }
         return 0
     }

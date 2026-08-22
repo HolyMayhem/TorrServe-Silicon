@@ -11,7 +11,7 @@ enum OverviewTranslationPolicy {
     ) -> Bool {
         guard mode == .automatic,
               language == .russian,
-              provider == .omdb,
+              provider == .omdb || provider == .anilist,
               !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return false
         }
@@ -86,7 +86,10 @@ struct LocalizedOverviewText: View {
             overviewBody
 
             if translatedText != nil {
-                Label("OMDb · Переведено Apple", systemImage: "translate")
+                Label(
+                    "\(provider?.displayName ?? "Metadata") · Переведено Apple",
+                    systemImage: "translate"
+                )
                     .font(.system(size: 9.5, weight: .medium))
                     .foregroundStyle(.tertiary)
             } else if isTranslating {

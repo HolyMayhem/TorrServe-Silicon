@@ -28,6 +28,9 @@ struct SettingsView: View {
                 applicationSection
                 interfaceSection
                 metadataSection
+                if model.metadataSource != .disabled {
+                    animeMetadataSection
+                }
             }
             .padding(.horizontal, SettingsScreenLayout.formContentInset)
             .padding(.top, SettingsScreenLayout.scrollContentTopPadding)
@@ -166,52 +169,54 @@ struct SettingsView: View {
                 }
             }
 
-            if model.metadataSource == .combined {
-                Divider()
-                combinedOrderRow
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
-
-            Divider()
-            settingRow(model.language == .russian ? "Ключи API" : "API keys") {
-                Picker("", selection: $model.metadataAPIKeyMode) {
-                    Text(model.language == .russian ? "Встроенные" : "Built-in")
-                        .tag(MetadataAPIKeyMode.builtIn)
-                    Text(model.language == .russian ? "Свои" : "Custom")
-                        .tag(MetadataAPIKeyMode.custom)
+            if model.metadataSource != .disabled {
+                if model.metadataSource == .combined {
+                    Divider()
+                    combinedOrderRow
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                 }
-                .labelsHidden()
-                .fixedSize()
-                .frame(width: pickerColumnWidth, alignment: .trailing)
-                .onChange(of: model.metadataAPIKeyMode) { _, mode in
-                    withAnimation(.easeInOut(duration: 0.22)) {
-                        model.onMetadataAPIKeyModeChanged?(mode)
+
+                Divider()
+                settingRow(model.language == .russian ? "Ключи API" : "API keys") {
+                    Picker("", selection: $model.metadataAPIKeyMode) {
+                        Text(model.language == .russian ? "Встроенные" : "Built-in")
+                            .tag(MetadataAPIKeyMode.builtIn)
+                        Text(model.language == .russian ? "Свои" : "Custom")
+                            .tag(MetadataAPIKeyMode.custom)
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                    .frame(width: pickerColumnWidth, alignment: .trailing)
+                    .onChange(of: model.metadataAPIKeyMode) { _, mode in
+                        withAnimation(.easeInOut(duration: 0.22)) {
+                            model.onMetadataAPIKeyModeChanged?(mode)
+                        }
                     }
                 }
-            }
 
-            if model.metadataAPIKeyMode == .custom {
-                Divider()
-                apiKeyRow("TMDB API Key", provider: .tmdb, value: $model.tmdbAPIKey)
-                Divider()
-                apiKeyRow("OMDb API Key", provider: .omdb, value: $model.omdbAPIKey)
-                Divider()
-                apiKeyRow("КиноПоиск API Key", provider: .kinopoisk, value: $model.kinopoiskAPIKey)
-            }
-
-            Divider()
-            settingRow(model.language == .russian ? "Перевод описаний" : "Overview translation") {
-                Picker("", selection: $model.overviewTranslationMode) {
-                    Text(model.language == .russian ? "Автоматически" : "Automatic")
-                        .tag(OverviewTranslationMode.automatic)
-                    Text(model.language == .russian ? "Оригинал" : "Original")
-                        .tag(OverviewTranslationMode.original)
+                if model.metadataAPIKeyMode == .custom {
+                    Divider()
+                    apiKeyRow("TMDB API Key", provider: .tmdb, value: $model.tmdbAPIKey)
+                    Divider()
+                    apiKeyRow("OMDb API Key", provider: .omdb, value: $model.omdbAPIKey)
+                    Divider()
+                    apiKeyRow("КиноПоиск API Key", provider: .kinopoisk, value: $model.kinopoiskAPIKey)
                 }
-                .labelsHidden()
-                .fixedSize()
-                .frame(width: pickerColumnWidth, alignment: .trailing)
-                .onChange(of: model.overviewTranslationMode) { _, mode in
-                    model.onOverviewTranslationModeChanged?(mode)
+
+                Divider()
+                settingRow(model.language == .russian ? "Перевод описаний" : "Overview translation") {
+                    Picker("", selection: $model.overviewTranslationMode) {
+                        Text(model.language == .russian ? "Автоматически" : "Automatic")
+                            .tag(OverviewTranslationMode.automatic)
+                        Text(model.language == .russian ? "Оригинал" : "Original")
+                            .tag(OverviewTranslationMode.original)
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                    .frame(width: pickerColumnWidth, alignment: .trailing)
+                    .onChange(of: model.overviewTranslationMode) { _, mode in
+                        model.onOverviewTranslationModeChanged?(mode)
+                    }
                 }
             }
         }
@@ -238,6 +243,21 @@ struct SettingsView: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.vertical, 10)
+    }
+
+    private var animeMetadataSection: some View {
+        settingsSection(
+            title: model.language == .russian ? "Аниме" : "Anime",
+            footer: model.language == .russian
+                ? "AniList проверяется отдельно и не входит в общий порядок поиска. Приложение принимает точное совпадение названия, а при наличии года — также и года. Затем при необходимости используются обычные источники."
+                : "AniList is checked separately and is not included in the general lookup order. The app requires an exact title match and, when present, the year as well, then falls back to regular providers when needed."
+        ) {
+            toggleRow(
+                model.language == .russian ? "Метаданные AniList" : "AniList metadata",
+                keyPath: \.aniListEnabled,
+                callback: model.onAniListEnabledChanged
+            )
+        }
     }
 
     private func apiKeyRow(
@@ -334,11 +354,22 @@ struct SettingsView: View {
     }
 
     private func metadataSourceTitle(_ source: MetadataSourceMode) -> String {
-        guard source == .combined else { return source.displayName }
-        return model.language == .russian ? "Комбинированные" : "Combined"
+        switch source {
+        case .disabled:
+            return model.language == .russian ? "Не использовать" : "Off"
+        case .combined:
+            return model.language == .russian ? "Комбинированные" : "Combined"
+        default:
+            return source.displayName
+        }
     }
 
     private var metadataFooter: String {
+        if model.metadataSource == .disabled {
+            return model.language == .russian
+                ? "Приложение не будет загружать, хранить или показывать метаданные материалов."
+                : "The app will not fetch, store, or display media metadata."
+        }
         if model.metadataAPIKeyMode == .builtIn {
             return model.language == .russian
                 ? "Приложение использует встроенные ключи. В комбинированном режиме источники проверяются по указанному порядку."

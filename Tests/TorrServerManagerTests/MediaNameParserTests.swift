@@ -75,6 +75,34 @@ final class MediaTitleCandidateGeneratorTests: XCTestCase {
         XCTAssertEqual(values.first?.parsedName.year, 1998)
     }
 
+    func testExtractsCleanAniListAliasFromTrackerAnnotations() {
+        let values = MediaTitleCandidateGenerator().candidates(
+            from: [
+                "[SOFCJ-Raws] Death Note - 20 (BDRip 1920x1080 x264 VFR 10bit FLAC).mkv",
+                "Тетрадь Смерти / Death Note [TV] [37 из 37] [RUS(ext), JAP+Sub] [2006, психологический триллер, мистика, детектив, BDRip] [1080p]"
+            ],
+            provider: .anilist,
+            language: "ru-RU"
+        )
+        XCTAssertTrue(values.contains {
+            $0.parsedName.title == "Death Note" && $0.parsedName.year == 2006
+        })
+        XCTAssertEqual(values.first?.parsedName.title, "Death Note")
+    }
+
+    func testExtractsCleanAniListAliasFromAnimeReleaseFile() {
+        let values = MediaTitleCandidateGenerator().candidates(
+            from: [
+                "[VCB-Studio] Kill la Kill - 24 [BDRip 1080p x264 FLAC].mkv",
+                "Крошить-кромсать / Kill la Kill / Kiru ra Kiru [TV+Special] [24+1 из 24+1]"
+            ],
+            provider: .anilist,
+            language: "ru-RU"
+        )
+
+        XCTAssertEqual(values.first?.parsedName.title, "Kill la Kill")
+    }
+
     func testResolverFallsBackToCleanAlias() async {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

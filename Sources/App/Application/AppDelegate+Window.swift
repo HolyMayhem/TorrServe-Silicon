@@ -29,6 +29,7 @@ extension AppDelegate {
         )
         let metadataProviderSettings = metadataSettings.settings
         mainWindowModel.metadataSource = metadataProviderSettings.selectedSource
+        mainWindowModel.aniListEnabled = metadataProviderSettings.aniListEnabled
         mainWindowModel.metadataAPIKeyMode = metadataProviderSettings.apiKeyMode
         mainWindowModel.combinedMetadataOrder = metadataProviderSettings.combinedOrder
         mainWindowModel.tmdbAPIKey = metadataProviderSettings.tmdbAPIKey
@@ -80,6 +81,9 @@ extension AppDelegate {
         }
         mainWindowModel.onMetadataSourceChanged = { [weak self] source in
             self?.setMetadataSource(source)
+        }
+        mainWindowModel.onAniListEnabledChanged = { [weak self] enabled in
+            self?.setAniListEnabled(enabled)
         }
         mainWindowModel.onMetadataAPIKeyModeChanged = { [weak self] mode in
             self?.setMetadataAPIKeyMode(mode)

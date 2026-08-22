@@ -108,6 +108,7 @@ final class MetadataSettingsStoreTests: XCTestCase {
         try store.save(selectedSource: .combined)
         try store.save(apiKeyMode: .custom)
         try store.save(combinedOrder: [.kinopoisk, .tmdb, .omdb])
+        try store.save(aniListEnabled: false)
         try store.save(overviewTranslationMode: .original)
 
         let reloaded = MetadataSettingsStore(
@@ -118,6 +119,7 @@ final class MetadataSettingsStoreTests: XCTestCase {
         XCTAssertEqual(reloaded.selectedSource, .combined)
         XCTAssertEqual(reloaded.apiKeyMode, .custom)
         XCTAssertEqual(reloaded.combinedOrder, [.kinopoisk, .tmdb, .omdb])
+        XCTAssertFalse(reloaded.aniListEnabled)
         XCTAssertEqual(reloaded.tmdbAPIKey, "tmdb-key")
         XCTAssertEqual(reloaded.omdbAPIKey, "omdb-key")
         XCTAssertEqual(reloaded.kinopoiskAPIKey, "kinopoisk-key")
@@ -144,6 +146,28 @@ final class MetadataSettingsStoreTests: XCTestCase {
         XCTAssertEqual(settings.selectedSource, .omdb)
         XCTAssertEqual(settings.apiKeyMode, .builtIn)
         XCTAssertEqual(settings.combinedOrder, [.omdb, .kinopoisk, .tmdb])
+        XCTAssertTrue(settings.aniListEnabled)
+    }
+
+    func testDisabledSourceStopsAllMetadataWithoutResettingSettings() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = MetadataSettingsStore(
+            fileURL: directory.appendingPathComponent("metadata.json"),
+            legacyTMDBURL: directory.appendingPathComponent("legacy.json"),
+            builtInAPIKeys: .empty
+        )
+
+        try store.save(combinedOrder: [.kinopoisk, .omdb, .tmdb])
+        try store.save(aniListEnabled: true)
+        try store.save(selectedSource: .disabled)
+
+        let settings = store.settings
+        XCTAssertEqual(settings.selectedSource, .disabled)
+        XCTAssertTrue(settings.resolutionOrder.isEmpty)
+        XCTAssertTrue(settings.aniListEnabled)
+        XCTAssertEqual(settings.combinedOrder, [.kinopoisk, .omdb, .tmdb])
     }
 
     func testBuiltInAndCustomKeyModesUseDifferentKeys() throws {
@@ -163,12 +187,36 @@ final class MetadataSettingsStoreTests: XCTestCase {
         XCTAssertEqual(store.tmdbConfiguration()?.apiKey, "built-in-tmdb")
         XCTAssertEqual(store.omdbConfiguration()?.apiKey, "built-in-omdb")
         XCTAssertEqual(store.kinopoiskConfiguration()?.apiKey, "built-in-kinopoisk")
+        XCTAssertTrue(store.isConfigured(.anilist))
 
         try store.save(apiKey: "custom-omdb", for: .omdb)
         try store.save(apiKeyMode: .custom)
 
         XCTAssertEqual(store.omdbConfiguration()?.apiKey, "custom-omdb")
         XCTAssertNil(store.tmdbConfiguration())
+    }
+
+    func testMigratesRemovedTVMazeSettingsWithoutLosingKeys() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let fileURL = directory.appendingPathComponent("metadata.json")
+        try Data(#"{"selectedSource":"tvmaze","apiKeyMode":"custom","combinedOrder":["tvmaze","kinopoisk","tmdb","omdb"],"tmdbAPIKey":"tmdb-key","omdbAPIKey":"omdb-key","kinopoiskAPIKey":"kp-key"}"#.utf8)
+            .write(to: fileURL)
+
+        let settings = MetadataSettingsStore(
+            fileURL: fileURL,
+            legacyTMDBURL: directory.appendingPathComponent("legacy.json"),
+            builtInAPIKeys: .empty
+        ).settings
+
+        XCTAssertEqual(settings.selectedSource, .tmdb)
+        XCTAssertEqual(settings.combinedOrder, [.kinopoisk, .tmdb, .omdb])
+        XCTAssertEqual(settings.tmdbAPIKey, "tmdb-key")
+        XCTAssertEqual(settings.omdbAPIKey, "omdb-key")
+        XCTAssertEqual(settings.kinopoiskAPIKey, "kp-key")
+        XCTAssertTrue(settings.aniListEnabled)
     }
 }
 
@@ -177,6 +225,12 @@ final class OverviewTranslationTests: XCTestCase {
         XCTAssertTrue(OverviewTranslationPolicy.shouldTranslate(
             "A criminal returns to the city for one final job.",
             provider: .omdb,
+            language: .russian,
+            mode: .automatic
+        ))
+        XCTAssertTrue(OverviewTranslationPolicy.shouldTranslate(
+            "A family fights for control of the kingdom.",
+            provider: .anilist,
             language: .russian,
             mode: .automatic
         ))

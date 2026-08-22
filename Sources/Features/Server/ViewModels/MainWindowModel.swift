@@ -127,6 +127,7 @@ final class MainWindowModel: ObservableObject {
     @Published var notificationsAuthorizationPending = false
     @Published var jackettEnabled = true
     @Published var metadataSource = MetadataSourceMode.tmdb
+    @Published var aniListEnabled = true
     @Published var metadataAPIKeyMode = MetadataAPIKeyMode.builtIn
     @Published var combinedMetadataOrder = MetadataProviderSettings.defaultCombinedOrder
     @Published var tmdbAPIKey = ""
@@ -183,6 +184,7 @@ final class MainWindowModel: ObservableObject {
     var onJackettEnabledChanged: ((Bool) -> Void)?
     var onOpenJackettDashboard: (() -> Void)?
     var onMetadataSourceChanged: ((MetadataSourceMode) -> Void)?
+    var onAniListEnabledChanged: ((Bool) -> Void)?
     var onMetadataAPIKeyModeChanged: ((MetadataAPIKeyMode) -> Void)?
     var onCombinedMetadataOrderChanged: (([MetadataProvider]) -> Void)?
     var onMetadataAPIKeyChanged: ((MetadataProvider, String) -> Void)?

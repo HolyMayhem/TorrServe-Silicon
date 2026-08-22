@@ -57,11 +57,12 @@ protocol KinopoiskConfigurationProviding: Sendable {
 }
 
 struct MetadataProviderSettings: Equatable, Sendable {
-    static let defaultCombinedOrder: [MetadataProvider] = [.omdb, .kinopoisk, .tmdb]
+    static let defaultCombinedOrder = MetadataProvider.lookupOrderProviders
 
     var selectedSource: MetadataSourceMode
     var apiKeyMode: MetadataAPIKeyMode
     var combinedOrder: [MetadataProvider]
+    var aniListEnabled: Bool
     var tmdbAPIKey: String
     var omdbAPIKey: String
     var kinopoiskAPIKey: String
@@ -72,17 +73,20 @@ struct MetadataProviderSettings: Equatable, Sendable {
         case .tmdb: return tmdbAPIKey
         case .omdb: return omdbAPIKey
         case .kinopoisk: return kinopoiskAPIKey
+        case .anilist: return ""
         }
     }
 
     var resolutionOrder: [MetadataProvider] {
-        selectedSource.singleProvider.map { [$0] }
+        guard selectedSource != .disabled else { return [] }
+        return selectedSource.singleProvider.map { [$0] }
             ?? Self.normalizedOrder(combinedOrder)
     }
 
     static func normalizedOrder(_ providers: [MetadataProvider]) -> [MetadataProvider] {
+        let allowed = Set(defaultCombinedOrder)
         var seen = Set<MetadataProvider>()
-        let unique = providers.filter { seen.insert($0).inserted }
+        let unique = providers.filter { allowed.contains($0) && seen.insert($0).inserted }
         return unique + defaultCombinedOrder.filter { !seen.contains($0) }
     }
 }
@@ -99,6 +103,7 @@ struct BuiltInMetadataAPIKeys: Equatable, Sendable {
         case .tmdb: return tmdb
         case .omdb: return omdb
         case .kinopoisk: return kinopoisk
+        case .anilist: return ""
         }
     }
 }
@@ -111,10 +116,78 @@ final class MetadataSettingsStore: TMDBConfigurationProviding, OMDBConfiguration
         var selectedSource: MetadataSourceMode?
         var apiKeyMode: MetadataAPIKeyMode?
         var combinedOrder: [MetadataProvider]?
+        var aniListEnabled: Bool?
         var tmdbAPIKey: String
         var omdbAPIKey: String
         var kinopoiskAPIKey: String?
         var overviewTranslationMode: OverviewTranslationMode?
+
+        private enum CodingKeys: String, CodingKey {
+            case selectedProvider
+            case selectedSource
+            case apiKeyMode
+            case combinedOrder
+            case aniListEnabled
+            case tmdbAPIKey
+            case omdbAPIKey
+            case kinopoiskAPIKey
+            case overviewTranslationMode
+        }
+
+        init(
+            selectedProvider: MetadataProvider?,
+            selectedSource: MetadataSourceMode?,
+            apiKeyMode: MetadataAPIKeyMode?,
+            combinedOrder: [MetadataProvider]?,
+            aniListEnabled: Bool?,
+            tmdbAPIKey: String,
+            omdbAPIKey: String,
+            kinopoiskAPIKey: String?,
+            overviewTranslationMode: OverviewTranslationMode?
+        ) {
+            self.selectedProvider = selectedProvider
+            self.selectedSource = selectedSource
+            self.apiKeyMode = apiKeyMode
+            self.combinedOrder = combinedOrder
+            self.aniListEnabled = aniListEnabled
+            self.tmdbAPIKey = tmdbAPIKey
+            self.omdbAPIKey = omdbAPIKey
+            self.kinopoiskAPIKey = kinopoiskAPIKey
+            self.overviewTranslationMode = overviewTranslationMode
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            selectedProvider = try? container.decode(MetadataProvider.self, forKey: .selectedProvider)
+            selectedSource = try? container.decode(MetadataSourceMode.self, forKey: .selectedSource)
+            apiKeyMode = try? container.decode(MetadataAPIKeyMode.self, forKey: .apiKeyMode)
+            let rawOrder = try? container.decode([String].self, forKey: .combinedOrder)
+            combinedOrder = rawOrder?.compactMap(MetadataProvider.init(rawValue:))
+            aniListEnabled = try? container.decode(Bool.self, forKey: .aniListEnabled)
+            tmdbAPIKey = (try? container.decode(String.self, forKey: .tmdbAPIKey)) ?? ""
+            omdbAPIKey = (try? container.decode(String.self, forKey: .omdbAPIKey)) ?? ""
+            kinopoiskAPIKey = try? container.decode(String.self, forKey: .kinopoiskAPIKey)
+            overviewTranslationMode = try? container.decode(
+                OverviewTranslationMode.self,
+                forKey: .overviewTranslationMode
+            )
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encodeIfPresent(selectedProvider, forKey: .selectedProvider)
+            try container.encodeIfPresent(selectedSource, forKey: .selectedSource)
+            try container.encodeIfPresent(apiKeyMode, forKey: .apiKeyMode)
+            try container.encodeIfPresent(combinedOrder, forKey: .combinedOrder)
+            try container.encodeIfPresent(aniListEnabled, forKey: .aniListEnabled)
+            try container.encode(tmdbAPIKey, forKey: .tmdbAPIKey)
+            try container.encode(omdbAPIKey, forKey: .omdbAPIKey)
+            try container.encodeIfPresent(kinopoiskAPIKey, forKey: .kinopoiskAPIKey)
+            try container.encodeIfPresent(
+                overviewTranslationMode,
+                forKey: .overviewTranslationMode
+            )
+        }
     }
 
     private struct LegacyTMDBPayload: Codable {
@@ -154,6 +227,7 @@ final class MetadataSettingsStore: TMDBConfigurationProviding, OMDBConfiguration
                 combinedOrder: MetadataProviderSettings.normalizedOrder(
                     payload.combinedOrder ?? MetadataProviderSettings.defaultCombinedOrder
                 ),
+                aniListEnabled: payload.aniListEnabled ?? true,
                 tmdbAPIKey: payload.tmdbAPIKey,
                 omdbAPIKey: payload.omdbAPIKey,
                 kinopoiskAPIKey: payload.kinopoiskAPIKey ?? "",
@@ -163,7 +237,8 @@ final class MetadataSettingsStore: TMDBConfigurationProviding, OMDBConfiguration
     }
 
     func isConfigured(_ provider: MetadataProvider) -> Bool {
-        !effectiveAPIKey(for: provider).isEmpty
+        if !provider.requiresAPIKey { return true }
+        return !effectiveAPIKey(for: provider).isEmpty
     }
 
     func activeAPIKey(for provider: MetadataProvider) -> String {
@@ -202,7 +277,16 @@ final class MetadataSettingsStore: TMDBConfigurationProviding, OMDBConfiguration
             case .tmdb: payload.tmdbAPIKey = value
             case .omdb: payload.omdbAPIKey = value
             case .kinopoisk: payload.kinopoiskAPIKey = value
+            case .anilist: return
             }
+            try persist(payload)
+        }
+    }
+
+    func save(aniListEnabled: Bool) throws {
+        try lock.withLock {
+            var payload = loadPayload()
+            payload.aniListEnabled = aniListEnabled
             try persist(payload)
         }
     }
@@ -261,6 +345,7 @@ final class MetadataSettingsStore: TMDBConfigurationProviding, OMDBConfiguration
             selectedSource: .tmdb,
             apiKeyMode: .builtIn,
             combinedOrder: MetadataProviderSettings.defaultCombinedOrder,
+            aniListEnabled: true,
             tmdbAPIKey: legacyKey,
             omdbAPIKey: "",
             kinopoiskAPIKey: "",

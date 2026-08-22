@@ -18,6 +18,7 @@ actor MetadataAPIKeyValidator {
         provider: MetadataProvider,
         apiKey: String
     ) async -> MetadataAPIKeyValidationResult {
+        guard provider.requiresAPIKey else { return .valid }
         let key = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { return .invalid }
 
@@ -29,6 +30,8 @@ actor MetadataAPIKeyValidator {
                 return try await validateOMDB(key)
             case .kinopoisk:
                 return try await validateKinopoisk(key)
+            case .anilist:
+                return .valid
             }
         } catch {
             return .unavailable

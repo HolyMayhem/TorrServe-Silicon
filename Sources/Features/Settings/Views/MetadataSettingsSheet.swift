@@ -35,17 +35,25 @@ struct MetadataSettingsSheet: View {
             )
             .font(.title3.weight(.semibold))
 
-            Text(language == .russian
-                ? "Укажите API Key для \(provider.displayName). Ключ хранится локально и используется только для запросов метаданных."
-                : "Enter the \(provider.displayName) API Key. It is stored locally and used only for metadata requests.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            if provider.requiresAPIKey {
+                Text(language == .russian
+                    ? "Укажите API Key для \(provider.displayName). Ключ хранится локально и используется только для запросов метаданных."
+                    : "Enter the \(provider.displayName) API Key. It is stored locally and used only for metadata requests.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
 
-            SecureField("\(provider.displayName) API Key", text: $apiKey)
-                .textFieldStyle(.roundedBorder)
+                SecureField("\(provider.displayName) API Key", text: $apiKey)
+                    .textFieldStyle(.roundedBorder)
+            } else {
+                Text(language == .russian
+                    ? "Публичный API AniList не требует ключа."
+                    : "The public AniList API does not require an API key.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
 
-            if provider == .omdb {
+            if provider == .omdb || provider == .anilist {
                 VStack(alignment: .leading, spacing: 7) {
                     Text(language == .russian ? "Перевод описаний" : "Overview translation")
                         .font(.subheadline.weight(.medium))
@@ -60,8 +68,8 @@ struct MetadataSettingsSheet: View {
                     .pickerStyle(.segmented)
 
                     Text(language == .russian
-                        ? "В русской версии английские описания OMDb переводятся средствами macOS. Оригинал всегда сохраняется."
-                        : "In the Russian interface, English OMDb overviews are translated by macOS. The original is always preserved.")
+                        ? "В русской версии английские описания переводятся средствами macOS. Оригинал всегда сохраняется."
+                        : "In the Russian interface, English overviews are translated by macOS. The original is always preserved.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -74,7 +82,9 @@ struct MetadataSettingsSheet: View {
 
             HStack {
                 Link(
-                    language == .russian ? "Получить API Key" : "Get an API Key",
+                    provider.requiresAPIKey
+                        ? (language == .russian ? "Получить API Key" : "Get an API Key")
+                        : (language == .russian ? "Документация API" : "API documentation"),
                     destination: apiKeyURL
                 )
 
@@ -111,6 +121,10 @@ struct MetadataSettingsSheet: View {
             return language == .russian
                 ? "Данные предоставляются неофициальным API КиноПоиска. Доступность и лимиты зависят от тарифа API."
                 : "Data is provided by the unofficial Kinopoisk API. Availability and limits depend on its API plan."
+        case .anilist:
+            return language == .russian
+                ? "AniList используется отдельно для точного поиска аниме и не входит в общий порядок источников."
+                : "AniList is used separately for exact anime matching and is not part of the general provider order."
         }
     }
 
@@ -122,6 +136,8 @@ struct MetadataSettingsSheet: View {
             return URL(string: "https://www.omdbapi.com/apikey.aspx")!
         case .kinopoisk:
             return URL(string: "https://kinopoiskapiunofficial.tech/profile")!
+        case .anilist:
+            return URL(string: "https://docs.anilist.co/guide/graphql/")!
         }
     }
 }

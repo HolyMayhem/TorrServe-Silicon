@@ -128,10 +128,14 @@ struct LibraryMetadata: Codable, Equatable {
         source = try container.decodeIfPresent(String.self, forKey: .source) ?? ""
         sourceURL = try container.decodeIfPresent(String.self, forKey: .sourceURL)
         tmdbID = try container.decodeIfPresent(Int.self, forKey: .tmdbID)
-        metadataProvider = try container.decodeIfPresent(
-            MetadataProvider.self,
+        if let rawProvider = try container.decodeIfPresent(
+            String.self,
             forKey: .metadataProvider
-        ) ?? (tmdbID == nil ? nil : .tmdb)
+        ) {
+            metadataProvider = MetadataProvider(rawValue: rawProvider)
+        } else {
+            metadataProvider = tmdbID == nil ? nil : .tmdb
+        }
         metadataProviderID = try container.decodeIfPresent(
             String.self,
             forKey: .metadataProviderID

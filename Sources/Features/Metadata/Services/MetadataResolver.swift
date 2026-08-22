@@ -10,7 +10,8 @@ actor MetadataResolver {
         services: [any MetadataServicing] = [
             TMDBService(),
             OMDBService(),
-            KinopoiskService()
+            KinopoiskService(),
+            AniListService()
         ],
         cache: MetadataCache = .shared
     ) {
@@ -55,7 +56,10 @@ actor MetadataResolver {
         }
 
         do {
-            let queryCandidates = Self.queryCandidates(from: titleCandidates)
+            let queryCandidates = Self.queryCandidates(
+                from: titleCandidates,
+                provider: provider
+            )
             var selectedMatch: CandidateMatch?
 
             for query in queryCandidates {
@@ -71,6 +75,14 @@ actor MetadataResolver {
                 }
 
                 let resultRanking = Self.ranking(for: result, parsed: parsed)
+                guard Self.isAcceptable(
+                    result,
+                    ranking: resultRanking,
+                    parsed: parsed,
+                    provider: provider
+                ) else {
+                    continue
+                }
                 let match = CandidateMatch(
                     result: result,
                     parsedName: parsed,
@@ -89,7 +101,7 @@ actor MetadataResolver {
                 let yearMatches = parsed.year == nil || result.releaseYear == parsed.year
                 if resultRanking.title == 3,
                    yearMatches,
-                   result.kind == parsed.kind {
+                   (provider == .anilist || result.kind == parsed.kind) {
                     break
                 }
             }
@@ -134,6 +146,18 @@ actor MetadataResolver {
             kind: result.kind == parsed.kind ? 1 : 0,
             popularity: result.popularity
         )
+    }
+
+    private static func isAcceptable(
+        _ result: MediaSearchResult,
+        ranking: ResultRanking,
+        parsed: ParsedMediaName,
+        provider: MetadataProvider
+    ) -> Bool {
+        guard provider == .anilist else { return true }
+        guard ranking.title == 3 else { return false }
+        guard let year = parsed.year else { return true }
+        return result.releaseYear == year
     }
 
     private static func titleMatch(_ candidate: String, _ requested: String) -> Double {
@@ -181,8 +205,16 @@ actor MetadataResolver {
     }
 
     private static func queryCandidates(
-        from candidates: [MediaTitleCandidate]
+        from candidates: [MediaTitleCandidate],
+        provider: MetadataProvider
     ) -> [(candidate: MediaTitleCandidate, kind: MediaKind)] {
+        // AniList searches all anime formats in the same GraphQL collection and ignores
+        // our movie/TV hint. Repeating each title with the opposite kind only burns its
+        // comparatively small public rate limit, so keep only the strongest clean aliases.
+        if provider == .anilist {
+            return candidates.prefix(2).map { ($0, $0.parsedName.kind) }
+        }
+
         let primary = candidates.prefix(4).map { ($0, $0.parsedName.kind) }
         let fallback = candidates.prefix(2).map { candidate in
             let kind: MediaKind = candidate.parsedName.kind == .movie ? .tv : .movie

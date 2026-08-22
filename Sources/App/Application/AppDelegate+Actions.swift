@@ -453,6 +453,17 @@ extension AppDelegate {
         }
     }
 
+    func setAniListEnabled(_ enabled: Bool) {
+        do {
+            try metadataSettings.save(aniListEnabled: enabled)
+            mainWindowModel.aniListEnabled = enabled
+            libraryModel.metadataConfigurationChanged()
+        } catch {
+            showAlert(title: "AniList", message: error.localizedDescription)
+            mainWindowModel.aniListEnabled = metadataSettings.settings.aniListEnabled
+        }
+    }
+
     func setMetadataAPIKeyMode(_ mode: MetadataAPIKeyMode) {
         mainWindowModel.metadataKeysDiagnostic = .idle
         do {
@@ -536,7 +547,8 @@ extension AppDelegate {
 
         mainWindowModel.isTestingAllMetadataAPIKeys = true
         mainWindowModel.metadataKeysDiagnostic = DiagnosticResult(kind: .checking, message: "")
-        for provider in MetadataProvider.allCases {
+        let providers = MetadataProvider.apiKeyProviders
+        for provider in providers {
             mainWindowModel.metadataAPIKeyTestStates[provider] = .testing
         }
 
@@ -544,7 +556,7 @@ extension AppDelegate {
             guard let self else { return }
             var results: [MetadataProvider: MetadataAPIKeyValidationResult] = [:]
 
-            for provider in MetadataProvider.allCases {
+            for provider in providers {
                 let apiKey = self.metadataSettings.activeAPIKey(for: provider)
                 results[provider] = await self.metadataAPIKeyValidator.validate(
                     provider: provider,
@@ -552,7 +564,7 @@ extension AppDelegate {
                 )
             }
 
-            for provider in MetadataProvider.allCases {
+            for provider in providers {
                 switch results[provider] ?? .unavailable {
                 case .valid:
                     self.mainWindowModel.metadataAPIKeyTestStates[provider] = .valid
@@ -574,12 +586,12 @@ extension AppDelegate {
             let result = DiagnosticResult(
                 kind: hasInvalidKey
                     ? .failure
-                    : (hasUnavailableProvider || acceptedCount < MetadataProvider.allCases.count
+                    : (hasUnavailableProvider || acceptedCount < providers.count
                         ? .warning
                         : .success),
                 message: language == .russian
-                    ? "Проверено ключей: \(acceptedCount) из \(MetadataProvider.allCases.count)."
-                    : "API keys accepted: \(acceptedCount) of \(MetadataProvider.allCases.count)."
+                    ? "Проверено ключей: \(acceptedCount) из \(providers.count)."
+                    : "API keys accepted: \(acceptedCount) of \(providers.count)."
             )
             self.mainWindowModel.metadataKeysDiagnostic = result
             self.mainWindowModel.latestDiagnostic = result
@@ -595,6 +607,8 @@ extension AppDelegate {
             return mainWindowModel.omdbAPIKey
         case .kinopoisk:
             return mainWindowModel.kinopoiskAPIKey
+        case .anilist:
+            return ""
         }
     }
 

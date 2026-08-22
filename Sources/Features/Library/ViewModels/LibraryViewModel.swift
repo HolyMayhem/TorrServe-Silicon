@@ -188,7 +188,8 @@ final class LibraryViewModel: ObservableObject {
         metadataStore.removeAll()
         metadataByHash = [:]
 
-        guard !selectedMetadataProviders.isEmpty else { return }
+        guard aniListMetadataEnabled
+            || !selectedMetadataProviders.isEmpty else { return }
         for torrent in torrents {
             resolveMetadata(for: torrent, forceRefresh: true)
         }
@@ -384,6 +385,11 @@ final class LibraryViewModel: ObservableObject {
         metadataSettings.settings.resolutionOrder.filter(metadataSettings.isConfigured)
     }
 
+    private var aniListMetadataEnabled: Bool {
+        let settings = metadataSettings.settings
+        return settings.selectedSource != .disabled && settings.aniListEnabled
+    }
+
     private func metadataLanguageCode(for provider: MetadataProvider) -> String {
         provider == .omdb
             ? "en-US"
@@ -392,13 +398,15 @@ final class LibraryViewModel: ObservableObject {
 
     private func resolveMetadataIfNeeded(for values: [NativeTorrent]) {
         let providers = selectedMetadataProviders
-        guard !providers.isEmpty else { return }
+        let aniListEnabled = aniListMetadataEnabled
+        guard aniListEnabled || !providers.isEmpty else { return }
+        let acceptedProviders = Set(providers + (aniListEnabled ? [.anilist] : []))
         for torrent in values {
             let hash = torrent.hash.lowercased()
             guard !hash.isEmpty else { continue }
             if let metadata = metadataByHash[hash],
                let provider = metadata.metadataProvider,
-               providers.contains(provider),
+               acceptedProviders.contains(provider),
                metadata.metadataProviderID != nil,
                metadata.metadataLanguage == metadataLanguageCode(for: provider) {
                 continue
@@ -412,7 +420,8 @@ final class LibraryViewModel: ObservableObject {
         forceRefresh: Bool = false
     ) {
         let providers = selectedMetadataProviders
-        guard !providers.isEmpty else { return }
+        let aniListEnabled = aniListMetadataEnabled
+        guard aniListEnabled || !providers.isEmpty else { return }
         let hash = torrent.hash.lowercased()
         guard !hash.isEmpty else { return }
         guard metadataResolutionTasks[hash] == nil else { return }
@@ -434,8 +443,9 @@ final class LibraryViewModel: ObservableObject {
                 }
             }
             var providerWasUnavailable = false
+            let providersToResolve = (aniListEnabled ? [.anilist] : []) + providers
 
-            for provider in providers {
+            for provider in providersToResolve {
                 let language = metadataLanguageCode(for: provider)
                 let outcome = await metadataResolver.resolve(
                     candidates: candidates,

@@ -3,6 +3,14 @@ import XCTest
 @testable import TorrServerManager
 
 final class MetadataAPIKeyValidatorTests: XCTestCase {
+    func testAniListDoesNotRequireAnAPIKey() async {
+        let validator = MetadataAPIKeyValidator()
+
+        let result = await validator.validate(provider: .anilist, apiKey: "")
+
+        XCTAssertEqual(result, .valid)
+    }
+
     override func tearDown() {
         ValidationURLProtocol.handler = nil
         super.tearDown()

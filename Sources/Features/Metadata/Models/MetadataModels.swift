@@ -4,13 +4,27 @@ enum MetadataProvider: String, Codable, CaseIterable, Hashable, Sendable {
     case tmdb
     case omdb
     case kinopoisk
+    case anilist
 
     var displayName: String {
         switch self {
         case .tmdb: return "TMDB"
         case .omdb: return "OMDb"
         case .kinopoisk: return "КиноПоиск"
+        case .anilist: return "AniList"
         }
+    }
+
+    var requiresAPIKey: Bool {
+        self != .anilist
+    }
+
+    static var apiKeyProviders: [MetadataProvider] {
+        [.tmdb, .omdb, .kinopoisk]
+    }
+
+    static var lookupOrderProviders: [MetadataProvider] {
+        [.omdb, .kinopoisk, .tmdb]
     }
 
     func sourceURL(id: String, kind: MediaKind) -> URL? {
@@ -21,11 +35,14 @@ enum MetadataProvider: String, Codable, CaseIterable, Hashable, Sendable {
             return URL(string: "https://www.imdb.com/title/\(id)")
         case .kinopoisk:
             return URL(string: "https://www.kinopoisk.ru/film/\(id)/")
+        case .anilist:
+            return URL(string: "https://anilist.co/anime/\(id)")
         }
     }
 }
 
 enum MetadataSourceMode: String, Codable, CaseIterable, Sendable {
+    case disabled
     case omdb
     case kinopoisk
     case tmdb
@@ -33,6 +50,7 @@ enum MetadataSourceMode: String, Codable, CaseIterable, Sendable {
 
     var displayName: String {
         switch self {
+        case .disabled: return "Не использовать"
         case .omdb: return "OMDb"
         case .kinopoisk: return "КиноПоиск"
         case .tmdb: return "TMDB"
@@ -42,6 +60,7 @@ enum MetadataSourceMode: String, Codable, CaseIterable, Sendable {
 
     var singleProvider: MetadataProvider? {
         switch self {
+        case .disabled: return nil
         case .omdb: return .omdb
         case .kinopoisk: return .kinopoisk
         case .tmdb: return .tmdb
@@ -54,6 +73,7 @@ enum MetadataSourceMode: String, Codable, CaseIterable, Sendable {
         case .omdb: self = .omdb
         case .kinopoisk: self = .kinopoisk
         case .tmdb: self = .tmdb
+        case .anilist: self = .combined
         }
     }
 }
