@@ -46,8 +46,7 @@ extension AppDelegate {
                 canDownload: false,
                 canOpenWeb: false,
                 canEditPath: false,
-                menuStatus: transferTitle,
-                statusIconColor: .systemGray
+                menuStatus: transferTitle
             ))
             return
         }
@@ -65,8 +64,7 @@ extension AppDelegate {
                 canDownload: true,
                 canOpenWeb: true,
                 canEditPath: true,
-                menuStatus: hasPath ? texts.stopped : texts.torrServerNotSelected,
-                statusIconColor: .systemGray
+                menuStatus: hasPath ? texts.stopped : texts.torrServerNotSelected
             ))
             loadedTorrServerSettings = nil
             mainWindowModel.hasLoadedServerSettings = false
@@ -82,8 +80,7 @@ extension AppDelegate {
                 canDownload: false,
                 canOpenWeb: true,
                 canEditPath: false,
-                menuStatus: texts.running(pid: pid),
-                statusIconColor: .systemGreen
+                menuStatus: texts.running(pid: pid)
             ))
             refreshStorage()
             if mainWindowModel.selectedSection == .server,
@@ -103,8 +100,7 @@ extension AppDelegate {
                 canDownload: false,
                 canOpenWeb: false,
                 canEditPath: false,
-                menuStatus: texts.stopping,
-                statusIconColor: .systemGray
+                menuStatus: texts.stopping
             ))
 
         case .failed(let message):
@@ -119,8 +115,7 @@ extension AppDelegate {
                 canDownload: true,
                 canOpenWeb: true,
                 canEditPath: true,
-                menuStatus: texts.launchError,
-                statusIconColor: .systemGray
+                menuStatus: texts.launchError
             ))
         }
     }
@@ -255,7 +250,6 @@ extension AppDelegate {
         popoverModel.canOpenWeb = state.canOpenWeb
         popoverModel.canDownload = state.canDownload
         popoverModel.isDownloading = isDownloading
-        currentStatusIconColor = state.statusIconColor
         refreshSpeedDisplay()
     }
 
@@ -270,105 +264,6 @@ extension AppDelegate {
             return .failed
         }
         return .stopped
-    }
-
-    var menuBarVisualState: MenuBarVisualState {
-        if isDownloading { return .updating }
-        if mainWindowModel.statusKind == .failed { return .failed }
-        if mainWindowModel.statusKind == .working { return .working }
-        guard processController.isRunning else { return .stopped }
-        if currentTorrents.contains(where: { $0.stat == 2 }) { return .buffering }
-        if currentTorrents.contains(where: { $0.stat == 3 })
-            || (currentSpeedBytesPerSecond ?? 0) > 0 {
-            return .streaming
-        }
-        return .running
-    }
-
-    func makeMenuBarImage(
-        state: MenuBarVisualState,
-        phase: CGFloat
-    ) -> NSImage {
-        let size = NSSize(width: 18, height: 18)
-        let image = NSImage(size: size)
-        image.lockFocus()
-
-        let color: NSColor
-        switch state {
-        case .stopped:
-            color = NSColor(
-                srgbRed: 82.0 / 255.0,
-                green: 119.0 / 255.0,
-                blue: 100.0 / 255.0,
-                alpha: 1
-            )
-        case .running, .streaming:
-            color = NSColor(
-                srgbRed: 0.0 / 255.0,
-                green: 239.0 / 255.0,
-                blue: 98.0 / 255.0,
-                alpha: 1
-            )
-        case .working, .buffering, .updating:
-            color = NSColor(
-                srgbRed: 220.0 / 255.0,
-                green: 166.0 / 255.0,
-                blue: 78.0 / 255.0,
-                alpha: 1
-            )
-        case .failed:
-            color = NSColor(
-                srgbRed: 138.0 / 255.0,
-                green: 81.0 / 255.0,
-                blue: 88.0 / 255.0,
-                alpha: 1
-            )
-        }
-
-        let isPulsing = state == .streaming || state == .working
-        let pulse = isPulsing ? phase * 0.10 : 0
-
-        let outerGlowRect = NSRect(x: 0.35, y: 0.35, width: 17.3, height: 17.3)
-        color.withAlphaComponent(0.13 + pulse * 0.45).setFill()
-        NSBezierPath(ovalIn: outerGlowRect).fill()
-
-        let glowRect = NSRect(x: 1.1, y: 1.1, width: 15.8, height: 15.8)
-        color.withAlphaComponent(0.25 + pulse).setFill()
-        NSBezierPath(ovalIn: glowRect).fill()
-
-        let rect = NSRect(x: 2.45, y: 2.45, width: 13.1, height: 13.1)
-        color.setFill()
-        NSBezierPath(ovalIn: rect).fill()
-
-        NSColor.white.withAlphaComponent(0.95).setFill()
-        let bolt = NSBezierPath()
-        bolt.move(to: NSPoint(x: 10.1, y: 14.1))
-        bolt.line(to: NSPoint(x: 6.25, y: 9.25))
-        bolt.line(to: NSPoint(x: 8.65, y: 9.25))
-        bolt.line(to: NSPoint(x: 7.65, y: 4.35))
-        bolt.line(to: NSPoint(x: 12.15, y: 9.85))
-        bolt.line(to: NSPoint(x: 9.75, y: 9.85))
-        bolt.close()
-        bolt.fill()
-
-        if state == .updating {
-            let ringRect = NSRect(x: 0.8, y: 0.8, width: 16.4, height: 16.4)
-            let ring = NSBezierPath()
-            ring.appendArc(
-                withCenter: NSPoint(x: ringRect.midX, y: ringRect.midY),
-                radius: ringRect.width / 2,
-                startAngle: 90 - phase * 360,
-                endAngle: 220 - phase * 360
-            )
-            ring.lineWidth = 1.2
-            ring.lineCapStyle = .round
-            NSColor.white.withAlphaComponent(0.9).setStroke()
-            ring.stroke()
-        }
-
-        image.unlockFocus()
-        image.isTemplate = false
-        return image
     }
 
     func refreshSpeedDisplay() {
@@ -403,44 +298,11 @@ extension AppDelegate {
         statusItem.length = title.isEmpty
             ? NSStatusItem.squareLength
             : NSStatusItem.variableLength
-        updateMenuBarAnimationTimer()
-        statusItem.button?.image = makeMenuBarImage(
-            state: menuBarVisualState,
-            phase: menuBarAnimationPhase
-        )
+        statusItem.button?.image = MenuBarIcon.makeImage()
         statusItem.button?.title = title.isEmpty ? "" : " \(title)"
         statusItem.button?.toolTip = title.isEmpty
             ? "TorrServer"
             : "TorrServer · \(title)"
-    }
-
-    func updateMenuBarAnimationTimer() {
-        let state = menuBarVisualState
-        let needsAnimation = state == .streaming || state == .working || state == .updating
-        guard needsAnimation else {
-            menuBarAnimationTimer?.invalidate()
-            menuBarAnimationTimer = nil
-            menuBarAnimationPhase = 0
-            return
-        }
-        guard menuBarAnimationTimer == nil else { return }
-        let interval: TimeInterval = state == .updating ? 0.14 : 0.8
-        menuBarAnimationTimer = Timer.scheduledTimer(
-            withTimeInterval: interval,
-            repeats: true
-        ) { [weak self] _ in
-            Task { @MainActor in
-                guard let self else { return }
-                self.menuBarAnimationPhase += state == .updating ? 0.08 : 1
-                if self.menuBarAnimationPhase > 1 {
-                    self.menuBarAnimationPhase = 0
-                }
-                self.statusItem.button?.image = self.makeMenuBarImage(
-                    state: self.menuBarVisualState,
-                    phase: self.menuBarAnimationPhase
-                )
-            }
-        }
     }
 
     static func formatFileSize(_ bytes: Int64) -> String {

@@ -11,5 +11,4 @@ struct ServerPresentationState {
     let canOpenWeb: Bool
     let canEditPath: Bool
     let menuStatus: String
-    let statusIconColor: NSColor
 }

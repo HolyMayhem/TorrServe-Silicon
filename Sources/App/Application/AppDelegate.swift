@@ -64,15 +64,6 @@ func migrateLegacyPreferencesIfNeeded() {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
-    enum MenuBarVisualState {
-        case stopped
-        case running
-        case streaming
-        case working
-        case buffering
-        case failed
-        case updating
-    }
     let processController = TorrServerProcessController()
     let downloader = TorrServerDownloader()
     let launchAtLoginController = LaunchAtLoginController()
@@ -94,7 +85,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     var statusItem: NSStatusItem!
     var statusPopover: NSPopover!
     var menuBarMaterialTimer: Timer?
-    var menuBarAnimationTimer: Timer?
     var torrServerUpdateTimer: Timer?
     var torrServerUpdateWorkItem: DispatchWorkItem?
     var torrServerUpdateCheckRevision = 0
@@ -104,11 +94,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     var isDownloading = false
     var hasRepliedToTermination = false
     var currentSpeedBytesPerSecond: Double?
-    var currentStatusIconColor: NSColor = .systemGray
     var currentTorrents: [NativeTorrent] = []
     var speedHistory: [Double] = []
     var hasAnnouncedRunningState = false
-    var menuBarAnimationPhase: CGFloat = 0
     var diagnosticsRevision = 0
     var isNotificationAuthorizationPending = false
     var loadedTorrServerSettings: TorrServerStorageSettings?
