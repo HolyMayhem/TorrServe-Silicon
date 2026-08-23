@@ -101,24 +101,6 @@ struct SearchTexts {
 
 enum SearchFormat {
     static func fileSize(_ bytes: Int64) -> String {
-        guard bytes > 0 else { return "—" }
-        let formatter = ByteCountFormatter()
-        formatter.countStyle = .file
-        formatter.allowedUnits = [.useMB, .useGB, .useTB]
-        return formatter.string(fromByteCount: bytes)
-    }
-}
-
-extension View {
-    @ViewBuilder
-    func searchPanel() -> some View {
-        let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
-        if #available(macOS 26.0, *) {
-            self.glassEffect(.regular, in: shape)
-        } else {
-            self
-                .background(.regularMaterial, in: shape)
-                .overlay(shape.stroke(.white.opacity(0.12), lineWidth: 0.5))
-        }
+        FileSizeFormatter.string(bytes)
     }
 }

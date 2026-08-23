@@ -16,7 +16,7 @@ final class LibraryViewModel: ObservableObject {
     @Published var isRemoving = false
     @Published var isDropTargeted = false
     @Published var showsMagnetSheet = false
-    @Published var alert: LibraryAlert?
+    @Published var alert: AppAlert?
     @Published var playerChoice: ExternalPlayerChoice
     @Published var customPlayerPath: String
     @Published var displayMode: LibraryDisplayMode
@@ -30,18 +30,18 @@ final class LibraryViewModel: ObservableObject {
     var onPlayerChanged: ((ExternalPlayerChoice) -> Void)?
     var onServerConnectionIssueChanged: ((String?) -> Void)?
 
-    let api: NativeTorrServerAPI
+    let api: any TorrServerServing
     private let metadataStore: LibraryMetadataStore
     private let metadataResolver: MetadataResolver
     private let metadataSettings: MetadataSettingsStore
-    private var refreshTimer: Timer?
+    private(set) var isPollingActive = false
     private var metadataResolutionTasks: [String: Task<Void, Never>] = [:]
     private var metadataRetryAfter: [String: Date] = [:]
     private var metadataLanguage = AppLanguage.systemDefault
     private var metadataConfigurationRevision = 0
 
     init(
-        api: NativeTorrServerAPI = NativeTorrServerAPI(),
+        api: any TorrServerServing = NativeTorrServerAPI(),
         metadataStore: LibraryMetadataStore = .shared,
         metadataResolver: MetadataResolver = MetadataResolver(),
         metadataSettings: MetadataSettingsStore = .shared
@@ -89,24 +89,16 @@ final class LibraryViewModel: ObservableObject {
     }
 
     func startPolling() {
-        guard refreshTimer == nil else { return }
+        guard !isPollingActive else { return }
+        isPollingActive = true
         refresh()
-        refreshTimer = Timer.scheduledTimer(
-            withTimeInterval: 2,
-            repeats: true
-        ) { [weak self] _ in
-            Task { @MainActor in
-                self?.refresh(silently: true)
-            }
-        }
     }
 
     func stopPolling() {
-        refreshTimer?.invalidate()
-        refreshTimer = nil
+        isPollingActive = false
     }
 
-    func refresh(silently: Bool = false) {
+    func refresh() {
         guard !isRefreshing else { return }
         isRefreshing = true
 
@@ -114,28 +106,35 @@ final class LibraryViewModel: ObservableObject {
             defer { isRefreshing = false }
             do {
                 let values = try await api.listTorrents()
-                torrents = values
-                metadataByHash = metadataStore.allMetadata()
-                resolveMetadataIfNeeded(for: values)
-
-                if let selectedTorrentID,
-                   !values.contains(where: { $0.id == selectedTorrentID }) {
-                    self.selectedTorrentID = nil
-                }
-                let availableIDs = Set(values.map(\.id))
-                self.selectedTorrentIDs.formIntersection(availableIDs)
-                if self.selectedTorrentID == nil {
-                    self.selectedTorrentID = self.selectedTorrents.first?.id
-                        ?? values.first?.id
-                }
-                if let selectedTorrentID = self.selectedTorrentID {
-                    self.selectedTorrentIDs.insert(selectedTorrentID)
-                }
-                setServerConnectionIssue(nil)
+                applyServerSnapshot(values)
             } catch {
-                setServerConnectionIssue(error.localizedDescription)
+                applyServerFailure(error)
             }
         }
+    }
+
+    func applyServerSnapshot(_ values: [NativeTorrent]) {
+        torrents = values
+        metadataByHash = metadataStore.allMetadata()
+        resolveMetadataIfNeeded(for: values)
+
+        if let selectedTorrentID,
+           !values.contains(where: { $0.id == selectedTorrentID }) {
+            self.selectedTorrentID = nil
+        }
+        let availableIDs = Set(values.map(\.id))
+        selectedTorrentIDs.formIntersection(availableIDs)
+        if selectedTorrentID == nil {
+            selectedTorrentID = selectedTorrents.first?.id ?? values.first?.id
+        }
+        if let selectedTorrentID {
+            selectedTorrentIDs.insert(selectedTorrentID)
+        }
+        setServerConnectionIssue(nil)
+    }
+
+    func applyServerFailure(_ error: Error) {
+        setServerConnectionIssue(error.localizedDescription)
     }
 
     func select(_ torrent: NativeTorrent, extendingSelection: Bool = false) {
@@ -200,13 +199,13 @@ final class LibraryViewModel: ObservableObject {
             selectedTorrentID = torrent.id
             selectedTorrentIDs = [torrent.id]
         }
-        refresh(silently: true)
+        refresh()
     }
 
     func addMagnet(language: AppLanguage) {
         let value = magnetInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard value.lowercased().hasPrefix("magnet:?") else {
-            alert = LibraryAlert(
+            alert = AppAlert(
                 title: language == .russian ? "Неверная magnet-ссылка" : "Invalid magnet link",
                 message: language == .russian
                     ? "Ссылка должна начинаться с magnet:?"
@@ -348,27 +347,17 @@ final class LibraryViewModel: ObservableObject {
 
     private func refreshImmediately(selectingHash: String?) async throws {
         let values = try await api.listTorrents()
-        torrents = values
-        resolveMetadataIfNeeded(for: values)
+        applyServerSnapshot(values)
 
         if let selectingHash,
            let selected = values.first(where: { $0.hash == selectingHash }) {
             selectedTorrentID = selected.id
             selectedTorrentIDs = [selected.id]
-        } else if selectedTorrentID == nil {
-            selectedTorrentID = values.first?.id
-            selectedTorrentIDs = values.first.map { [$0.id] } ?? []
-        } else {
-            let availableIDs = Set(values.map(\.id))
-            selectedTorrentIDs.formIntersection(availableIDs)
-            if let selectedTorrentID {
-                selectedTorrentIDs.insert(selectedTorrentID)
-            }
         }
     }
 
     private func showError(_ error: Error) {
-        alert = LibraryAlert(
+        alert = AppAlert(
             title: "TorrServer",
             message: error.localizedDescription
         )

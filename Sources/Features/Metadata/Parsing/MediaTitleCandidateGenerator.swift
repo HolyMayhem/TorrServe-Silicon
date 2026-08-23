@@ -93,7 +93,7 @@ struct MediaTitleCandidateGenerator: MediaTitleCandidateGenerating {
     }
 
     private func titlePrefix(from source: String) -> String {
-        let filename = mediaName(from: source)
+        let filename = MediaFilename.titleSource(from: source)
         let yearRanges = matches(pattern: #"\b(?:19|20)\d{2}\b"#, in: filename)
         let technicalRange = firstMatch(
             pattern: #"(?i)\b(?:2160p|1440p|1080p|720p|576p|480p|4K|UHD|HDR|REMUX|BluRay|BDRip|BRRip|WEB[ ._-]?(?:DL|Rip)|HDTV|DVDRip|x26[45]|h26[45]|HEVC|AVC|AV1)\b"#,
@@ -111,7 +111,7 @@ struct MediaTitleCandidateGenerator: MediaTitleCandidateGenerating {
     }
 
     private func releaseYear(in source: String) -> Int? {
-        let filename = mediaName(from: source)
+        let filename = MediaFilename.titleSource(from: source)
         guard let range = matches(
             pattern: #"\b(?:19|20)\d{2}\b"#,
             in: filename
@@ -222,17 +222,6 @@ struct MediaTitleCandidateGenerator: MediaTitleCandidateGenerating {
         let excessWords = max(0, wordCount - 6)
         let separatorPenalty = title.contains("/") || title.contains("|") ? 18 : 0
         return excessWords * 4 + separatorPenalty
-    }
-
-    private func mediaName(from value: String) -> String {
-        let path = value as NSString
-        let mediaExtensions: Set<String> = [
-            "mkv", "mp4", "m4v", "avi", "mov", "wmv", "webm", "ts", "m2ts", "torrent"
-        ]
-        guard mediaExtensions.contains(path.pathExtension.lowercased()) else {
-            return value
-        }
-        return (path.lastPathComponent as NSString).deletingPathExtension
     }
 
     private func firstMatch(pattern: String, in value: String) -> Range<String.Index>? {

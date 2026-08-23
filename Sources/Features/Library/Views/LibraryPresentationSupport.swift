@@ -140,12 +140,7 @@ struct LibraryTexts {
 
 enum LibraryFormat {
     static func fileSize(_ bytes: Int64) -> String {
-        guard bytes > 0 else { return "—" }
-        let formatter = ByteCountFormatter()
-        formatter.countStyle = .file
-        formatter.allowedUnits = [.useMB, .useGB, .useTB]
-        formatter.includesUnit = true
-        return formatter.string(fromByteCount: bytes)
+        FileSizeFormatter.string(bytes)
     }
 
     static func speed(_ bytesPerSecond: Double) -> String {
@@ -154,19 +149,5 @@ enum LibraryFormat {
             bytesPerSecond: bytesPerSecond,
             unit: .automatic
         )
-    }
-}
-
-extension View {
-    @ViewBuilder
-    func libraryPanel() -> some View {
-        let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
-        if #available(macOS 26.0, *) {
-            self.glassEffect(.regular, in: shape)
-        } else {
-            self
-                .background(.regularMaterial, in: shape)
-                .overlay(shape.stroke(.white.opacity(0.12), lineWidth: 0.5))
-        }
     }
 }

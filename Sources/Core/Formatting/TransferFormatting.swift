@@ -28,3 +28,14 @@ enum SpeedFormatter {
         }
     }
 }
+
+enum FileSizeFormatter {
+    static func string(_ bytes: Int64) -> String {
+        guard bytes > 0 else { return "—" }
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        formatter.allowedUnits = [.useMB, .useGB, .useTB]
+        formatter.includesUnit = true
+        return formatter.string(fromByteCount: bytes)
+    }
+}

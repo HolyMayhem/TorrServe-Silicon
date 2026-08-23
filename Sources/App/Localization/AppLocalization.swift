@@ -5,7 +5,7 @@ enum AppLanguage: String {
     case english = "en"
 
     static var systemDefault: AppLanguage {
-        Locale.current.languageCode == "ru" ? .russian : .english
+        Locale.current.language.languageCode?.identifier == "ru" ? .russian : .english
     }
 }
 

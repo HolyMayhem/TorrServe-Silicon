@@ -2,7 +2,11 @@ import AppKit
 import Foundation
 
 final class TorrServerDiagnosticsService {
-    private let api = NativeTorrServerAPI()
+    private let api: any TorrServerServing
+
+    init(api: any TorrServerServing = NativeTorrServerAPI()) {
+        self.api = api
+    }
 
     func checkPort(language: AppLanguage) async -> DiagnosticResult {
         do {

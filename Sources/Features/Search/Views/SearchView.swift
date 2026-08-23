@@ -12,7 +12,7 @@ struct SearchView: View {
     @ObservedObject var mainModel: MainWindowModel
     @ObservedObject var model: SearchViewModel
     @State private var resultsHeaderOverlayHeight: CGFloat = 40
-    @State private var resultsScrollMetrics = LibraryScrollMetrics.zero
+    @State private var resultsScrollMetrics = AppScrollMetrics.zero
     @State private var resultsScrollIndicatorIsVisible = false
 
     private let resultsScrollEdgeFadeHeight: CGFloat = 17
@@ -117,7 +117,7 @@ struct SearchView: View {
             .controlSize(.large)
         }
         .padding(10)
-        .searchPanel()
+        .appPanel()
     }
 
     private var resultsPanel: some View {
@@ -155,10 +155,10 @@ struct SearchView: View {
                 }
                 .scrollIndicators(.hidden)
                 .background {
-                    LibraryNativeScrollIndicatorHider()
+                    AppNativeScrollIndicatorHider()
                 }
-                .onScrollGeometryChange(for: LibraryScrollMetrics.self) { geometry in
-                    LibraryScrollMetrics(geometry)
+                .onScrollGeometryChange(for: AppScrollMetrics.self) { geometry in
+                    AppScrollMetrics(geometry)
                 } action: { _, metrics in
                     resultsScrollMetrics = metrics
                 }
@@ -168,14 +168,14 @@ struct SearchView: View {
                     }
                 }
                 .mask {
-                    LibraryScrollContentMask(
+                    AppScrollContentMask(
                         topInset: resultsHeaderOverlayHeight,
                         bottomInset: resultsBottomFadeHeight,
                         fadeLength: resultsScrollEdgeFadeHeight
                     )
                 }
                 .overlay {
-                    LibraryScrollIndicator(
+                    AppScrollIndicator(
                         metrics: resultsScrollMetrics,
                         topInset: resultsHeaderOverlayHeight,
                         bottomInset: 4,
@@ -191,7 +191,7 @@ struct SearchView: View {
         }
         .padding(.leading, 14)
         .padding(.top, 14)
-        .searchPanel()
+        .appPanel()
     }
 
     private var resultsHeader: some View {
@@ -278,7 +278,7 @@ struct SearchView: View {
                 serverIsRunning: mainModel.canStop
             )
             .padding(16)
-            .searchPanel()
+            .appPanel()
         } else {
             VStack(spacing: 12) {
                 Image(systemName: "sparkle.magnifyingglass")
@@ -293,7 +293,7 @@ struct SearchView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(14)
-            .searchPanel()
+            .appPanel()
         }
     }
 
@@ -373,7 +373,7 @@ struct SearchView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(28)
-        .searchPanel()
+        .appPanel()
     }
 
     private var settingsSheet: some View {

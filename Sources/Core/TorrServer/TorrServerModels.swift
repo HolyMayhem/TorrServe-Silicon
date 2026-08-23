@@ -1,6 +1,6 @@
 import Foundation
 
-struct NativeTorrentFile: Codable, Hashable, Identifiable {
+struct NativeTorrentFile: Decodable, Hashable, Identifiable {
     let id: Int
     let path: String
     let length: Int64
@@ -26,6 +26,9 @@ struct NativeTorrentFile: Codable, Hashable, Identifiable {
         case id
         case path
         case length
+        case idUpper = "Id"
+        case pathUpper = "Path"
+        case lengthUpper = "Length"
     }
 
     init(id: Int, path: String, length: Int64) {
@@ -36,13 +39,19 @@ struct NativeTorrentFile: Codable, Hashable, Identifiable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decodeIfPresent(Int.self, forKey: .id) ?? 0
-        path = try container.decodeIfPresent(String.self, forKey: .path) ?? ""
-        length = try container.decodeIfPresent(Int64.self, forKey: .length) ?? 0
+        id = try container.decodeIfPresent(Int.self, forKey: .id)
+            ?? container.decodeIfPresent(Int.self, forKey: .idUpper)
+            ?? 0
+        path = try container.decodeIfPresent(String.self, forKey: .path)
+            ?? container.decodeIfPresent(String.self, forKey: .pathUpper)
+            ?? ""
+        length = try container.decodeIfPresent(Int64.self, forKey: .length)
+            ?? container.decodeIfPresent(Int64.self, forKey: .lengthUpper)
+            ?? 0
     }
 }
 
-struct NativeTorrent: Codable, Hashable, Identifiable {
+struct NativeTorrent: Decodable, Hashable, Identifiable {
     let title: String
     let category: String
     let poster: String
@@ -97,6 +106,11 @@ struct NativeTorrent: Codable, Hashable, Identifiable {
         return min(max(Double(loadedSize) / Double(torrentSize), 0), 1)
     }
 
+    var menuBufferProgress: Double? {
+        guard torrentSize > 0 else { return nil }
+        return min(max(Double(loadedSize) / Double(torrentSize), 0), 1)
+    }
+
     var bufferingProgress: Double? {
         guard preloadSize > 0 else { return nil }
         return min(max(Double(preloadedBytes) / Double(preloadSize), 0), 1)
@@ -145,31 +159,87 @@ struct NativeTorrent: Codable, Hashable, Identifiable {
         case activePeers = "active_peers"
         case connectedSeeders = "connected_seeders"
         case fileStats = "file_stats"
+        case titleUpper = "Title"
+        case categoryUpper = "Category"
+        case posterUpper = "Poster"
+        case dataUpper = "Data"
+        case timestampUpper = "Timestamp"
+        case nameUpper = "Name"
+        case hashUpper = "Hash"
+        case statUpper = "Stat"
+        case statStringUpper = "StatString"
+        case loadedSizeUpper = "LoadedSize"
+        case torrentSizeUpper = "TorrentSize"
+        case preloadedBytesUpper = "PreloadedBytes"
+        case preloadSizeUpper = "PreloadSize"
+        case downloadSpeedUpper = "DownloadSpeed"
+        case uploadSpeedUpper = "UploadSpeed"
+        case totalPeersUpper = "TotalPeers"
+        case activePeersUpper = "ActivePeers"
+        case connectedSeedersUpper = "ConnectedSeeders"
+        case fileStatsUpper = "FileStats"
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        title = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
-        category = try container.decodeIfPresent(String.self, forKey: .category) ?? ""
-        poster = try container.decodeIfPresent(String.self, forKey: .poster) ?? ""
+        title = try container.decodeIfPresent(String.self, forKey: .title)
+            ?? container.decodeIfPresent(String.self, forKey: .titleUpper)
+            ?? ""
+        category = try container.decodeIfPresent(String.self, forKey: .category)
+            ?? container.decodeIfPresent(String.self, forKey: .categoryUpper)
+            ?? ""
+        poster = try container.decodeIfPresent(String.self, forKey: .poster)
+            ?? container.decodeIfPresent(String.self, forKey: .posterUpper)
+            ?? ""
         data = try container.decodeIfPresent(String.self, forKey: .data)
-        timestamp = try container.decodeIfPresent(Int64.self, forKey: .timestamp) ?? 0
+            ?? container.decodeIfPresent(String.self, forKey: .dataUpper)
+        timestamp = try container.decodeIfPresent(Int64.self, forKey: .timestamp)
+            ?? container.decodeIfPresent(Int64.self, forKey: .timestampUpper)
+            ?? 0
         name = try container.decodeIfPresent(String.self, forKey: .name)
-        hash = try container.decodeIfPresent(String.self, forKey: .hash) ?? ""
-        stat = try container.decodeIfPresent(Int.self, forKey: .stat) ?? 0
-        statString = try container.decodeIfPresent(String.self, forKey: .statString) ?? ""
-        loadedSize = try container.decodeIfPresent(Int64.self, forKey: .loadedSize) ?? 0
-        torrentSize = try container.decodeIfPresent(Int64.self, forKey: .torrentSize) ?? 0
-        preloadedBytes = try container.decodeIfPresent(Int64.self, forKey: .preloadedBytes) ?? 0
-        preloadSize = try container.decodeIfPresent(Int64.self, forKey: .preloadSize) ?? 0
-        downloadSpeed = try container.decodeIfPresent(Double.self, forKey: .downloadSpeed) ?? 0
-        uploadSpeed = try container.decodeIfPresent(Double.self, forKey: .uploadSpeed) ?? 0
-        totalPeers = try container.decodeIfPresent(Int.self, forKey: .totalPeers) ?? 0
-        activePeers = try container.decodeIfPresent(Int.self, forKey: .activePeers) ?? 0
-        connectedSeeders = try container.decodeIfPresent(Int.self, forKey: .connectedSeeders) ?? 0
+            ?? container.decodeIfPresent(String.self, forKey: .nameUpper)
+        hash = try container.decodeIfPresent(String.self, forKey: .hash)
+            ?? container.decodeIfPresent(String.self, forKey: .hashUpper)
+            ?? ""
+        stat = try container.decodeIfPresent(Int.self, forKey: .stat)
+            ?? container.decodeIfPresent(Int.self, forKey: .statUpper)
+            ?? 0
+        statString = try container.decodeIfPresent(String.self, forKey: .statString)
+            ?? container.decodeIfPresent(String.self, forKey: .statStringUpper)
+            ?? ""
+        loadedSize = try container.decodeIfPresent(Int64.self, forKey: .loadedSize)
+            ?? container.decodeIfPresent(Int64.self, forKey: .loadedSizeUpper)
+            ?? 0
+        torrentSize = try container.decodeIfPresent(Int64.self, forKey: .torrentSize)
+            ?? container.decodeIfPresent(Int64.self, forKey: .torrentSizeUpper)
+            ?? loadedSize
+        preloadedBytes = try container.decodeIfPresent(Int64.self, forKey: .preloadedBytes)
+            ?? container.decodeIfPresent(Int64.self, forKey: .preloadedBytesUpper)
+            ?? 0
+        preloadSize = try container.decodeIfPresent(Int64.self, forKey: .preloadSize)
+            ?? container.decodeIfPresent(Int64.self, forKey: .preloadSizeUpper)
+            ?? 0
+        downloadSpeed = try container.decodeIfPresent(Double.self, forKey: .downloadSpeed)
+            ?? container.decodeIfPresent(Double.self, forKey: .downloadSpeedUpper)
+            ?? 0
+        uploadSpeed = try container.decodeIfPresent(Double.self, forKey: .uploadSpeed)
+            ?? container.decodeIfPresent(Double.self, forKey: .uploadSpeedUpper)
+            ?? 0
+        totalPeers = try container.decodeIfPresent(Int.self, forKey: .totalPeers)
+            ?? container.decodeIfPresent(Int.self, forKey: .totalPeersUpper)
+            ?? 0
+        activePeers = try container.decodeIfPresent(Int.self, forKey: .activePeers)
+            ?? container.decodeIfPresent(Int.self, forKey: .activePeersUpper)
+            ?? 0
+        connectedSeeders = try container.decodeIfPresent(Int.self, forKey: .connectedSeeders)
+            ?? container.decodeIfPresent(Int.self, forKey: .connectedSeedersUpper)
+            ?? 0
         fileStats = try container.decodeIfPresent(
             [NativeTorrentFile].self,
             forKey: .fileStats
+        ) ?? container.decodeIfPresent(
+            [NativeTorrentFile].self,
+            forKey: .fileStatsUpper
         ) ?? []
     }
 }

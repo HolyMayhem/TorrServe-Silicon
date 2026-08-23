@@ -85,9 +85,3 @@ struct DetectedPlayer: Identifiable, Equatable {
     var id: String { choice.id }
     var isInstalled: Bool { applicationURL != nil }
 }
-
-struct LibraryAlert: Identifiable {
-    let id = UUID()
-    let title: String
-    let message: String
-}

@@ -8,7 +8,7 @@ struct LibraryView: View {
     @FocusState private var magnetFieldIsFocused: Bool
     @State private var compactHeaderOverlayHeight: CGFloat = 82
     @State private var compactFooterOverlayHeight: CGFloat = 40
-    @State private var compactScrollMetrics = LibraryScrollMetrics.zero
+    @State private var compactScrollMetrics = AppScrollMetrics.zero
     @State private var compactScrollIndicatorIsVisible = false
 
     private let compactScrollEdgeFadeHeight: CGFloat = 17
@@ -140,10 +140,10 @@ struct LibraryView: View {
                 }
                 .scrollIndicators(.hidden)
                 .background {
-                    LibraryNativeScrollIndicatorHider()
+                    AppNativeScrollIndicatorHider()
                 }
-                .onScrollGeometryChange(for: LibraryScrollMetrics.self) { geometry in
-                    LibraryScrollMetrics(geometry)
+                .onScrollGeometryChange(for: AppScrollMetrics.self) { geometry in
+                    AppScrollMetrics(geometry)
                 } action: { _, metrics in
                     compactScrollMetrics = metrics
                 }
@@ -153,14 +153,14 @@ struct LibraryView: View {
                     }
                 }
                 .mask {
-                    LibraryScrollContentMask(
+                    AppScrollContentMask(
                         topInset: compactHeaderOverlayHeight,
                         bottomInset: compactFooterOverlayHeight,
                         fadeLength: compactScrollEdgeFadeHeight
                     )
                 }
                 .overlay {
-                    LibraryScrollIndicator(
+                    AppScrollIndicator(
                         metrics: compactScrollMetrics,
                         topInset: compactHeaderOverlayHeight,
                         bottomInset: compactFooterOverlayHeight,
@@ -179,7 +179,7 @@ struct LibraryView: View {
         }
         .padding(.leading, 14)
         .padding(.top, 14)
-        .libraryPanel()
+        .appPanel()
         .overlay {
             if model.isDropTargeted {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -328,14 +328,14 @@ struct LibraryView: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 11)
-            .libraryPanel()
+            .appPanel()
 
             if !mainModel.canStop {
                 serverUnavailable
-                    .libraryPanel()
+                    .appPanel()
             } else if model.filteredTorrents.isEmpty {
                 emptyLibrary
-                    .libraryPanel()
+                    .appPanel()
             } else {
                 ScrollView {
                     if model.displayMode == .posters {
@@ -396,7 +396,7 @@ struct LibraryView: View {
                         .padding(14)
                     }
                 }
-                .libraryPanel()
+                .appPanel()
             }
         }
     }
@@ -412,7 +412,7 @@ struct LibraryView: View {
                 translationMode: mainModel.overviewTranslationMode
             )
             .padding(14)
-            .libraryPanel()
+            .appPanel()
         } else {
             VStack(spacing: 12) {
                 Image(systemName: "film.stack")
@@ -427,7 +427,7 @@ struct LibraryView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(14)
-            .libraryPanel()
+            .appPanel()
         }
     }
 

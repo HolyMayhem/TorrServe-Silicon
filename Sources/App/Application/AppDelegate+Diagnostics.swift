@@ -31,7 +31,7 @@ extension AppDelegate {
             guard let self else { return }
             do {
                 try await self.diagnosticsService.clearCache(torrents: torrents)
-                self.libraryModel.refresh(silently: true)
+                self.libraryModel.refresh()
             } catch {
                 self.showAlert(title: "TorrServer", message: error.localizedDescription)
             }

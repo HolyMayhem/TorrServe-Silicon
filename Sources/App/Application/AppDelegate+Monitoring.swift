@@ -5,16 +5,16 @@ import UniformTypeIdentifiers
 
 @MainActor
 extension AppDelegate {
-    func updatePopoverMaterial(with torrents: [TorrentSummary]) {
+    func updatePopoverMaterial(with torrents: [NativeTorrent]) {
         let active = torrents.first(where: \.isActive)
         let selected = active ?? torrents.first
-        popoverModel.activeTitle = selected?.title
+        popoverModel.activeTitle = selected?.displayTitle
         popoverModel.materialIsActive = active != nil
         popoverModel.activeSizeText = selected.map {
-            Self.formatFileSize($0.size)
+            Self.formatFileSize($0.torrentSize)
         } ?? ""
-        popoverModel.bufferProgress = selected?.bufferProgress
-        popoverModel.seeders = selected?.seeders ?? 0
+        popoverModel.bufferProgress = selected?.menuBufferProgress
+        popoverModel.seeders = selected?.connectedSeeders ?? 0
         popoverModel.peers = selected.map {
             max($0.activePeers, $0.totalPeers)
         } ?? 0
@@ -34,7 +34,7 @@ extension AppDelegate {
             let transferTitle = mainWindowModel.torrServerUpdateActivity?.title(
                 language: currentLanguage
             ) ?? texts.downloading
-            applyUIState(
+            applyUIState(ServerPresentationState(
                 dotColor: .systemOrange,
                 statusText: transferTitle,
                 statusTooltip: mainWindowModel.torrServerUpdateActivity?.detail(
@@ -48,14 +48,14 @@ extension AppDelegate {
                 canEditPath: false,
                 menuStatus: transferTitle,
                 statusIconColor: .systemGray
-            )
+            ))
             return
         }
 
         switch state {
         case .stopped:
             clearServerConnectionIssue()
-            applyUIState(
+            applyUIState(ServerPresentationState(
                 dotColor: .systemGray,
                 statusText: hasPath ? texts.stopped : texts.chooseOrDownload,
                 statusTooltip: hasPath ? texts.stopped : texts.chooseOrDownload,
@@ -67,12 +67,12 @@ extension AppDelegate {
                 canEditPath: true,
                 menuStatus: hasPath ? texts.stopped : texts.torrServerNotSelected,
                 statusIconColor: .systemGray
-            )
+            ))
             loadedTorrServerSettings = nil
             mainWindowModel.hasLoadedServerSettings = false
 
         case .running(let pid):
-            applyUIState(
+            applyUIState(ServerPresentationState(
                 dotColor: .systemGreen,
                 statusText: texts.running(pid: pid),
                 statusTooltip: texts.running(pid: pid),
@@ -84,7 +84,7 @@ extension AppDelegate {
                 canEditPath: false,
                 menuStatus: texts.running(pid: pid),
                 statusIconColor: .systemGreen
-            )
+            ))
             refreshStorage()
             if mainWindowModel.selectedSection == .server,
                !mainWindowModel.hasLoadedServerSettings {
@@ -93,7 +93,7 @@ extension AppDelegate {
 
         case .stopping:
             clearServerConnectionIssue()
-            applyUIState(
+            applyUIState(ServerPresentationState(
                 dotColor: .systemOrange,
                 statusText: texts.stopping,
                 statusTooltip: texts.stopping,
@@ -105,11 +105,11 @@ extension AppDelegate {
                 canEditPath: false,
                 menuStatus: texts.stopping,
                 statusIconColor: .systemGray
-            )
+            ))
 
         case .failed(let message):
             clearServerConnectionIssue()
-            applyUIState(
+            applyUIState(ServerPresentationState(
                 dotColor: .systemRed,
                 statusText: texts.error(message),
                 statusTooltip: texts.errorTooltip(message),
@@ -121,7 +121,7 @@ extension AppDelegate {
                 canEditPath: true,
                 menuStatus: texts.launchError,
                 statusIconColor: .systemGray
-            )
+            ))
         }
     }
 
@@ -220,28 +220,16 @@ extension AppDelegate {
         }
     }
 
-    func applyUIState(
-        dotColor: NSColor,
-        statusText: String,
-        statusTooltip: String,
-        canStart: Bool,
-        canStop: Bool,
-        canBrowse: Bool,
-        canDownload: Bool,
-        canOpenWeb: Bool,
-        canEditPath: Bool,
-        menuStatus: String,
-        statusIconColor: NSColor
-    ) {
-        mainWindowModel.statusKind = mainStatusKind(for: dotColor)
-        mainWindowModel.statusText = statusText
-        mainWindowModel.statusTooltip = statusTooltip
-        mainWindowModel.canStart = canStart
-        mainWindowModel.canStop = canStop
-        mainWindowModel.canOpenWeb = canOpenWeb
-        mainWindowModel.canBrowse = canBrowse
-        mainWindowModel.canDownload = canDownload
-        mainWindowModel.canEditPath = canEditPath
+    func applyUIState(_ state: ServerPresentationState) {
+        mainWindowModel.statusKind = mainStatusKind(for: state.dotColor)
+        mainWindowModel.statusText = state.statusText
+        mainWindowModel.statusTooltip = state.statusTooltip
+        mainWindowModel.canStart = state.canStart
+        mainWindowModel.canStop = state.canStop
+        mainWindowModel.canOpenWeb = state.canOpenWeb
+        mainWindowModel.canBrowse = state.canBrowse
+        mainWindowModel.canDownload = state.canDownload
+        mainWindowModel.canEditPath = state.canEditPath
         mainWindowModel.launchAtLogin = launchAtLoginController.isEnabled
         mainWindowModel.autoStartServer = UserDefaults.standard.bool(forKey: autoStartServerKey)
         mainWindowModel.autoUpdateTorrServer = UserDefaults.standard.bool(
@@ -259,15 +247,15 @@ extension AppDelegate {
         )
         mainWindowModel.speedUnit = currentSpeedDisplayUnit
 
-        popoverModel.statusKind = mainStatusKind(for: dotColor)
-        popoverModel.statusText = menuStatus
+        popoverModel.statusKind = mainStatusKind(for: state.dotColor)
+        popoverModel.statusText = state.menuStatus
         popoverModel.isRunning = processController.isRunning
-        popoverModel.canStart = canStart
-        popoverModel.canStop = canStop
-        popoverModel.canOpenWeb = canOpenWeb
-        popoverModel.canDownload = canDownload
+        popoverModel.canStart = state.canStart
+        popoverModel.canStop = state.canStop
+        popoverModel.canOpenWeb = state.canOpenWeb
+        popoverModel.canDownload = state.canDownload
         popoverModel.isDownloading = isDownloading
-        currentStatusIconColor = statusIconColor
+        currentStatusIconColor = state.statusIconColor
         refreshSpeedDisplay()
     }
 
@@ -289,8 +277,8 @@ extension AppDelegate {
         if mainWindowModel.statusKind == .failed { return .failed }
         if mainWindowModel.statusKind == .working { return .working }
         guard processController.isRunning else { return .stopped }
-        if currentTorrents.contains(where: { $0.status == 2 }) { return .buffering }
-        if currentTorrents.contains(where: { $0.status == 3 })
+        if currentTorrents.contains(where: { $0.stat == 2 }) { return .buffering }
+        if currentTorrents.contains(where: { $0.stat == 3 })
             || (currentSpeedBytesPerSecond ?? 0) > 0 {
             return .streaming
         }

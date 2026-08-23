@@ -51,7 +51,6 @@ extension AppDelegate {
 
         refreshQRCode()
         refreshPopoverMaterial()
-        startPopoverRefreshTimer()
         synchronizePopoverLayout()
         NSApp.activate(ignoringOtherApps: true)
         statusPopover.show(
@@ -78,8 +77,6 @@ extension AppDelegate {
     }
 
     func popoverDidClose(_ notification: Notification) {
-        popoverRefreshTimer?.invalidate()
-        popoverRefreshTimer = nil
         stopMonitoringPopoverDismissal()
     }
 
@@ -125,18 +122,6 @@ extension AppDelegate {
         if let globalPopoverEventMonitor {
             NSEvent.removeMonitor(globalPopoverEventMonitor)
             self.globalPopoverEventMonitor = nil
-        }
-    }
-
-    func startPopoverRefreshTimer() {
-        popoverRefreshTimer?.invalidate()
-        popoverRefreshTimer = Timer.scheduledTimer(
-            withTimeInterval: 2,
-            repeats: true
-        ) { [weak self] _ in
-            Task { @MainActor in
-                self?.refreshPopoverMaterial()
-            }
         }
     }
 
@@ -213,21 +198,26 @@ extension AppDelegate {
             return
         }
 
+        guard !popoverModel.isLoadingMaterial else { return }
         popoverModel.isLoadingMaterial = true
-        libraryClient.fetchTorrents { [weak self] result in
-            guard let self else { return }
-            self.popoverModel.isLoadingMaterial = false
-
-            switch result {
-            case .success(let torrents):
-                self.currentTorrents = torrents
-                self.updatePopoverMaterial(with: torrents)
-            case .failure:
-                self.currentTorrents = []
-                self.updatePopoverMaterial(with: [])
+        Task {
+            defer { popoverModel.isLoadingMaterial = false }
+            do {
+                let torrents = try await nativeTorrServerAPI.listTorrents()
+                currentTorrents = torrents
+                updatePopoverMaterial(with: torrents)
+                if libraryModel.isPollingActive {
+                    libraryModel.applyServerSnapshot(torrents)
+                }
+            } catch {
+                currentTorrents = []
+                updatePopoverMaterial(with: [])
+                if libraryModel.isPollingActive {
+                    libraryModel.applyServerFailure(error)
+                }
             }
-            self.synchronizePopoverLayout()
-            self.refreshSpeedDisplay()
+            synchronizePopoverLayout()
+            refreshSpeedDisplay()
         }
     }
 }

@@ -37,8 +37,11 @@ if [[ ! -x "$ACTOOL" ]]; then
   exit 1
 fi
 
-swift build -c release --package-path "$PROJECT_DIR"
-BIN_DIR="$(swift build -c release --package-path "$PROJECT_DIR" --show-bin-path)"
+DEVELOPER_DIR="$XCODE_DEVELOPER_DIR" swift build -c release --package-path "$PROJECT_DIR"
+BIN_DIR="$(
+  DEVELOPER_DIR="$XCODE_DEVELOPER_DIR" \
+    swift build -c release --package-path "$PROJECT_DIR" --show-bin-path
+)"
 
 rm -rf "$APP_PATH"
 rm -rf "$COMPILED_ICON_DIR"

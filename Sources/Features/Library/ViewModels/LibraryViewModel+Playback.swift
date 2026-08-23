@@ -52,7 +52,7 @@ extension LibraryViewModel {
                 customPlayerPath: customPlayerPath
             )
         } catch {
-            alert = LibraryAlert(
+            alert = AppAlert(
                 title: language == .russian
                     ? "Не удалось открыть плеер"
                     : "Could not open player",

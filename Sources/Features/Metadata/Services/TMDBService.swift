@@ -87,20 +87,10 @@ final class TMDBService: MetadataServicing, @unchecked Sendable {
         request.timeoutInterval = 12
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
-        let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw MetadataServiceError.invalidResponse
-        }
-        guard (200...299).contains(http.statusCode) else {
-            throw MetadataServiceError.httpStatus(http.statusCode)
-        }
-        do {
-            let decoder = JSONDecoder()
-            decoder.keyDecodingStrategy = .convertFromSnakeCase
-            return try decoder.decode(Response.self, from: data)
-        } catch {
-            throw MetadataServiceError.decodingFailed
-        }
+        let data = try await MetadataHTTPTransport.data(for: request, session: session)
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        return try MetadataHTTPTransport.decode(Response.self, from: data, using: decoder)
     }
 }
 

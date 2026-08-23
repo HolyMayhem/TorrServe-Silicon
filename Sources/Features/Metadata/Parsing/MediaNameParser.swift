@@ -14,7 +14,7 @@ struct MediaNameParser: MediaNameParsing {
     private static let technicalPattern = #"(?i)\b(?:2160p|1440p|1080p|720p|576p|480p|4K|UHD|HDR10\+?|HDR|DV|DoVi|REMUX|BluRay|BDRip|BRRip|WEB[ ._-]?(?:DL|Rip)|HDTV|DVDRip|x26[45]|h26[45]|HEVC|AVC|AV1|AAC|AC3|EAC3|DTS(?:-HD)?|Atmos|TrueHD|FLAC|MULTI|DUAL|PROPER|REPACK|EXTENDED|UNRATED|COMPLETE)\b"#
 
     func parse(_ value: String) -> ParsedMediaName {
-        let filename = mediaName(from: value)
+        let filename = MediaFilename.titleSource(from: value)
         let normalized = normalize(filename)
         let episodeMatch = firstEpisodeMatch(in: normalized)
         let season = episodeMatch?.season ?? firstInteger(
@@ -64,17 +64,6 @@ struct MediaNameParser: MediaNameParsing {
             .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(
                 CharacterSet(charactersIn: "-–—")
             ))
-    }
-
-    private func mediaName(from value: String) -> String {
-        let path = value as NSString
-        let mediaExtensions: Set<String> = [
-            "mkv", "mp4", "m4v", "avi", "mov", "wmv", "webm", "ts", "m2ts", "torrent"
-        ]
-        guard mediaExtensions.contains(path.pathExtension.lowercased()) else {
-            return value
-        }
-        return (path.lastPathComponent as NSString).deletingPathExtension
     }
 
     private func firstEpisodeMatch(

@@ -77,16 +77,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     let downloader = TorrServerDownloader()
     let launchAtLoginController = LaunchAtLoginController()
     let speedMonitor = TorrServerSpeedMonitor()
-    let libraryClient = TorrServerLibraryClient()
     let notificationController = NotificationController()
-    let diagnosticsService = TorrServerDiagnosticsService()
     let releaseChecker = TorrServerReleaseChecker()
     let nativeTorrServerAPI = NativeTorrServerAPI()
+    lazy var diagnosticsService = TorrServerDiagnosticsService(api: nativeTorrServerAPI)
     let metadataAPIKeyValidator = MetadataAPIKeyValidator()
     let metadataSettings = MetadataSettingsStore.shared
     let mainWindowModel = MainWindowModel()
-    let libraryModel = LibraryViewModel()
-    let searchModel = SearchViewModel()
+    lazy var libraryModel = LibraryViewModel(api: nativeTorrServerAPI)
+    lazy var searchModel = SearchViewModel(torrServer: nativeTorrServerAPI)
     let popoverModel = MenuBarPopoverModel()
 
     var window: NSWindow!
@@ -94,7 +93,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     var statusItem: NSStatusItem!
     var statusPopover: NSPopover!
-    var popoverRefreshTimer: Timer?
     var menuBarMaterialTimer: Timer?
     var menuBarAnimationTimer: Timer?
     var torrServerUpdateTimer: Timer?
@@ -107,7 +105,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     var hasRepliedToTermination = false
     var currentSpeedBytesPerSecond: Double?
     var currentStatusIconColor: NSColor = .systemGray
-    var currentTorrents: [TorrentSummary] = []
+    var currentTorrents: [NativeTorrent] = []
     var speedHistory: [Double] = []
     var hasAnnouncedRunningState = false
     var menuBarAnimationPhase: CGFloat = 0

@@ -1,8 +1,85 @@
 import Foundation
 
-final class NativeTorrServerAPI {
-    private let baseURL = URL(string: "http://127.0.0.1:8090")!
+protocol TorrServerServing {
+    func listTorrents() async throws -> [NativeTorrent]
+    func torrent(hash: String) async throws -> NativeTorrent
+    func addMagnet(
+        _ magnet: String,
+        title: String,
+        poster: String,
+        category: String
+    ) async throws -> NativeTorrent
+    func removeTorrent(hash: String) async throws
+    func dropTorrentCache(hash: String) async throws
+    func cacheState(hash: String) async throws -> TorrServerCacheState
+    func settings() async throws -> TorrServerStorageSettings
+    func updateSettings(
+        _ draft: TorrServerSettingsDraft,
+        basedOn currentSettings: TorrServerStorageSettings
+    ) async throws
+    func checkHealth() async throws
+    func uploadTorrent(at fileURL: URL) async throws -> [NativeTorrent]
+    func uploadTorrent(
+        data fileData: Data,
+        filename: String,
+        title: String,
+        poster: String,
+        category: String
+    ) async throws -> [NativeTorrent]
+    func updateMetadata(
+        hash: String,
+        title: String,
+        poster: String,
+        category: String
+    ) async throws
+    func streamURL(torrent: NativeTorrent, file: NativeTorrentFile) -> URL?
+    func beginPreloading(torrentHash: String, fileID: Int) async
+}
+
+extension TorrServerServing {
+    func addMagnet(
+        _ magnet: String,
+        title: String = "",
+        poster: String = "",
+        category: String = ""
+    ) async throws -> NativeTorrent {
+        try await addMagnet(
+            magnet,
+            title: title,
+            poster: poster,
+            category: category
+        )
+    }
+
+    func uploadTorrent(
+        data fileData: Data,
+        filename: String,
+        title: String = "",
+        poster: String = "",
+        category: String = ""
+    ) async throws -> [NativeTorrent] {
+        try await uploadTorrent(
+            data: fileData,
+            filename: filename,
+            title: title,
+            poster: poster,
+            category: category
+        )
+    }
+}
+
+final class NativeTorrServerAPI: TorrServerServing {
+    private let baseURL: URL
+    private let session: URLSession
     private let decoder = JSONDecoder()
+
+    init(
+        baseURL: URL = URL(string: "http://127.0.0.1:8090")!,
+        session: URLSession = .shared
+    ) {
+        self.baseURL = baseURL
+        self.session = session
+    }
 
     func listTorrents() async throws -> [NativeTorrent] {
         let data = try await postTorrents(["action": "list"])
@@ -184,7 +261,7 @@ final class NativeTorrServerAPI {
 
         var request = URLRequest(url: url)
         request.timeoutInterval = 60
-        _ = try? await URLSession.shared.data(for: request)
+        _ = try? await session.data(for: request)
     }
 
     private func postTorrents(_ body: [String: Any]) async throws -> Data {
@@ -205,7 +282,7 @@ final class NativeTorrServerAPI {
     }
 
     private func perform(_ request: URLRequest) async throws -> Data {
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         guard
             let httpResponse = response as? HTTPURLResponse,
             200..<300 ~= httpResponse.statusCode

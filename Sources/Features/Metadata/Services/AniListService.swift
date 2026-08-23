@@ -128,20 +128,13 @@ final class AniListService: MetadataServicing, @unchecked Sendable {
             AniListGraphQLRequest(query: query, variables: variables)
         )
 
-        let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw MetadataServiceError.invalidResponse
-        }
-        guard (200...299).contains(http.statusCode) else {
-            throw MetadataServiceError.httpStatus(http.statusCode)
-        }
+        let data = try await MetadataHTTPTransport.data(for: request, session: session)
 
         let envelope: AniListGraphQLEnvelope<Response>
-        do {
-            envelope = try JSONDecoder().decode(AniListGraphQLEnvelope<Response>.self, from: data)
-        } catch {
-            throw MetadataServiceError.decodingFailed
-        }
+        envelope = try MetadataHTTPTransport.decode(
+            AniListGraphQLEnvelope<Response>.self,
+            from: data
+        )
         if let value = envelope.data {
             return value
         }

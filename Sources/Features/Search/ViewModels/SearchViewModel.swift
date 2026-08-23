@@ -19,19 +19,19 @@ final class SearchViewModel: ObservableObject {
     @Published var connectionMessage = ""
     @Published var connectionIsHealthy = false
     @Published var showsSettings = false
-    @Published var alert: LibraryAlert?
+    @Published var alert: AppAlert?
     @Published var sortField: SearchSortField = .seeders
     @Published var sortAscending = false
 
     var onTorrentAdded: ((String) -> Void)?
 
     private let jackett: JackettClient
-    private let torrServer: NativeTorrServerAPI
+    private let torrServer: any TorrServerServing
     private let credentialStore = JackettCredentialStore()
 
     init(
         jackett: JackettClient = JackettClient(),
-        torrServer: NativeTorrServerAPI = NativeTorrServerAPI()
+        torrServer: any TorrServerServing = NativeTorrServerAPI()
     ) {
         self.jackett = jackett
         self.torrServer = torrServer
@@ -150,7 +150,7 @@ final class SearchViewModel: ObservableObject {
                 connectionIsHealthy = true
             } catch {
                 connectionIsHealthy = false
-                alert = LibraryAlert(
+                alert = AppAlert(
                     title: "Jackett",
                     message: error.localizedDescription
                 )
@@ -172,7 +172,7 @@ final class SearchViewModel: ObservableObject {
         serverIsRunning: Bool
     ) {
         guard serverIsRunning else {
-            alert = LibraryAlert(
+            alert = AppAlert(
                 title: "TorrServer",
                 message: SearchTexts(language: language).startServerFirst
             )
@@ -216,7 +216,7 @@ final class SearchViewModel: ObservableObject {
                 addedResultIDs.insert(result.id)
                 onTorrentAdded?(hash)
             } catch {
-                alert = LibraryAlert(
+                alert = AppAlert(
                     title: SearchTexts(language: language).couldNotAdd,
                     message: error.localizedDescription
                 )
