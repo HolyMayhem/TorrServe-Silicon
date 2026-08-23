@@ -1,8 +1,22 @@
 import SwiftUI
 
+private struct SearchResultsHeaderHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
 struct SearchView: View {
     @ObservedObject var mainModel: MainWindowModel
     @ObservedObject var model: SearchViewModel
+    @State private var resultsHeaderOverlayHeight: CGFloat = 40
+    @State private var resultsScrollMetrics = LibraryScrollMetrics.zero
+    @State private var resultsScrollIndicatorIsVisible = false
+
+    private let resultsScrollEdgeFadeHeight: CGFloat = 17
+    private let resultsBottomFadeHeight: CGFloat = 40
 
     private var texts: SearchTexts {
         SearchTexts(language: mainModel.language)
@@ -107,27 +121,17 @@ struct SearchView: View {
     }
 
     private var resultsPanel: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Label(texts.results, systemImage: "list.bullet.rectangle")
-                    .font(.headline)
-                Spacer()
-
-                if !model.results.isEmpty {
-                    sortMenu
-                }
-
-                if !model.results.isEmpty {
-                    Text("\(model.results.count)")
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                }
-            }
-
+        ZStack {
             if model.isSearching && model.results.isEmpty {
                 searchLoading
+                    .padding(.top, resultsHeaderOverlayHeight)
+                    .padding(.trailing, 14)
+                    .padding(.bottom, 14)
             } else if model.results.isEmpty {
                 searchEmpty
+                    .padding(.top, resultsHeaderOverlayHeight)
+                    .padding(.trailing, 14)
+                    .padding(.bottom, 14)
             } else {
                 ScrollView {
                     LazyVStack(spacing: 6) {
@@ -142,12 +146,82 @@ struct SearchView: View {
                             }
                         }
                     }
+                    .padding(.top, resultsHeaderOverlayHeight)
+                    .padding(.bottom, 14)
+                    // Match the compact Library list: SwiftUI reserves a hidden
+                    // 17 pt trailing gutter even without the native scroller.
+                    .padding(.trailing, -3)
                     .padding(.vertical, 2)
                 }
+                .scrollIndicators(.hidden)
+                .background {
+                    LibraryNativeScrollIndicatorHider()
+                }
+                .onScrollGeometryChange(for: LibraryScrollMetrics.self) { geometry in
+                    LibraryScrollMetrics(geometry)
+                } action: { _, metrics in
+                    resultsScrollMetrics = metrics
+                }
+                .onScrollPhaseChange { _, phase in
+                    withAnimation(.easeOut(duration: phase.isScrolling ? 0.08 : 0.24)) {
+                        resultsScrollIndicatorIsVisible = phase.isScrolling
+                    }
+                }
+                .mask {
+                    LibraryScrollContentMask(
+                        topInset: resultsHeaderOverlayHeight,
+                        bottomInset: resultsBottomFadeHeight,
+                        fadeLength: resultsScrollEdgeFadeHeight
+                    )
+                }
+                .overlay {
+                    LibraryScrollIndicator(
+                        metrics: resultsScrollMetrics,
+                        topInset: resultsHeaderOverlayHeight,
+                        bottomInset: 4,
+                        isVisible: resultsScrollIndicatorIsVisible
+                    )
+                }
+            }
+
+            VStack(spacing: 0) {
+                resultsHeader
+                Spacer(minLength: 0)
             }
         }
-        .padding(14)
+        .padding(.leading, 14)
+        .padding(.top, 14)
         .searchPanel()
+    }
+
+    private var resultsHeader: some View {
+        HStack {
+            Label(texts.results, systemImage: "list.bullet.rectangle")
+                .font(.headline)
+            Spacer()
+
+            if !model.results.isEmpty {
+                sortMenu
+
+                Text("\(model.results.count)")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.bottom, resultsScrollEdgeFadeHeight)
+        .padding(.trailing, 14)
+        .background {
+            GeometryReader { proxy in
+                Color.clear.preference(
+                    key: SearchResultsHeaderHeightKey.self,
+                    value: proxy.size.height
+                )
+            }
+        }
+        .onPreferenceChange(SearchResultsHeaderHeightKey.self) { height in
+            guard height > 0 else { return }
+            resultsHeaderOverlayHeight = height
+        }
     }
 
     private var sortMenu: some View {

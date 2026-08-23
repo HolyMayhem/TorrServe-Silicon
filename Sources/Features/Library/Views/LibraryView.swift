@@ -6,6 +6,12 @@ struct LibraryView: View {
     @ObservedObject var mainModel: MainWindowModel
     @ObservedObject var model: LibraryViewModel
     @FocusState private var magnetFieldIsFocused: Bool
+    @State private var compactHeaderOverlayHeight: CGFloat = 82
+    @State private var compactFooterOverlayHeight: CGFloat = 40
+    @State private var compactScrollMetrics = LibraryScrollMetrics.zero
+    @State private var compactScrollIndicatorIsVisible = false
+
+    private let compactScrollEdgeFadeHeight: CGFloat = 17
 
     private var texts: LibraryTexts {
         LibraryTexts(language: mainModel.language)
@@ -94,52 +100,15 @@ struct LibraryView: View {
     }
 
     private var torrentListPanel: some View {
-        VStack(spacing: 10) {
-            HStack {
-                Label(texts.library, systemImage: "film.stack")
-                    .font(.headline)
-
-                Spacer()
-
-                LibraryModePicker(model: model, language: mainModel.language)
-
-                Button {
-                    model.refresh()
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .buttonStyle(.plain)
-                .disabled(model.isRefreshing || !mainModel.canStop)
-                .help(texts.refresh)
-
-                Menu {
-                    Button {
-                        model.showsMagnetSheet = true
-                    } label: {
-                        Label(texts.addMagnet, systemImage: "link")
-                    }
-
-                    Button {
-                        model.chooseTorrentFiles(language: mainModel.language)
-                    } label: {
-                        Label(texts.addTorrentFile, systemImage: "doc.badge.plus")
-                    }
-                } label: {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 17))
-                }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
-                .disabled(model.isAdding || !mainModel.canStop)
-            }
-
-            TextField(texts.search, text: $model.searchText)
-                .textFieldStyle(.roundedBorder)
-
+        ZStack {
             if !mainModel.canStop {
                 serverUnavailable
+                    .padding(.top, compactHeaderOverlayHeight)
+                    .padding(.bottom, compactFooterOverlayHeight)
             } else if model.filteredTorrents.isEmpty {
                 emptyLibrary
+                    .padding(.top, compactHeaderOverlayHeight)
+                    .padding(.bottom, compactFooterOverlayHeight)
             } else {
                 ScrollView {
                     LazyVStack(spacing: 6) {
@@ -161,10 +130,130 @@ struct LibraryView: View {
                             }
                         }
                     }
+                    .padding(.top, compactHeaderOverlayHeight)
+                    .padding(.bottom, compactFooterOverlayHeight)
+                    // SwiftUI keeps a 17 pt trailing scroll gutter even after the
+                    // native scroller is removed. Compensate for it so the row's
+                    // visual inset matches the 13 pt inset at the leading edge.
+                    .padding(.trailing, -3)
                     .padding(.vertical, 2)
+                }
+                .scrollIndicators(.hidden)
+                .background {
+                    LibraryNativeScrollIndicatorHider()
+                }
+                .onScrollGeometryChange(for: LibraryScrollMetrics.self) { geometry in
+                    LibraryScrollMetrics(geometry)
+                } action: { _, metrics in
+                    compactScrollMetrics = metrics
+                }
+                .onScrollPhaseChange { _, phase in
+                    withAnimation(.easeOut(duration: phase.isScrolling ? 0.08 : 0.24)) {
+                        compactScrollIndicatorIsVisible = phase.isScrolling
+                    }
+                }
+                .mask {
+                    LibraryScrollContentMask(
+                        topInset: compactHeaderOverlayHeight,
+                        bottomInset: compactFooterOverlayHeight,
+                        fadeLength: compactScrollEdgeFadeHeight
+                    )
+                }
+                .overlay {
+                    LibraryScrollIndicator(
+                        metrics: compactScrollMetrics,
+                        topInset: compactHeaderOverlayHeight,
+                        bottomInset: compactFooterOverlayHeight,
+                        isVisible: compactScrollIndicatorIsVisible
+                    )
                 }
             }
 
+            VStack(spacing: 0) {
+                compactLibraryHeader
+
+                Spacer(minLength: 0)
+
+                compactLibraryFooter
+            }
+        }
+        .padding(.leading, 14)
+        .padding(.top, 14)
+        .libraryPanel()
+        .overlay {
+            if model.isDropTargeted {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(Color.accentColor, style: StrokeStyle(
+                        lineWidth: 2,
+                        dash: [6, 4]
+                    ))
+            }
+        }
+    }
+
+    private var compactLibraryHeader: some View {
+        VStack(spacing: 0) {
+            VStack(spacing: 10) {
+                HStack {
+                    Label(texts.library, systemImage: "film.stack")
+                        .font(.headline)
+
+                    Spacer()
+
+                    LibraryModePicker(model: model, language: mainModel.language)
+
+                    Button {
+                        model.refresh()
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(model.isRefreshing || !mainModel.canStop)
+                    .help(texts.refresh)
+
+                    Menu {
+                        Button {
+                            model.showsMagnetSheet = true
+                        } label: {
+                            Label(texts.addMagnet, systemImage: "link")
+                        }
+
+                        Button {
+                            model.chooseTorrentFiles(language: mainModel.language)
+                        } label: {
+                            Label(texts.addTorrentFile, systemImage: "doc.badge.plus")
+                        }
+                    } label: {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 17))
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                    .disabled(model.isAdding || !mainModel.canStop)
+                }
+
+                TextField(texts.search, text: $model.searchText)
+                    .textFieldStyle(.roundedBorder)
+            }
+            .padding(.bottom, compactScrollEdgeFadeHeight)
+            .padding(.trailing, 14)
+        }
+        .background {
+            GeometryReader { proxy in
+                Color.clear.preference(
+                    key: CompactLibraryHeaderHeightKey.self,
+                    value: proxy.size.height
+                )
+            }
+        }
+        .onPreferenceChange(CompactLibraryHeaderHeightKey.self) { height in
+            guard height > 0 else { return }
+            compactHeaderOverlayHeight = height
+        }
+    }
+
+    private var compactLibraryFooter: some View {
+        VStack(spacing: 0) {
             HStack {
                 if model.isAdding {
                     ProgressView()
@@ -180,17 +269,21 @@ struct LibraryView: View {
             }
             .font(.caption2)
             .foregroundStyle(model.isDropTargeted ? Color.accentColor : .secondary)
+            .padding(.top, compactScrollEdgeFadeHeight)
+            .padding(.trailing, 14)
         }
-        .padding(14)
-        .libraryPanel()
-        .overlay {
-            if model.isDropTargeted {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(Color.accentColor, style: StrokeStyle(
-                        lineWidth: 2,
-                        dash: [6, 4]
-                    ))
+        .padding(.bottom, 14)
+        .background {
+            GeometryReader { proxy in
+                Color.clear.preference(
+                    key: CompactLibraryFooterHeightKey.self,
+                    value: proxy.size.height
+                )
             }
+        }
+        .onPreferenceChange(CompactLibraryFooterHeightKey.self) { height in
+            guard height > 0 else { return }
+            compactFooterOverlayHeight = height
         }
     }
 
