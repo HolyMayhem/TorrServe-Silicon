@@ -121,7 +121,7 @@ final class MainWindowModel: ObservableObject {
     @Published var launchAtLogin = false
     @Published var autoStartServer = false
     @Published var autoUpdateTorrServer = false
-    @Published var showSpeed = true
+    @Published var menuBarPreferences = MenuBarPreferences.defaults
     @Published var hideDockIcon = false
     @Published var notificationsEnabled = false
     @Published var notificationsAuthorizationPending = false
@@ -178,7 +178,7 @@ final class MainWindowModel: ObservableObject {
     var onLaunchAtLoginChanged: ((Bool) -> Void)?
     var onAutoStartChanged: ((Bool) -> Void)?
     var onAutoUpdateTorrServerChanged: ((Bool) -> Void)?
-    var onShowSpeedChanged: ((Bool) -> Void)?
+    var onMenuBarPreferencesChanged: ((MenuBarPreferences) -> Void)?
     var onHideDockIconChanged: ((Bool) -> Void)?
     var onNotificationsChanged: ((Bool) -> Void)?
     var onJackettEnabledChanged: ((Bool) -> Void)?

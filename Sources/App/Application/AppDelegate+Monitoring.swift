@@ -230,7 +230,6 @@ extension AppDelegate {
         mainWindowModel.autoUpdateTorrServer = UserDefaults.standard.bool(
             forKey: autoUpdateTorrServerKey
         )
-        mainWindowModel.showSpeed = isSpeedDisplayEnabled
         mainWindowModel.hideDockIcon = UserDefaults.standard.bool(forKey: hideDockIconKey)
         if !isNotificationAuthorizationPending {
             mainWindowModel.notificationsEnabled = UserDefaults.standard.bool(

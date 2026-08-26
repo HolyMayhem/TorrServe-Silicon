@@ -16,6 +16,19 @@ extension AppDelegate {
         statusItem.button?.action = #selector(toggleStatusPopover(_:))
         statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
 
+        var preferences = menuBarPreferencesStore.load()
+        if !preferences.isIconVisible,
+           UserDefaults.standard.bool(forKey: hideDockIconKey) {
+            UserDefaults.standard.set(false, forKey: hideDockIconKey)
+            applyActivationPolicy()
+        }
+        preferences.sectionOrder = MenuBarPreferences.normalizedOrder(
+            preferences.sectionOrder
+        )
+        mainWindowModel.menuBarPreferences = preferences
+        popoverModel.preferences = preferences
+        statusItem.isVisible = preferences.isIconVisible
+
         popoverModel.onStart = { [weak self] in self?.startServer(nil) }
         popoverModel.onStop = { [weak self] in self?.stopServer(nil) }
         popoverModel.onOpenWeb = { [weak self] in self?.openWebUI(nil) }
@@ -50,6 +63,8 @@ extension AppDelegate {
         }
 
         refreshQRCode()
+        popoverModel.showsQRCode = popoverModel.preferences.showsQRCode
+            && popoverModel.preferences.expandsQRCodeOnOpen
         refreshPopoverMaterial()
         synchronizePopoverLayout()
         NSApp.activate(ignoringOtherApps: true)

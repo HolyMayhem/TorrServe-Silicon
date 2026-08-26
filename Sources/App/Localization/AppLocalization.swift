@@ -47,8 +47,41 @@ struct Texts {
     }
     var showSpeed: String {
         language == .russian
-            ? "Показывать скорость в меню баре"
-            : "Show speed in menu bar"
+            ? "Показывать скорость"
+            : "Show speed"
+    }
+    var menuBarSettings: String {
+        language == .russian ? "Значок в меню баре" : "Menu bar icon"
+    }
+    var showMenuBarIcon: String {
+        language == .russian ? "Показывать значок" : "Show icon"
+    }
+    var showRecentMaterial: String {
+        language == .russian ? "Показывать последний материал" : "Show latest material"
+    }
+    var showQuickActions: String {
+        language == .russian ? "Показывать быстрые действия" : "Show quick actions"
+    }
+    var showQRCodeInMenu: String {
+        language == .russian ? "Показывать QR-код" : "Show QR code"
+    }
+    var expandQRCodeOnOpen: String {
+        language == .russian
+            ? "Раскрывать QR-код при открытии"
+            : "Expand QR code when opened"
+    }
+    var menuBarElementOrder: String {
+        language == .russian ? "Порядок элементов" : "Item order"
+    }
+    var menuBarOrderHint: String {
+        language == .russian
+            ? "Перетаскивайте элементы, чтобы изменить их порядок. Отключённые элементы показаны бледнее."
+            : "Drag items to change their order. Hidden items appear dimmed."
+    }
+    var menuBarSettingsFooter: String {
+        language == .russian
+            ? "Если скрыть значок, приложение останется доступно в Dock. Заголовок состояния и кнопка завершения всегда остаются в меню."
+            : "When the icon is hidden, the app remains available in the Dock. The status header and Quit button always remain in the menu."
     }
     var notifications: String {
         language == .russian ? "Системные уведомления" : "System notifications"

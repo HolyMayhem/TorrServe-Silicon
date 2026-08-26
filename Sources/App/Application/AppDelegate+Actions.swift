@@ -359,12 +359,35 @@ extension AppDelegate {
         }
     }
 
-    func setSpeedInMenuBar(_ enabled: Bool) {
-        UserDefaults.standard.set(enabled, forKey: showSpeedInMenuBarKey)
-        updateUI(for: processController.state)
+    func setMenuBarPreferences(_ preferences: MenuBarPreferences) {
+        var normalized = preferences
+        normalized.sectionOrder = MenuBarPreferences.normalizedOrder(
+            preferences.sectionOrder
+        )
+
+        if !normalized.isIconVisible && mainWindowModel.hideDockIcon {
+            UserDefaults.standard.set(false, forKey: hideDockIconKey)
+            mainWindowModel.hideDockIcon = false
+            applyActivationPolicy(keepingWindowVisible: true)
+        }
+
+        menuBarPreferencesStore.save(normalized)
+        mainWindowModel.menuBarPreferences = normalized
+        popoverModel.preferences = normalized
+        statusItem?.isVisible = normalized.isIconVisible
+        if !normalized.showsQRCode {
+            popoverModel.showsQRCode = false
+        }
+        refreshSpeedDisplay()
+        synchronizePopoverLayout()
     }
 
     func setHideDockIcon(_ enabled: Bool) {
+        if enabled && !mainWindowModel.menuBarPreferences.isIconVisible {
+            var preferences = mainWindowModel.menuBarPreferences
+            preferences.isIconVisible = true
+            setMenuBarPreferences(preferences)
+        }
         UserDefaults.standard.set(enabled, forKey: hideDockIconKey)
         applyActivationPolicy(keepingWindowVisible: true)
         updateUI(for: processController.state)
@@ -654,7 +677,7 @@ extension AppDelegate {
     }
 
     var isSpeedDisplayEnabled: Bool {
-        UserDefaults.standard.bool(forKey: showSpeedInMenuBarKey)
+        mainWindowModel.menuBarPreferences.showsSpeed
     }
 
     var currentSpeedDisplayUnit: SpeedDisplayUnit {

@@ -24,6 +24,7 @@ extension AppDelegate {
 
         mainWindowModel.path = initialExecutablePath()
         mainWindowModel.language = currentLanguage
+        mainWindowModel.menuBarPreferences = menuBarPreferencesStore.load()
         mainWindowModel.jackettEnabled = UserDefaults.standard.bool(
             forKey: jackettSearchEnabledKey
         )
@@ -62,8 +63,8 @@ extension AppDelegate {
         mainWindowModel.onAutoUpdateTorrServerChanged = { [weak self] enabled in
             self?.setAutoUpdateTorrServer(enabled)
         }
-        mainWindowModel.onShowSpeedChanged = { [weak self] enabled in
-            self?.setSpeedInMenuBar(enabled)
+        mainWindowModel.onMenuBarPreferencesChanged = { [weak self] preferences in
+            self?.setMenuBarPreferences(preferences)
         }
         mainWindowModel.onHideDockIconChanged = { [weak self] enabled in
             self?.setHideDockIcon(enabled)

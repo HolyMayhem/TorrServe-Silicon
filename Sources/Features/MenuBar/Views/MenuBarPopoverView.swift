@@ -11,6 +11,7 @@ final class MenuBarPopoverModel: ObservableObject {
     @Published var canOpenWeb = true
     @Published var canDownload = true
     @Published var isDownloading = false
+    @Published var preferences = MenuBarPreferences.defaults
 
     @Published var speedText = ""
     @Published var speedSamples: [Double] = []
@@ -61,10 +62,9 @@ struct MenuBarPopoverView: View {
 
             VStack(spacing: 10) {
                 header
-                currentMaterialCard
-                speedCard
-                actionButtons
-                webUICard
+                ForEach(model.preferences.sectionOrder) { section in
+                    popoverSection(section)
+                }
                 footer
             }
             .padding(13)
@@ -95,7 +95,7 @@ struct MenuBarPopoverView: View {
 
             Spacer(minLength: 8)
 
-            if model.isRunning {
+            if model.isRunning && model.preferences.showsSpeed {
                 Text(model.speedText)
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .monospacedDigit()
@@ -103,6 +103,22 @@ struct MenuBarPopoverView: View {
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
                     .popoverGlass(in: Capsule())
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func popoverSection(_ section: MenuBarPopoverSection) -> some View {
+        if model.preferences.isVisible(section) {
+            switch section {
+            case .recentMaterial:
+                currentMaterialCard
+            case .speed:
+                speedCard
+            case .quickActions:
+                actionButtons
+            case .qrCode:
+                webUICard
             }
         }
     }

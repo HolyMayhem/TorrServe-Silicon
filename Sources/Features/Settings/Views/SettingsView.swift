@@ -26,6 +26,7 @@ struct SettingsView: View {
                 )
 
                 applicationSection
+                menuBarSection
                 interfaceSection
                 metadataSection
                 if model.metadataSource != .disabled {
@@ -66,16 +67,11 @@ struct SettingsView: View {
             )
             Divider()
             toggleRow(
-                texts.showSpeed,
-                keyPath: \.showSpeed,
-                callback: model.onShowSpeedChanged
-            )
-            Divider()
-            toggleRow(
                 texts.hideDockIcon,
                 keyPath: \.hideDockIcon,
                 callback: model.onHideDockIconChanged
             )
+            .disabled(!model.menuBarPreferences.isIconVisible)
             Divider()
             toggleRow(
                 texts.notifications,
@@ -86,8 +82,24 @@ struct SettingsView: View {
         }
     }
 
-    private var interfaceSection: some View {
-        settingsSection(title: model.language == .russian ? "Интерфейс" : "Interface") {
+    private var menuBarSection: some View {
+        settingsSection(
+            title: texts.menuBarSettings,
+            footer: texts.menuBarSettingsFooter
+        ) {
+            menuBarToggleRow(texts.showMenuBarIcon, keyPath: \.isIconVisible)
+            Divider()
+            menuBarToggleRow(texts.showSpeed, keyPath: \.showsSpeed)
+            Divider()
+            menuBarToggleRow(texts.showRecentMaterial, keyPath: \.showsRecentMaterial)
+            Divider()
+            menuBarToggleRow(texts.showQuickActions, keyPath: \.showsQuickActions)
+            Divider()
+            menuBarToggleRow(texts.showQRCodeInMenu, keyPath: \.showsQRCode)
+            Divider()
+            menuBarToggleRow(texts.expandQRCodeOnOpen, keyPath: \.expandsQRCodeOnOpen)
+                .disabled(!model.menuBarPreferences.showsQRCode)
+            Divider()
             settingRow(texts.speedFormat) {
                 Picker("", selection: $model.speedUnit) {
                     Text(texts.automaticSpeed).tag(SpeedDisplayUnit.automatic)
@@ -102,6 +114,48 @@ struct SettingsView: View {
                 }
             }
             Divider()
+            menuBarOrderRow
+        }
+    }
+
+    private var menuBarOrderRow: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack {
+                Text(texts.menuBarElementOrder)
+                    .font(.subheadline.weight(.medium))
+                Spacer()
+                if model.menuBarPreferences.sectionOrder
+                    != MenuBarPopoverSection.allCases {
+                    Button(model.language == .russian ? "По умолчанию" : "Default") {
+                        var preferences = model.menuBarPreferences
+                        preferences.sectionOrder = MenuBarPopoverSection.allCases
+                        commitMenuBarPreferences(preferences)
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.caption)
+                }
+            }
+
+            MenuBarSectionOrderView(
+                sections: model.menuBarPreferences.sectionOrder,
+                preferences: model.menuBarPreferences,
+                language: model.language
+            ) { sections in
+                var preferences = model.menuBarPreferences
+                preferences.sectionOrder = sections
+                commitMenuBarPreferences(preferences)
+            }
+
+            Text(texts.menuBarOrderHint)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.vertical, 10)
+    }
+
+    private var interfaceSection: some View {
+        settingsSection(title: model.language == .russian ? "Интерфейс" : "Interface") {
             settingRow(texts.languageLabel) {
                 Picker("", selection: $model.language) {
                     Text(texts.russian).tag(AppLanguage.russian)
@@ -390,6 +444,29 @@ struct SettingsView: View {
                 .labelsHidden()
                 .toggleStyle(.switch)
         }
+    }
+
+    private func menuBarToggleRow(
+        _ title: String,
+        keyPath: WritableKeyPath<MenuBarPreferences, Bool>
+    ) -> some View {
+        settingRow(title) {
+            Toggle("", isOn: Binding(
+                get: { model.menuBarPreferences[keyPath: keyPath] },
+                set: { value in
+                    var preferences = model.menuBarPreferences
+                    preferences[keyPath: keyPath] = value
+                    commitMenuBarPreferences(preferences)
+                }
+            ))
+            .labelsHidden()
+            .toggleStyle(.switch)
+        }
+    }
+
+    private func commitMenuBarPreferences(_ preferences: MenuBarPreferences) {
+        model.menuBarPreferences = preferences
+        model.onMenuBarPreferencesChanged?(preferences)
     }
 
     private func settingRow<Control: View>(

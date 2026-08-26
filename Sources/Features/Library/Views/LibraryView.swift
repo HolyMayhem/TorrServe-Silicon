@@ -132,10 +132,9 @@ struct LibraryView: View {
                     }
                     .padding(.top, compactHeaderOverlayHeight)
                     .padding(.bottom, compactFooterOverlayHeight)
-                    // SwiftUI keeps a 17 pt trailing scroll gutter even after the
-                    // native scroller is removed. Compensate for it so the row's
-                    // visual inset matches the 13 pt inset at the leading edge.
-                    .padding(.trailing, -3)
+                    // Keep row backgrounds inside the panel while the custom
+                    // scroll indicator remains aligned with the panel edge.
+                    .padding(.trailing, 14)
                     .padding(.vertical, 2)
                 }
                 .scrollIndicators(.hidden)

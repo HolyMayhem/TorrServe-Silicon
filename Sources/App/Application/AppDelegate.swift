@@ -32,6 +32,12 @@ func migrateLegacyPreferencesIfNeeded() {
             autoStartServerKey,
             autoUpdateTorrServerKey,
             showSpeedInMenuBarKey,
+            MenuBarPreferencesStore.Key.iconVisible,
+            MenuBarPreferencesStore.Key.recentMaterial,
+            MenuBarPreferencesStore.Key.quickActions,
+            MenuBarPreferencesStore.Key.qrCode,
+            MenuBarPreferencesStore.Key.expandQRCode,
+            MenuBarPreferencesStore.Key.sectionOrder,
             hideDockIconKey,
             languageKey,
             speedDisplayUnitKey,
@@ -74,6 +80,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     lazy var diagnosticsService = TorrServerDiagnosticsService(api: nativeTorrServerAPI)
     let metadataAPIKeyValidator = MetadataAPIKeyValidator()
     let metadataSettings = MetadataSettingsStore.shared
+    let menuBarPreferencesStore = MenuBarPreferencesStore()
     let mainWindowModel = MainWindowModel()
     lazy var libraryModel = LibraryViewModel(api: nativeTorrServerAPI)
     lazy var searchModel = SearchViewModel(torrServer: nativeTorrServerAPI)

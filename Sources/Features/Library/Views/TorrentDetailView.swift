@@ -8,6 +8,13 @@ struct TorrentDetailView: View {
     let language: AppLanguage
     let translationMode: OverviewTranslationMode
 
+    @State private var filesHeaderOverlayHeight: CGFloat = 38
+    @State private var filesScrollMetrics = AppScrollMetrics.zero
+    @State private var filesScrollIndicatorIsVisible = false
+
+    private let filesScrollEdgeFadeHeight: CGFloat = 17
+    private let filesTrailingExtension: CGFloat = 14
+
     private var texts: LibraryTexts {
         LibraryTexts(language: language)
     }
@@ -130,15 +137,12 @@ struct TorrentDetailView: View {
 
             Divider()
 
-            HStack {
-                Label(texts.files, systemImage: "list.bullet.rectangle")
-                    .font(.headline)
-                Spacer()
-                Text(texts.playerHint)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
+            filesSection
+        }
+    }
 
+    private var filesSection: some View {
+        ZStack {
             if torrent.allFiles.isEmpty {
                 VStack(spacing: 10) {
                     ProgressView()
@@ -148,6 +152,8 @@ struct TorrentDetailView: View {
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.top, filesHeaderOverlayHeight)
+                .padding(.trailing, filesTrailingExtension)
             } else {
                 ScrollView {
                     LazyVStack(spacing: 6) {
@@ -160,8 +166,71 @@ struct TorrentDetailView: View {
                             }
                         }
                     }
+                    .padding(.top, filesHeaderOverlayHeight)
+                    .padding(.trailing, filesTrailingExtension)
+                    .padding(.vertical, 2)
+                }
+                .scrollIndicators(.hidden)
+                .background {
+                    AppNativeScrollIndicatorHider()
+                }
+                .onScrollGeometryChange(for: AppScrollMetrics.self) { geometry in
+                    AppScrollMetrics(geometry)
+                } action: { _, metrics in
+                    filesScrollMetrics = metrics
+                }
+                .onScrollPhaseChange { _, phase in
+                    withAnimation(.easeOut(duration: phase.isScrolling ? 0.08 : 0.24)) {
+                        filesScrollIndicatorIsVisible = phase.isScrolling
+                    }
+                }
+                .mask {
+                    AppScrollContentMask(
+                        topInset: filesHeaderOverlayHeight,
+                        bottomInset: 0,
+                        fadeLength: filesScrollEdgeFadeHeight
+                    )
+                }
+                .overlay {
+                    AppScrollIndicator(
+                        metrics: filesScrollMetrics,
+                        topInset: filesHeaderOverlayHeight,
+                        bottomInset: 4,
+                        isVisible: filesScrollIndicatorIsVisible
+                    )
                 }
             }
+
+            VStack(spacing: 0) {
+                filesHeader
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(.trailing, -filesTrailingExtension)
+    }
+
+    private var filesHeader: some View {
+        HStack {
+            Label(texts.files, systemImage: "list.bullet.rectangle")
+                .font(.headline)
+            Spacer()
+            Text(texts.playerHint)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.bottom, filesScrollEdgeFadeHeight)
+        .padding(.trailing, filesTrailingExtension)
+        .background {
+            GeometryReader { proxy in
+                Color.clear.preference(
+                    key: TorrentFilesHeaderHeightKey.self,
+                    value: proxy.size.height
+                )
+            }
+        }
+        .onPreferenceChange(TorrentFilesHeaderHeightKey.self) { height in
+            guard height > 0 else { return }
+            filesHeaderOverlayHeight = height
         }
     }
 
@@ -284,6 +353,14 @@ struct TorrentDetailView: View {
 
     private var metadataSourceName: String? {
         metadata?.metadataProvider?.displayName
+    }
+}
+
+private struct TorrentFilesHeaderHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }
 
