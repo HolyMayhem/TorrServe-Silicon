@@ -10,6 +10,8 @@ struct LibraryView: View {
     @State private var compactFooterOverlayHeight: CGFloat = 40
     @State private var compactScrollMetrics = AppScrollMetrics.zero
     @State private var compactScrollIndicatorIsVisible = false
+    @State private var visualScrollMetrics = AppScrollMetrics.zero
+    @State private var visualScrollIndicatorIsVisible = false
 
     private let compactScrollEdgeFadeHeight: CGFloat = 17
 
@@ -394,6 +396,28 @@ struct LibraryView: View {
                         }
                         .padding(14)
                     }
+                }
+                .scrollIndicators(.hidden)
+                .background {
+                    AppNativeScrollIndicatorHider()
+                }
+                .onScrollGeometryChange(for: AppScrollMetrics.self) { geometry in
+                    AppScrollMetrics(geometry)
+                } action: { _, metrics in
+                    visualScrollMetrics = metrics
+                }
+                .onScrollPhaseChange { _, phase in
+                    withAnimation(.easeOut(duration: phase.isScrolling ? 0.08 : 0.24)) {
+                        visualScrollIndicatorIsVisible = phase.isScrolling
+                    }
+                }
+                .overlay {
+                    AppScrollIndicator(
+                        metrics: visualScrollMetrics,
+                        topInset: 0,
+                        bottomInset: 0,
+                        isVisible: visualScrollIndicatorIsVisible
+                    )
                 }
                 .appPanel()
             }

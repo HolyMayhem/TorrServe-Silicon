@@ -49,7 +49,7 @@ struct ApplicationRootView: View {
         }
         .overlay(alignment: .topLeading) {
             sidebarModeButton
-                .offset(x: sidebarWidth - 47, y: -25)
+                .offset(x: sidebarWidth - 47, y: -30)
         }
         .animation(.snappy(duration: 0.24, extraBounce: 0), value: sidebarWidth)
         .frame(minWidth: 900, minHeight: 560)

@@ -179,33 +179,20 @@ struct TorrentLargeCard: View {
         .padding(14)
         .frame(maxWidth: .infinity, minHeight: 190, alignment: .leading)
         .background {
-            let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
-            ZStack {
-                isSelected ? Color.accentColor.opacity(0.16) : Color.secondary.opacity(0.07)
-                if let value = metadata?.backdropURL,
-                   let url = URL(string: value),
-                   !value.isEmpty {
-                    CachedRemoteImage(
-                        url: url,
-                        contentMode: .fill,
-                        placeholderSystemImage: "photo"
-                    )
-                    .opacity(0.14)
-                    LinearGradient(
-                        colors: [
-                            Color(nsColor: .windowBackgroundColor).opacity(0.35),
-                            Color(nsColor: .windowBackgroundColor).opacity(0.82)
-                        ],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                }
-            }
-            .clipShape(shape)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(
+                    isSelected
+                        ? Color.accentColor.opacity(0.16)
+                        : Color.secondary.opacity(0.07)
+                )
         }
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(isSelected ? Color.accentColor : .clear, lineWidth: 1.5)
+                .strokeBorder(
+                    isSelected ? Color.accentColor : Color.primary.opacity(0.10),
+                    lineWidth: isSelected ? 1.5 : 1
+                )
         }
         .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .onTapGesture(perform: select)
