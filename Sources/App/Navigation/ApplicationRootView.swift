@@ -36,10 +36,16 @@ struct ApplicationRootView: View {
             )
             .frame(width: sidebarWidth)
 
-            Divider()
-
             detailContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(Color.white.opacity(0.16))
+                .frame(width: 1)
+                .offset(x: sidebarWidth - 0.5)
+                .ignoresSafeArea(.container, edges: .top)
+                .allowsHitTesting(false)
         }
         .overlay(alignment: .topLeading) {
             sidebarModeButton
