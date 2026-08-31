@@ -16,18 +16,6 @@ struct ApplicationRootView: View {
         isSidebarCompact ? compactSidebarWidth : expandedSidebarWidth
     }
 
-    private var columnVisibility: Binding<NavigationSplitViewVisibility> {
-        Binding(
-            get: { .all },
-            set: { requestedVisibility in
-                guard requestedVisibility == .detailOnly else { return }
-                withAnimation(.snappy(duration: 0.24, extraBounce: 0)) {
-                    isSidebarCompact.toggle()
-                }
-            }
-        )
-    }
-
     private var selection: Binding<AppSection?> {
         Binding(
             get: { mainModel.selectedSection },
@@ -39,7 +27,7 @@ struct ApplicationRootView: View {
     }
 
     var body: some View {
-        NavigationSplitView(columnVisibility: columnVisibility) {
+        HStack(spacing: 0) {
             AppSidebarView(
                 mainModel: mainModel,
                 libraryModel: libraryModel,
@@ -47,16 +35,15 @@ struct ApplicationRootView: View {
                 isCompact: isSidebarCompact
             )
             .frame(width: sidebarWidth)
-            .navigationSplitViewColumnWidth(
-                min: sidebarWidth,
-                ideal: sidebarWidth,
-                max: sidebarWidth
-            )
-        } detail: {
+
+            Divider()
+
             detailContent
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .background {
-            SidebarToolbarPositioner(horizontalOffset: isSidebarCompact ? -10 : 0)
+        .overlay(alignment: .topLeading) {
+            sidebarModeButton
+                .offset(x: sidebarWidth - 47, y: -25)
         }
         .animation(.snappy(duration: 0.24, extraBounce: 0), value: sidebarWidth)
         .frame(minWidth: 900, minHeight: 560)
@@ -77,6 +64,26 @@ struct ApplicationRootView: View {
         .onAppear {
             mainModel.onSectionChanged?(mainModel.selectedSection)
         }
+    }
+
+    private var sidebarModeButton: some View {
+        Button {
+            withAnimation(.snappy(duration: 0.24, extraBounce: 0)) {
+                isSidebarCompact.toggle()
+            }
+        } label: {
+            Image(systemName: "sidebar.left")
+                .font(.system(size: 15, weight: .medium))
+                .frame(width: 34, height: 28)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(mainModel.language == .russian
+            ? (isSidebarCompact ? "Развернуть боковую панель" : "Свернуть боковую панель")
+            : (isSidebarCompact ? "Expand Sidebar" : "Collapse Sidebar"))
+        .accessibilityLabel(mainModel.language == .russian
+            ? (isSidebarCompact ? "Развернуть боковую панель" : "Свернуть боковую панель")
+            : (isSidebarCompact ? "Expand Sidebar" : "Collapse Sidebar"))
     }
 
     @ViewBuilder
