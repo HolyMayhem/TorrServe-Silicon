@@ -298,7 +298,7 @@ extension AppDelegate {
             ? NSStatusItem.squareLength
             : NSStatusItem.variableLength
         statusItem.button?.image = MenuBarIcon.makeImage()
-        statusItem.button?.title = title.isEmpty ? "" : " \(title)"
+        statusItem.button?.title = title.isEmpty ? "" : "\(title) "
         statusItem.button?.toolTip = title.isEmpty
             ? "TorrServer"
             : "TorrServer · \(title)"

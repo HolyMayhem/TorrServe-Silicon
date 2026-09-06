@@ -9,7 +9,7 @@ extension AppDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.toolTip = "TorrServer"
         statusItem.button?.setAccessibilityLabel("TorrServer status")
-        statusItem.button?.imagePosition = .imageLeading
+        statusItem.button?.imagePosition = .imageTrailing
         statusItem.button?.imageScaling = .scaleProportionallyUpOrDown
         statusItem.button?.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
         statusItem.button?.target = self

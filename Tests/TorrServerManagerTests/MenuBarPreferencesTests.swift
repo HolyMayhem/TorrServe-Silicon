@@ -55,22 +55,25 @@ final class MenuBarPreferencesTests: XCTestCase {
         )
     }
 
-    func testMovesSectionBeforeDropTarget() {
-        XCTAssertEqual(
-            MenuBarSectionOrdering.moving(
-                MenuBarPopoverSection.allCases,
-                section: .qrCode,
-                before: .recentMaterial
-            ),
-            [.qrCode, .recentMaterial, .speed, .quickActions]
-        )
+    func testMovesFirstSectionToTheEnd() {
         XCTAssertEqual(
             MenuBarSectionOrdering.moving(
                 MenuBarPopoverSection.allCases,
                 section: .recentMaterial,
-                before: .qrCode
+                to: 3
             ),
-            [.speed, .quickActions, .recentMaterial, .qrCode]
+            [.speed, .quickActions, .qrCode, .recentMaterial]
+        )
+    }
+
+    func testMovesLastSectionToTheBeginning() {
+        XCTAssertEqual(
+            MenuBarSectionOrdering.moving(
+                MenuBarPopoverSection.allCases,
+                section: .qrCode,
+                to: 0
+            ),
+            [.qrCode, .recentMaterial, .speed, .quickActions]
         )
     }
 }

@@ -75,11 +75,6 @@ extension AppDelegate {
         mainWindowModel.onJackettEnabledChanged = { [weak self] enabled in
             self?.setJackettEnabled(enabled)
         }
-        mainWindowModel.onOpenJackettDashboard = { [weak self] in
-            guard let self,
-                  let url = self.searchModel.configuration.normalizedServerURL else { return }
-            NSWorkspace.shared.open(url)
-        }
         mainWindowModel.onMetadataSourceChanged = { [weak self] source in
             self?.setMetadataSource(source)
         }

@@ -4,6 +4,8 @@ import SwiftUI
 struct MainWindowView: View {
     @ObservedObject var model: MainWindowModel
     @State private var showsClearCacheConfirmation = false
+    @State private var scrollMetrics = AppScrollMetrics.zero
+    @State private var scrollIndicatorIsVisible = false
 
     private var texts: Texts {
         Texts(language: model.language)
@@ -43,6 +45,28 @@ struct MainWindowView: View {
             .padding(.horizontal, SettingsScreenLayout.formContentInset)
             .padding(.top, SettingsScreenLayout.scrollContentTopPadding)
             .padding(.bottom, 12)
+        }
+        .scrollIndicators(.hidden)
+        .background {
+            AppNativeScrollIndicatorHider()
+        }
+        .onScrollGeometryChange(for: AppScrollMetrics.self) { geometry in
+            AppScrollMetrics(geometry)
+        } action: { _, metrics in
+            scrollMetrics = metrics
+        }
+        .onScrollPhaseChange { _, phase in
+            withAnimation(.easeOut(duration: phase.isScrolling ? 0.08 : 0.24)) {
+                scrollIndicatorIsVisible = phase.isScrolling
+            }
+        }
+        .overlay {
+            AppScrollIndicator(
+                metrics: scrollMetrics,
+                topInset: 0,
+                bottomInset: 0,
+                isVisible: scrollIndicatorIsVisible
+            )
         }
         .settingsScrollEdgeFade()
         .frame(maxWidth: SettingsScreenLayout.contentMaxWidth)
@@ -90,12 +114,6 @@ struct MainWindowView: View {
                         title: model.language == .russian ? "Адрес" : "Address",
                         value: "localhost:8090",
                         systemImage: "network"
-                    )
-
-                    serverInfo(
-                        title: model.language == .russian ? "Скорость" : "Speed",
-                        value: speedText,
-                        systemImage: "arrow.down"
                     )
 
                     serverInfo(
@@ -193,6 +211,13 @@ struct MainWindowView: View {
             .disabled(!model.canEditPath)
 
             HStack(spacing: 8) {
+                Text(model.language == .russian
+                    ? "Файл программы TorrServer, который запускает сервер."
+                    : "The TorrServer program file used to launch the server.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+
                 if let update = model.torrServerUpdate {
                     Label(
                         model.language == .russian
@@ -497,12 +522,6 @@ struct MainWindowView: View {
         case .failed: return "exclamationmark"
         case .stopped: return "power"
         }
-    }
-
-    private var speedText: String {
-        model.currentSpeedText.isEmpty
-            ? SpeedFormatter.string(bytesPerSecond: 0, unit: model.speedUnit)
-            : model.currentSpeedText
     }
 
     private var storageUsageText: String {

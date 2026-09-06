@@ -15,7 +15,6 @@ struct TorrentPosterCard: View {
         VStack(alignment: .leading, spacing: 8) {
             ZStack(alignment: .bottom) {
                 LibraryPoster(torrent: torrent, metadata: metadata)
-                    .aspectRatio(2.0 / 3.0, contentMode: .fit)
 
                 LinearGradient(
                     colors: [.clear, .black.opacity(0.78)],
@@ -50,11 +49,14 @@ struct TorrentPosterCard: View {
                 }
                 .padding(10)
             }
+            .frame(minWidth: 0, maxWidth: .infinity)
+            .aspectRatio(2.0 / 3.0, contentMode: .fit)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 
             Text(metadata?.displayTitle ?? torrent.displayTitle)
                 .font(.system(size: 12.5, weight: .semibold))
                 .lineLimit(2)
+                .frame(height: 32, alignment: .topLeading)
 
             HStack {
                 Text(LibraryFormat.fileSize(torrent.torrentSize))
@@ -69,6 +71,7 @@ struct TorrentPosterCard: View {
             .font(.caption2)
             .foregroundStyle(.secondary)
         }
+        .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
         .padding(9)
         .background(
             isSelected ? Color.accentColor.opacity(0.18) : Color.secondary.opacity(0.07),
@@ -175,6 +178,7 @@ struct TorrentLargeCard: View {
                     .disabled(torrent.playableFiles.isEmpty)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(14)
         .frame(maxWidth: .infinity, minHeight: 190, alignment: .leading)

@@ -182,7 +182,6 @@ final class MainWindowModel: ObservableObject {
     var onHideDockIconChanged: ((Bool) -> Void)?
     var onNotificationsChanged: ((Bool) -> Void)?
     var onJackettEnabledChanged: ((Bool) -> Void)?
-    var onOpenJackettDashboard: (() -> Void)?
     var onMetadataSourceChanged: ((MetadataSourceMode) -> Void)?
     var onAniListEnabledChanged: ((Bool) -> Void)?
     var onMetadataAPIKeyModeChanged: ((MetadataAPIKeyMode) -> Void)?

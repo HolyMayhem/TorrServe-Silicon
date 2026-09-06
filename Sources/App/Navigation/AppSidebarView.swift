@@ -6,6 +6,7 @@ struct AppSidebarView: View {
     @ObservedObject var libraryModel: LibraryViewModel
     @Binding var selection: AppSection?
     let isCompact: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var primarySections: [AppSection] {
         mainModel.jackettEnabled
@@ -23,8 +24,33 @@ struct AppSidebarView: View {
                     .transition(.opacity)
             }
         }
+        .backgroundPreferenceValue(SidebarSelectionBounds.self) { bounds in
+            GeometryReader { geometry in
+                if let selection, let anchor = bounds[selection] {
+                    let frame = geometry[anchor]
+                    SidebarSelectionGlass()
+                        .frame(width: frame.width, height: frame.height)
+                        .position(x: frame.midX, y: frame.midY)
+                        .animation(
+                            reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.82),
+                            value: frame
+                        )
+                }
+            }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
         .background(.thinMaterial)
         .animation(.easeInOut(duration: 0.16), value: isCompact)
+        .onMoveCommand { direction in
+            let sections = primarySections + [.settings, .server]
+            guard let selection, let index = sections.firstIndex(of: selection) else { return }
+            switch direction {
+            case .up: self.selection = sections[max(index - 1, 0)]
+            case .down: self.selection = sections[min(index + 1, sections.count - 1)]
+            default: break
+            }
+        }
     }
 
     private var expandedSidebar: some View {
@@ -38,30 +64,26 @@ struct AppSidebarView: View {
                 .padding(.top, 18)
                 .padding(.bottom, 12)
 
-            List(selection: $selection) {
-                Section {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 6) {
                     ForEach(primarySections) { section in
-                        SidebarNavigationItem(
-                            section: section,
-                            language: mainModel.language
-                        )
+                        navigationButton(section)
                     }
-                }
 
-                Section(mainModel.language == .russian ? "Настройки" : "Settings") {
-                    SidebarNavigationItem(
-                        section: .settings,
-                        language: mainModel.language
-                    )
+                    Text(mainModel.language == .russian ? "Настройки" : "Settings")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 12)
+                        .padding(.top, 16)
+                        .padding(.bottom, 4)
 
-                    SidebarNavigationItem(
-                        section: .server,
-                        language: mainModel.language
-                    )
+                    navigationButton(.settings)
+                    navigationButton(.server)
                 }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
             }
-            .listStyle(.sidebar)
-            .scrollContentBackground(.hidden)
+            .frame(maxHeight: .infinity)
 
             if let update = mainModel.torrServerUpdate {
                 SidebarUpdateNotice(
@@ -82,6 +104,23 @@ struct AppSidebarView: View {
             )
             .padding(14)
         }
+    }
+
+    private func navigationButton(_ section: AppSection) -> some View {
+        Button {
+            selection = section
+        } label: {
+            SidebarNavigationItem(section: section, language: mainModel.language)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 3)
+                .foregroundStyle(selection == section ? Color.accentColor : Color.primary)
+                .contentShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .anchorPreference(key: SidebarSelectionBounds.self, value: .bounds) {
+            [section: $0]
+        }
+        .accessibilityAddTraits(selection == section ? .isSelected : [])
     }
 
     private var compactSidebar: some View {
@@ -208,14 +247,13 @@ private struct CompactSidebarButton: View {
                 .font(.system(size: 20, weight: .medium))
                 .symbolRenderingMode(.hierarchical)
                 .frame(width: 48, height: 48)
-                .foregroundStyle(isSelected ? Color.white : Color.primary)
-                .background {
-                    RoundedRectangle(cornerRadius: 13, style: .continuous)
-                        .fill(isSelected ? Color.accentColor : Color.clear)
-                }
+                .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
                 .contentShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
         }
         .buttonStyle(.plain)
+        .anchorPreference(key: SidebarSelectionBounds.self, value: .bounds) {
+            [section: $0]
+        }
         .help(section.sidebarTitle(language: language))
         .accessibilityLabel(section.sidebarTitle(language: language))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
@@ -312,11 +350,60 @@ struct SidebarNavigationItem: View {
             .imageScale(.large)
             .frame(maxWidth: .infinity, minHeight: rowHeight, alignment: .leading)
             .contentShape(Rectangle())
-            .tag(section)
             .accessibilityLabel(section.sidebarTitle(language: language))
-            .listRowInsets(
-                EdgeInsets(top: 3, leading: 12, bottom: 3, trailing: 12)
-            )
+    }
+}
+
+private struct SidebarSelectionBounds: PreferenceKey {
+    static let defaultValue: [AppSection: Anchor<CGRect>] = [:]
+
+    static func reduce(
+        value: inout [AppSection: Anchor<CGRect>],
+        nextValue: () -> [AppSection: Anchor<CGRect>]
+    ) {
+        value.merge(nextValue(), uniquingKeysWith: { _, latest in latest })
+    }
+}
+
+private struct SidebarSelectionGlass: View {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    private let shape = RoundedRectangle(cornerRadius: 13, style: .continuous)
+
+    var body: some View {
+        surface
+            .overlay {
+                shape.strokeBorder(
+                    LinearGradient(
+                        colors: [.white.opacity(0.55), .white.opacity(0.08), .white.opacity(0.24)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 0.75
+                )
+            }
+            .shadow(color: .black.opacity(0.10), radius: 6, y: 3)
+    }
+
+    @ViewBuilder
+    private var surface: some View {
+        if reduceTransparency {
+            shape.fill(Color(nsColor: .controlBackgroundColor))
+        } else if #available(macOS 26.0, *) {
+            Color.clear
+                .background(
+                    LinearGradient(
+                        colors: [.white.opacity(0.10), .white.opacity(0.025)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    in: shape
+                )
+                .glassEffect(.regular.tint(Color.accentColor.opacity(0.08)), in: shape)
+        } else {
+            shape.fill(.regularMaterial)
+                .overlay(shape.fill(Color.accentColor.opacity(0.06)))
+        }
     }
 }
 

@@ -2,6 +2,8 @@ import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject var model: MainWindowModel
+    @State private var scrollMetrics = AppScrollMetrics.zero
+    @State private var scrollIndicatorIsVisible = false
 
     private let pickerColumnWidth: CGFloat = 220
 
@@ -36,6 +38,28 @@ struct SettingsView: View {
             .padding(.horizontal, SettingsScreenLayout.formContentInset)
             .padding(.top, SettingsScreenLayout.scrollContentTopPadding)
             .padding(.bottom, 12)
+        }
+        .scrollIndicators(.hidden)
+        .background {
+            AppNativeScrollIndicatorHider()
+        }
+        .onScrollGeometryChange(for: AppScrollMetrics.self) { geometry in
+            AppScrollMetrics(geometry)
+        } action: { _, metrics in
+            scrollMetrics = metrics
+        }
+        .onScrollPhaseChange { _, phase in
+            withAnimation(.easeOut(duration: phase.isScrolling ? 0.08 : 0.24)) {
+                scrollIndicatorIsVisible = phase.isScrolling
+            }
+        }
+        .overlay {
+            AppScrollIndicator(
+                metrics: scrollMetrics,
+                topInset: 0,
+                bottomInset: 0,
+                isVisible: scrollIndicatorIsVisible
+            )
         }
         .settingsScrollEdgeFade()
         .frame(maxWidth: SettingsScreenLayout.contentMaxWidth)
@@ -170,34 +194,16 @@ struct SettingsView: View {
             }
             Divider()
             settingRow(texts.jackettSearch) {
-                HStack(spacing: 6) {
-                    if model.jackettEnabled {
-                        Button {
-                            model.onOpenJackettDashboard?()
-                        } label: {
-                            Image(systemName: "gearshape")
-                                .font(.system(size: 11, weight: .medium))
-                        }
-                        .buttonStyle(.borderless)
-                        .help(model.language == .russian
-                            ? "Открыть веб-панель Jackett"
-                            : "Open Jackett web dashboard")
-                        .accessibilityLabel(model.language == .russian
-                            ? "Открыть веб-панель Jackett"
-                            : "Open Jackett web dashboard")
-                    }
-
-                    Picker("", selection: $model.jackettEnabled) {
-                        Text("Jackett").tag(true)
-                        Text("Off").tag(false)
-                    }
-                    .labelsHidden()
-                    .fixedSize()
-                    .onChange(of: model.jackettEnabled) { _, isEnabled in
-                        model.onJackettEnabledChanged?(isEnabled)
-                    }
+                Picker("", selection: $model.jackettEnabled) {
+                    Text("Jackett").tag(true)
+                    Text("Off").tag(false)
                 }
+                .labelsHidden()
+                .fixedSize()
                 .frame(width: pickerColumnWidth, alignment: .trailing)
+                .onChange(of: model.jackettEnabled) { _, isEnabled in
+                    model.onJackettEnabledChanged?(isEnabled)
+                }
             }
         }
     }
