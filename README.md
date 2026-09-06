@@ -94,6 +94,11 @@ downloads the latest TorrServer executable from the upstream
 
 ## Create a DMG
 
+Before packaging a public build, copy `Config/MetadataKeys.example.plist` to
+`Config/MetadataKeys.plist` and fill in the TMDB, OMDb, and Kinopoisk keys. The
+local keys file is ignored by Git. DMG packaging stops if any built-in key is
+missing or rejected by its metadata provider.
+
 ```bash
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer ./scripts/package-dmg.sh
 ```

@@ -103,29 +103,57 @@ cp "$COMPILED_ICON_DIR/Assets.car" "$RESOURCES_DIR/Assets.car"
 cp "$TORRSERVER_CACHE_PATH" "$RESOURCES_DIR/$TORRSERVER_ASSET_NAME"
 chmod 755 "$RESOURCES_DIR/$TORRSERVER_ASSET_NAME"
 
-DEFAULT_METADATA_KEYS_FILE="$HOME/Library/Application Support/TorrServer/Settings/metadata.json"
+DEFAULT_METADATA_KEYS_FILE="$PROJECT_DIR/Config/MetadataKeys.plist"
 METADATA_KEYS_SOURCE="${METADATA_KEYS_FILE:-$DEFAULT_METADATA_KEYS_FILE}"
-if [[ -f "$METADATA_KEYS_SOURCE" ]]; then
-  TMDB_METADATA_KEY="$(plutil -extract tmdbAPIKey raw "$METADATA_KEYS_SOURCE" 2>/dev/null || true)"
-  OMDB_METADATA_KEY="$(plutil -extract omdbAPIKey raw "$METADATA_KEYS_SOURCE" 2>/dev/null || true)"
-  KINOPOISK_METADATA_KEY="$(plutil -extract kinopoiskAPIKey raw "$METADATA_KEYS_SOURCE" 2>/dev/null || true)"
+REQUIRE_METADATA_KEYS="${REQUIRE_METADATA_KEYS:-0}"
+TMDB_METADATA_KEY=""
+OMDB_METADATA_KEY=""
+KINOPOISK_METADATA_KEY=""
 
-  if [[ -n "$TMDB_METADATA_KEY" || -n "$OMDB_METADATA_KEY" || -n "$KINOPOISK_METADATA_KEY" ]]; then
-    /usr/libexec/PlistBuddy -c "Add :TorrServeMetadataAPIKeys dict" "$CONTENTS_DIR/Info.plist"
-    if [[ -n "$TMDB_METADATA_KEY" ]]; then
-      /usr/libexec/PlistBuddy -c "Add :TorrServeMetadataAPIKeys:TMDB string $TMDB_METADATA_KEY" "$CONTENTS_DIR/Info.plist"
-    fi
-    if [[ -n "$OMDB_METADATA_KEY" ]]; then
-      /usr/libexec/PlistBuddy -c "Add :TorrServeMetadataAPIKeys:OMDB string $OMDB_METADATA_KEY" "$CONTENTS_DIR/Info.plist"
-    fi
-    if [[ -n "$KINOPOISK_METADATA_KEY" ]]; then
-      /usr/libexec/PlistBuddy -c "Add :TorrServeMetadataAPIKeys:Kinopoisk string $KINOPOISK_METADATA_KEY" "$CONTENTS_DIR/Info.plist"
-    fi
-  else
-    echo "Warning: built-in metadata keys are unavailable; custom-key mode will still work." >&2
+read_metadata_key() {
+  local primary_name="$1"
+  local legacy_name="$2"
+  local value
+
+  value="$(plutil -extract "$primary_name" raw "$METADATA_KEYS_SOURCE" 2>/dev/null || true)"
+  if [[ -z "$value" ]]; then
+    value="$(plutil -extract "$legacy_name" raw "$METADATA_KEYS_SOURCE" 2>/dev/null || true)"
   fi
+  printf '%s' "$value"
+}
+
+if [[ -f "$METADATA_KEYS_SOURCE" ]]; then
+  TMDB_METADATA_KEY="$(read_metadata_key TMDB tmdbAPIKey)"
+  OMDB_METADATA_KEY="$(read_metadata_key OMDB omdbAPIKey)"
+  KINOPOISK_METADATA_KEY="$(read_metadata_key Kinopoisk kinopoiskAPIKey)"
+fi
+
+MISSING_METADATA_KEYS=""
+if [[ -z "$TMDB_METADATA_KEY" ]]; then MISSING_METADATA_KEYS="$MISSING_METADATA_KEYS TMDB"; fi
+if [[ -z "$OMDB_METADATA_KEY" ]]; then MISSING_METADATA_KEYS="$MISSING_METADATA_KEYS OMDB"; fi
+if [[ -z "$KINOPOISK_METADATA_KEY" ]]; then MISSING_METADATA_KEYS="$MISSING_METADATA_KEYS Kinopoisk"; fi
+
+if [[ "$REQUIRE_METADATA_KEYS" == "1" && -n "$MISSING_METADATA_KEYS" ]]; then
+  echo "Missing required built-in metadata keys:$MISSING_METADATA_KEYS" >&2
+  echo "Create $DEFAULT_METADATA_KEYS_FILE from Config/MetadataKeys.example.plist or set METADATA_KEYS_FILE." >&2
+  exit 1
+fi
+
+if [[ -n "$TMDB_METADATA_KEY" || -n "$OMDB_METADATA_KEY" || -n "$KINOPOISK_METADATA_KEY" ]]; then
+  /usr/libexec/PlistBuddy -c "Delete :TorrServeMetadataAPIKeys" "$CONTENTS_DIR/Info.plist" 2>/dev/null || true
+  /usr/libexec/PlistBuddy -c "Add :TorrServeMetadataAPIKeys dict" "$CONTENTS_DIR/Info.plist"
+  if [[ -n "$TMDB_METADATA_KEY" ]]; then
+    /usr/libexec/PlistBuddy -c "Add :TorrServeMetadataAPIKeys:TMDB string $TMDB_METADATA_KEY" "$CONTENTS_DIR/Info.plist"
+  fi
+  if [[ -n "$OMDB_METADATA_KEY" ]]; then
+    /usr/libexec/PlistBuddy -c "Add :TorrServeMetadataAPIKeys:OMDB string $OMDB_METADATA_KEY" "$CONTENTS_DIR/Info.plist"
+  fi
+  if [[ -n "$KINOPOISK_METADATA_KEY" ]]; then
+    /usr/libexec/PlistBuddy -c "Add :TorrServeMetadataAPIKeys:Kinopoisk string $KINOPOISK_METADATA_KEY" "$CONTENTS_DIR/Info.plist"
+  fi
+  echo "Embedded built-in metadata keys from $METADATA_KEYS_SOURCE" >&2
 else
-  echo "Warning: metadata key file not found; custom-key mode will still work." >&2
+  echo "Warning: built-in metadata keys are unavailable; custom-key mode will still work." >&2
 fi
 
 chflags -R nohidden "$APP_PATH" 2>/dev/null || true

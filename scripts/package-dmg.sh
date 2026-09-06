@@ -2,7 +2,15 @@
 set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP_PATH="$("$PROJECT_DIR/scripts/build-app.sh" | tail -n 1)"
+DEFAULT_METADATA_KEYS_FILE="$PROJECT_DIR/Config/MetadataKeys.plist"
+METADATA_KEYS_SOURCE="${METADATA_KEYS_FILE:-$DEFAULT_METADATA_KEYS_FILE}"
+"$PROJECT_DIR/scripts/validate-metadata-keys.sh" "$METADATA_KEYS_SOURCE"
+APP_PATH="$(
+  METADATA_KEYS_FILE="$METADATA_KEYS_SOURCE" \
+    REQUIRE_METADATA_KEYS=1 \
+    "$PROJECT_DIR/scripts/build-app.sh" \
+    | tail -n 1
+)"
 VERSION="$(plutil -extract CFBundleShortVersionString raw "$APP_PATH/Contents/Info.plist")"
 OUTPUT_DIR="$PROJECT_DIR/dist"
 DMG_PATH="$OUTPUT_DIR/TorrServer-$VERSION-macOS-arm64.dmg"
@@ -12,6 +20,17 @@ STAGING_DIR="$TEMP_DIR/staging"
 MOUNT_DIR="/Volumes/$VOLUME_NAME"
 RW_DMG="$TEMP_DIR/TorrServer-rw.dmg"
 DEVICE=""
+
+for metadata_provider in TMDB OMDB Kinopoisk; do
+  embedded_key="$(
+    plutil -extract "TorrServeMetadataAPIKeys.$metadata_provider" raw \
+      "$APP_PATH/Contents/Info.plist" 2>/dev/null || true
+  )"
+  if [[ -z "$embedded_key" ]]; then
+    echo "DMG packaging stopped: missing built-in $metadata_provider API key." >&2
+    exit 1
+  fi
+done
 
 cleanup() {
   if [[ -n "$DEVICE" ]]; then

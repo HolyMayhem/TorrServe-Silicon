@@ -20,9 +20,14 @@ struct CompactLibraryFooterHeightKey: PreferenceKey {
 struct LibraryKeyboardShortcutMonitor: NSViewRepresentable {
     let onDelete: () -> Bool
     let onReturn: () -> Bool
+    let onPaste: () -> Bool
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onDelete: onDelete, onReturn: onReturn)
+        Coordinator(
+            onDelete: onDelete,
+            onReturn: onReturn,
+            onPaste: onPaste
+        )
     }
 
     func makeNSView(context: Context) -> WindowTrackingView {
@@ -36,6 +41,7 @@ struct LibraryKeyboardShortcutMonitor: NSViewRepresentable {
     func updateNSView(_ nsView: WindowTrackingView, context: Context) {
         context.coordinator.onDelete = onDelete
         context.coordinator.onReturn = onReturn
+        context.coordinator.onPaste = onPaste
         context.coordinator.window = nsView.window
     }
 
@@ -43,11 +49,17 @@ struct LibraryKeyboardShortcutMonitor: NSViewRepresentable {
         weak var window: NSWindow?
         var onDelete: () -> Bool
         var onReturn: () -> Bool
+        var onPaste: () -> Bool
         private var eventMonitor: Any? = nil
 
-        init(onDelete: @escaping () -> Bool, onReturn: @escaping () -> Bool) {
+        init(
+            onDelete: @escaping () -> Bool,
+            onReturn: @escaping () -> Bool,
+            onPaste: @escaping () -> Bool
+        ) {
             self.onDelete = onDelete
             self.onReturn = onReturn
+            self.onPaste = onPaste
             eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) {
                 [weak self] event in
                 self?.handle(event) ?? event
@@ -62,9 +74,23 @@ struct LibraryKeyboardShortcutMonitor: NSViewRepresentable {
 
         private func handle(_ event: NSEvent) -> NSEvent? {
             guard event.window === window,
-                  !isEditingText(in: event.window),
-                  event.modifierFlags.intersection([.command, .control, .option]).isEmpty
+                  !isEditingText(in: event.window)
             else {
+                return event
+            }
+
+            if Self.isPasteShortcut(
+                keyCode: event.keyCode,
+                modifierFlags: event.modifierFlags
+            ) {
+                return onPaste() ? nil : event
+            }
+
+            guard event.modifierFlags.intersection([
+                .command,
+                .control,
+                .option
+            ]).isEmpty else {
                 return event
             }
 
@@ -76,6 +102,19 @@ struct LibraryKeyboardShortcutMonitor: NSViewRepresentable {
             default:
                 return event
             }
+        }
+
+        static func isPasteShortcut(
+            keyCode: UInt16,
+            modifierFlags: NSEvent.ModifierFlags
+        ) -> Bool {
+            let relevantModifiers = modifierFlags.intersection([
+                .command,
+                .control,
+                .option,
+                .shift
+            ])
+            return keyCode == 9 && relevantModifiers == .command
         }
 
         private func isEditingText(in window: NSWindow?) -> Bool {

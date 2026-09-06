@@ -59,7 +59,8 @@ struct LibraryView: View {
         .background {
             LibraryKeyboardShortcutMonitor(
                 onDelete: handleDeleteKey,
-                onReturn: handleReturnKey
+                onReturn: handleReturnKey,
+                onPaste: handlePaste
             )
             .frame(width: 0, height: 0)
         }
@@ -591,5 +592,30 @@ struct LibraryView: View {
             return false
         }
         return model.playSelectedFirstFile(language: mainModel.language)
+    }
+
+    private func handlePaste() -> Bool {
+        guard mainModel.canStop,
+              !model.isAdding,
+              !model.showsMagnetSheet,
+              model.pendingDeletionTorrents.isEmpty,
+              let magnetLink = LibraryPasteboard.magnetLink(
+                  from: NSPasteboard.general.string(forType: .string)
+              ) else {
+            return false
+        }
+
+        model.magnetInput = magnetLink
+        model.addMagnet(language: mainModel.language)
+        return true
+    }
+}
+
+enum LibraryPasteboard {
+    static func magnetLink(from value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmedValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedValue.lowercased().hasPrefix("magnet:?") else { return nil }
+        return trimmedValue
     }
 }

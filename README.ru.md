@@ -97,6 +97,11 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer ./scripts/build-app.sh
 
 ## Создание DMG
 
+Перед упаковкой публичной сборки скопируйте `Config/MetadataKeys.example.plist`
+в `Config/MetadataKeys.plist` и заполните ключи TMDB, OMDb и КиноПоиска. Локальный
+файл с ключами игнорируется Git. Упаковка DMG останавливается, если хотя бы один
+встроенный ключ отсутствует или отклоняется сервисом метаданных.
+
 ```bash
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer ./scripts/package-dmg.sh
 ```
