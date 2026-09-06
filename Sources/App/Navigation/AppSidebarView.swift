@@ -413,13 +413,6 @@ struct ServerStatusSidebarView: View {
 
     private var texts: Texts { Texts(language: mainModel.language) }
 
-    private var cacheText: String {
-        ByteCountFormatter.string(
-            fromByteCount: mainModel.storage.cacheUsed,
-            countStyle: .memory
-        )
-    }
-
     private var speedText: String {
         guard mainModel.canStop else {
             return SpeedFormatter.string(bytesPerSecond: 0, unit: mainModel.speedUnit)
@@ -427,10 +420,6 @@ struct ServerStatusSidebarView: View {
         return mainModel.currentSpeedText.isEmpty
             ? SpeedFormatter.string(bytesPerSecond: 0, unit: mainModel.speedUnit)
             : mainModel.currentSpeedText
-    }
-
-    private var cacheTitle: String {
-        mainModel.language == .russian ? "Кеш" : "Cache"
     }
 
     private var speedHelp: String {
@@ -508,13 +497,10 @@ struct ServerStatusSidebarView: View {
                             .frame(width: 30, height: 30)
                     }
                 }
-                .buttonStyle(.plain)
+                .liquidGlassControl()
+                .buttonBorderShape(.circle)
+                .tint(mainModel.effectiveStatusKind.color)
                 .foregroundStyle(mainModel.effectiveStatusKind.color)
-                .background(.thinMaterial, in: Circle())
-                .overlay {
-                    Circle()
-                        .stroke(mainModel.effectiveStatusKind.color.opacity(0.35), lineWidth: 1)
-                }
                 .contentShape(Circle())
                 .disabled(
                     mainModel.torrServerUpdateActivity != nil
@@ -555,23 +541,10 @@ struct ServerStatusSidebarView: View {
                     Spacer(minLength: 0)
                 }
                 .padding(.horizontal, 2)
-
-                HStack(spacing: 6) {
-                    Image(systemName: "internaldrive")
-                        .foregroundStyle(.secondary)
-                    Text(cacheTitle)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Text(cacheText)
-                        .monospacedDigit()
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                }
-                .font(.caption)
             }
         }
         .padding(12)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .liquidGlassPanel(cornerRadius: 14)
         .help(mainModel.serverConnectionIssue ?? statusTitle)
     }
 
