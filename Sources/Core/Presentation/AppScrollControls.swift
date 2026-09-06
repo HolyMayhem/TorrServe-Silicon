@@ -101,6 +101,21 @@ struct AppScrollIndicator: View {
 }
 
 struct AppNativeScrollIndicatorHider: NSViewRepresentable {
+    static func removeReservedVerticalScrollerSpace(from scrollView: NSScrollView) {
+        // With the macOS legacy scroller style, AppKit reserves a full-width
+        // trailing gutter before SwiftUI hides the native indicator. Switching
+        // to overlay first guarantees that no content width is consumed even
+        // if SwiftUI briefly recreates the scroller during layout.
+        scrollView.scrollerStyle = .overlay
+        scrollView.autohidesScrollers = true
+        scrollView.hasVerticalScroller = false
+        scrollView.verticalScroller?.removeFromSuperview()
+        scrollView.verticalScroller = nil
+        scrollView.tile()
+        scrollView.needsLayout = true
+        scrollView.layoutSubtreeIfNeeded()
+    }
+
     func makeNSView(context: Context) -> LocatorView {
         let view = LocatorView()
         view.scheduleUpdates()
@@ -153,12 +168,8 @@ struct AppNativeScrollIndicatorHider: NSViewRepresentable {
                 }
 
             guard let candidate else { return }
-            candidate.hasVerticalScroller = false
-            candidate.verticalScroller?.removeFromSuperview()
-            candidate.verticalScroller = nil
-            candidate.tile()
-            candidate.needsLayout = true
-            candidate.layoutSubtreeIfNeeded()
+            AppNativeScrollIndicatorHider
+                .removeReservedVerticalScrollerSpace(from: candidate)
         }
 
         private static func frameDistance(_ left: CGRect, _ right: CGRect) -> CGFloat {
