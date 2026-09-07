@@ -17,11 +17,6 @@ let package = Package(
         .executableTarget(
             name: "TorrServerManager",
             path: "Sources"
-        ),
-        .testTarget(
-            name: "TorrServerManagerTests",
-            dependencies: ["TorrServerManager"],
-            path: "Tests/TorrServerManagerTests"
         )
     ]
 )

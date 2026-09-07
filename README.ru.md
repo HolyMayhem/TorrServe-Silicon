@@ -86,7 +86,6 @@ Icon Composer.
 ```bash
 git clone https://github.com/HolyMayhem/TorrServe-Silicon.git
 cd TorrServe-Silicon
-DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer ./scripts/build-app.sh
 ```
 
@@ -114,7 +113,6 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer ./scripts/package-dmg.s
 - `Sources/App` — жизненный цикл приложения, окно, сайдбар и общее состояние.
 - `Sources/Core` — API TorrServer, форматирование, UI- и системные компоненты.
 - `Sources/Features` — библиотека, поиск, метаданные, сервер, настройки и menu bar.
-- `Tests/TorrServerManagerTests` — тесты сервисов, моделей, форматирования и настроек.
 - `scripts` — сборка приложения, компиляция иконки и упаковка DMG.
 
 ## Благодарности

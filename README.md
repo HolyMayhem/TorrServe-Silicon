@@ -2,10 +2,10 @@
 
 **English** | [Русский](README.ru.md)
 
-A native SwiftUI controller for TorrServer on Apple Silicon Macs. It combines
-server management, torrent search, a media library, metadata, playback, and
-menu bar controls in one macOS app—without requiring Terminal or the standard
-TorrServer Web UI for everyday use.
+A native SwiftUI app for managing TorrServer on Apple Silicon Macs. It brings
+together server controls, torrent search, a media library, metadata, playback,
+and menu bar features. Everyday use does not require Terminal or the standard
+TorrServer Web UI.
 
 The interface follows modern macOS conventions and uses native Liquid Glass on
 macOS 26, with compatible system materials on earlier supported versions.
@@ -15,10 +15,10 @@ macOS 26, with compatible system materials on earlier supported versions.
 - Start, stop, update, configure, and diagnose TorrServer.
 - Add magnet links and `.torrent` files directly to the library.
 - Browse the library in compact list, poster grid, or detailed card layouts.
-- Search public indexers through an optional Jackett connection.
+- Search for torrents through an optional Jackett connection.
 - Fetch posters, descriptions, genres, release dates, runtimes, and ratings
   from TMDB, OMDb, Kinopoisk, and AniList.
-- Configure metadata lookup order and use built-in or custom API keys.
+- Configure metadata lookup order and use either built-in or custom API keys.
 - Translate English descriptions into Russian with Apple Translation.
 - Play media in QuickTime Player, IINA, VLC, Infuse, or the default macOS app.
 - Monitor TorrServer from the menu bar, including live stream speed, recent
@@ -83,7 +83,6 @@ Composer support.
 ```bash
 git clone https://github.com/HolyMayhem/TorrServe-Silicon.git
 cd TorrServe-Silicon
-DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer ./scripts/build-app.sh
 ```
 
@@ -111,7 +110,6 @@ Local builds use ad-hoc signing and are not notarized by Apple.
 - `Sources/App` — application lifecycle, window, sidebar, and shared state.
 - `Sources/Core` — TorrServer API, formatting, presentation, and system helpers.
 - `Sources/Features` — Library, Search, Metadata, Server, Settings, and Menu Bar.
-- `Tests/TorrServerManagerTests` — service, model, formatting, and preference tests.
 - `scripts` — app build, icon compilation, and DMG packaging.
 
 ## Acknowledgements
