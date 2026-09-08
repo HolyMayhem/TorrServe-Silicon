@@ -63,6 +63,7 @@ extension AppDelegate {
         mainWindowModel.onAutoUpdateTorrServerChanged = { [weak self] enabled in
             self?.setAutoUpdateTorrServer(enabled)
         }
+        appUpdateController.bind(to: mainWindowModel)
         mainWindowModel.onMenuBarPreferencesChanged = { [weak self] preferences in
             self?.setMenuBarPreferences(preferences)
         }
@@ -209,6 +210,15 @@ extension AppDelegate {
             keyEquivalent: ""
         )
         aboutItem.target = self
+        appMenu.addItem(.separator())
+        let checkForUpdatesItem = appMenu.addItem(
+            withTitle: currentLanguage == .russian
+                ? "Проверить обновления…"
+                : "Check for Updates…",
+            action: #selector(AppUpdateController.checkForUpdates(_:)),
+            keyEquivalent: ""
+        )
+        checkForUpdatesItem.target = appUpdateController
         appMenu.addItem(.separator())
         appMenu.addItem(
             withTitle: texts.quit,

@@ -75,6 +75,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     let launchAtLoginController = LaunchAtLoginController()
     let speedMonitor = TorrServerSpeedMonitor()
     let notificationController = NotificationController()
+    let appUpdateController = AppUpdateController()
     let releaseChecker = TorrServerReleaseChecker()
     let nativeTorrServerAPI = NativeTorrServerAPI()
     lazy var diagnosticsService = TorrServerDiagnosticsService(api: nativeTorrServerAPI)
@@ -117,6 +118,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         buildStatusItem()
         buildWindow()
         applyLanguage()
+        appUpdateController.start()
         notificationController.synchronizeEnabledState { [weak self] enabled in
             self?.mainWindowModel.notificationsEnabled = enabled
         }

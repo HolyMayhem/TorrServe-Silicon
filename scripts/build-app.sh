@@ -8,6 +8,7 @@ APP_PATH="$APP_DIR/$APP_NAME"
 CONTENTS_DIR="$APP_PATH/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
+FRAMEWORKS_DIR="$CONTENTS_DIR/Frameworks"
 GENERATED_DIR="$PROJECT_DIR/build/generated"
 COMPILED_ICON_DIR="$GENERATED_DIR/AppIcon"
 PARTIAL_INFO_PLIST="$GENERATED_DIR/AppIcon-Info.plist"
@@ -42,11 +43,22 @@ BIN_DIR="$(
   DEVELOPER_DIR="$XCODE_DEVELOPER_DIR" \
     swift build -c release --package-path "$PROJECT_DIR" --show-bin-path
 )"
+SPARKLE_FRAMEWORK_PATH="$BIN_DIR/Sparkle.framework"
+
+if [[ ! -d "$SPARKLE_FRAMEWORK_PATH" ]]; then
+  echo "SwiftPM did not produce Sparkle.framework at $SPARKLE_FRAMEWORK_PATH" >&2
+  exit 1
+fi
 
 rm -rf "$APP_PATH"
 rm -rf "$COMPILED_ICON_DIR"
 rm -f "$GENERATED_DIR/AppIconSystemDark.icns" "$PARTIAL_INFO_PLIST"
-mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$COMPILED_ICON_DIR" "$TORRSERVER_CACHE_DIR"
+mkdir -p \
+  "$MACOS_DIR" \
+  "$RESOURCES_DIR" \
+  "$FRAMEWORKS_DIR" \
+  "$COMPILED_ICON_DIR" \
+  "$TORRSERVER_CACHE_DIR"
 
 if [[ -n "${TORRSERVER_EXECUTABLE:-}" ]]; then
   if [[ ! -f "$TORRSERVER_EXECUTABLE" ]]; then
@@ -101,6 +113,7 @@ cp "$PROJECT_DIR/Resources/PkgInfo" "$CONTENTS_DIR/PkgInfo"
 cp "$COMPILED_ICON_DIR/AppIcon.icns" "$RESOURCES_DIR/AppIcon.icns"
 cp "$COMPILED_ICON_DIR/Assets.car" "$RESOURCES_DIR/Assets.car"
 cp "$TORRSERVER_CACHE_PATH" "$RESOURCES_DIR/$TORRSERVER_ASSET_NAME"
+ditto --norsrc "$SPARKLE_FRAMEWORK_PATH" "$FRAMEWORKS_DIR/Sparkle.framework"
 chmod 755 "$RESOURCES_DIR/$TORRSERVER_ASSET_NAME"
 
 DEFAULT_METADATA_KEYS_FILE="$PROJECT_DIR/Config/MetadataKeys.plist"

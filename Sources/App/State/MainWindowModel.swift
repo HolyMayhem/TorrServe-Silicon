@@ -121,6 +121,9 @@ final class MainWindowModel: ObservableObject {
     @Published var launchAtLogin = false
     @Published var autoStartServer = false
     @Published var autoUpdateTorrServer = false
+    @Published var automaticallyChecksForAppUpdates = false
+    @Published var automaticallyDownloadsAppUpdates = false
+    @Published var canCheckForAppUpdates = false
     @Published var menuBarPreferences = MenuBarPreferences.defaults
     @Published var hideDockIcon = false
     @Published var notificationsEnabled = false
@@ -178,6 +181,9 @@ final class MainWindowModel: ObservableObject {
     var onLaunchAtLoginChanged: ((Bool) -> Void)?
     var onAutoStartChanged: ((Bool) -> Void)?
     var onAutoUpdateTorrServerChanged: ((Bool) -> Void)?
+    var onAutomaticallyChecksForAppUpdatesChanged: ((Bool) -> Void)?
+    var onAutomaticallyDownloadsAppUpdatesChanged: ((Bool) -> Void)?
+    var onCheckForAppUpdates: (() -> Void)?
     var onMenuBarPreferencesChanged: ((MenuBarPreferences) -> Void)?
     var onHideDockIconChanged: ((Bool) -> Void)?
     var onNotificationsChanged: ((Bool) -> Void)?

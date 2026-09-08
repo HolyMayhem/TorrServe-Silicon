@@ -16,3 +16,5 @@ Package.resolved
 
 # Release keys are embedded locally and must never be committed
 /Config/MetadataKeys.plist
+/Config/SparklePrivateKey*
+/.release-secrets/

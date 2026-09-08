@@ -28,6 +28,7 @@ struct SettingsView: View {
                 )
 
                 applicationSection
+                appUpdatesSection
                 menuBarSection
                 interfaceSection
                 metadataSection
@@ -139,6 +140,43 @@ struct SettingsView: View {
             }
             Divider()
             menuBarOrderRow
+        }
+    }
+
+    private var appUpdatesSection: some View {
+        settingsSection(
+            title: model.language == .russian
+                ? "Обновления TorrServe Silicon"
+                : "TorrServe Silicon Updates",
+            footer: model.language == .russian
+                ? "Эти настройки обновляют приложение целиком. Обновление движка TorrServer настраивается отдельно."
+                : "These settings update the whole app. TorrServer engine updates are configured separately."
+        ) {
+            toggleRow(
+                model.language == .russian
+                    ? "Автоматически проверять обновления"
+                    : "Automatically check for updates",
+                keyPath: \.automaticallyChecksForAppUpdates,
+                callback: model.onAutomaticallyChecksForAppUpdatesChanged
+            )
+            Divider()
+            toggleRow(
+                model.language == .russian
+                    ? "Автоматически загружать и устанавливать"
+                    : "Automatically download and install",
+                keyPath: \.automaticallyDownloadsAppUpdates,
+                callback: model.onAutomaticallyDownloadsAppUpdatesChanged
+            )
+            .disabled(!model.automaticallyChecksForAppUpdates)
+            Divider()
+            settingRow(
+                model.language == .russian ? "Обновление приложения" : "Application update"
+            ) {
+                Button(model.language == .russian ? "Проверить сейчас" : "Check Now") {
+                    model.onCheckForAppUpdates?()
+                }
+                .disabled(!model.canCheckForAppUpdates)
+            }
         }
     }
 

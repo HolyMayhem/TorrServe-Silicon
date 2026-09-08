@@ -649,10 +649,10 @@ extension AppDelegate {
     @objc func showAboutPanel(_ sender: Any?) {
         let version = Bundle.main.object(
             forInfoDictionaryKey: "CFBundleShortVersionString"
-        ) as? String ?? "2.6.9"
+        ) as? String ?? "2.7.0"
         let build = Bundle.main.object(
             forInfoDictionaryKey: "CFBundleVersion"
-        ) as? String ?? "39"
+        ) as? String ?? "40"
         let credits = NSAttributedString(
             string: texts.aboutCredits,
             attributes: [
