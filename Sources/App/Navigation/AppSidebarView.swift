@@ -218,14 +218,7 @@ private struct SidebarUpdateNotice: View {
             }
             .padding(9)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                Color.orange.opacity(0.09),
-                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(Color.orange.opacity(0.14), lineWidth: 1)
-            }
+            .liquidGlassPanel(cornerRadius: 14, interactive: true)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
