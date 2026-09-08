@@ -3,7 +3,7 @@ set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 INFO_PLIST="$PROJECT_DIR/Resources/Info.plist"
-SPARKLE_ACCOUNT="${SPARKLE_ACCOUNT:-com.holymayhem.torrserve-silicon}"
+SPARKLE_ACCOUNT="${SPARKLE_ACCOUNT:-com.holymayhem.torrserve-silicon-updates}"
 SPARKLE_TOOLS_DIR="${SPARKLE_TOOLS_DIR:-$PROJECT_DIR/.build/artifacts/sparkle/Sparkle/bin}"
 GENERATE_KEYS="$SPARKLE_TOOLS_DIR/generate_keys"
 GENERATE_APPCAST="$SPARKLE_TOOLS_DIR/generate_appcast"

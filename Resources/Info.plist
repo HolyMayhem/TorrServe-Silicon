@@ -40,7 +40,7 @@
 	<key>SUFeedURL</key>
 	<string>https://raw.githubusercontent.com/HolyMayhem/TorrServe-Silicon/main/appcast.xml</string>
 	<key>SUPublicEDKey</key>
-	<string>SG21kG1FWTmEuVsbLMtg3UZ9b6qdsjYTfUBxke8/rF0=</string>
+	<string>DO9Jw+zHchS9MfrKdSyknT84MddYTGa718dTugXKxTI=</string>
 	<key>SUShowReleaseNotes</key>
 	<true/>
 	<key>SUVerifyUpdateBeforeExtraction</key>

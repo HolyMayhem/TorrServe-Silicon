@@ -12,7 +12,7 @@ Resolve the Swift package and generate the signing key:
 ```bash
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift package resolve
 .build/artifacts/sparkle/Sparkle/bin/generate_keys \
-  --account com.holymayhem.torrserve-silicon
+  --account com.holymayhem.torrserve-silicon-updates
 ```
 
 The private key stays in the macOS login Keychain. Only the public key belongs
@@ -23,7 +23,7 @@ key; never commit it to Git or attach it to a GitHub release.
 umask 077
 mkdir -p .release-secrets
 .build/artifacts/sparkle/Sparkle/bin/generate_keys \
-  --account com.holymayhem.torrserve-silicon \
+  --account com.holymayhem.torrserve-silicon-updates \
   -x .release-secrets/sparkle-private-key
 ```
 
