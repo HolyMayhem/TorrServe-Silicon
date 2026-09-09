@@ -22,6 +22,21 @@ struct OfflineDownloadProgress: Equatable, Sendable {
     }
 }
 
+struct OfflineDownloadCheckpoint: Equatable, Sendable {
+    let request: OfflineDownloadRequest
+    let streamIdentity: OfflineDownloadStreamIdentity
+    let bytesWritten: Int64
+
+    var progress: OfflineDownloadProgress {
+        OfflineDownloadProgress(
+            destinationURL: request.destinationURL,
+            partialFileURL: request.partialFileURL,
+            bytesWritten: bytesWritten,
+            totalBytes: request.expectedLength
+        )
+    }
+}
+
 enum OfflineDownloadFailure: Error, Equatable, Sendable {
     case invalidHTTPResponse
     case contract(OfflineDownloadHTTPContractError)
@@ -53,30 +68,49 @@ extension OfflineDownloadFailure: LocalizedError {
 enum OfflineDownloadState: Equatable, Sendable {
     case idle
     case preparing(OfflineDownloadRequest)
+    case resuming(OfflineDownloadCheckpoint)
     case downloading(OfflineDownloadProgress)
+    case pausing(OfflineDownloadProgress)
+    case paused(OfflineDownloadCheckpoint)
     case cancelling(OfflineDownloadProgress?)
     case completed(URL)
     case cancelled
-    case failed(OfflineDownloadFailure, partialFileURL: URL?)
+    case failed(OfflineDownloadFailure, checkpoint: OfflineDownloadCheckpoint?)
 
     var isActive: Bool {
         switch self {
-        case .preparing, .downloading, .cancelling:
+        case .preparing, .resuming, .downloading, .pausing, .cancelling:
             return true
-        case .idle, .completed, .cancelled, .failed:
+        case .idle, .paused, .completed, .cancelled, .failed:
             return false
+        }
+    }
+
+    var resumableCheckpoint: OfflineDownloadCheckpoint? {
+        switch self {
+        case .paused(let checkpoint):
+            return checkpoint
+        case .failed(_, let checkpoint):
+            return checkpoint
+        case .idle, .preparing, .resuming, .downloading, .pausing,
+             .cancelling, .completed, .cancelled:
+            return nil
         }
     }
 }
 
 enum OfflineDownloadStartError: Error, Equatable, Sendable {
     case anotherDownloadIsActive
+    case resumableDownloadExists
+    case noResumableDownload
     case invalidSourceURL
     case invalidDestinationURL
     case invalidExpectedLength(Int64)
     case destinationDirectoryMissing(URL)
     case destinationAlreadyExists(URL)
     case partialFileAlreadyExists(URL)
+    case partialFileMissing(URL)
+    case partialFileSizeMismatch(expected: Int64, actual: Int64)
 }
 
 extension OfflineDownloadStartError: LocalizedError {
@@ -84,6 +118,10 @@ extension OfflineDownloadStartError: LocalizedError {
         switch self {
         case .anotherDownloadIsActive:
             return "Another offline download is already active."
+        case .resumableDownloadExists:
+            return "Pause, resume, or cancel the existing offline download first."
+        case .noResumableDownload:
+            return "There is no paused or interrupted download to resume."
         case .invalidSourceURL:
             return "The TorrServer stream URL is invalid."
         case .invalidDestinationURL:
@@ -96,6 +134,10 @@ extension OfflineDownloadStartError: LocalizedError {
             return "A file already exists at the destination: \(url.path)"
         case .partialFileAlreadyExists(let url):
             return "A partial download already exists: \(url.path)"
+        case .partialFileMissing(let url):
+            return "The partial download is missing: \(url.path)"
+        case .partialFileSizeMismatch(let expected, let actual):
+            return "The partial file contains \(actual) bytes; expected \(expected)."
         }
     }
 }

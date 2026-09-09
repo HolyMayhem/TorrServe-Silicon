@@ -49,5 +49,22 @@ the exact final byte count. Only then does it close and atomically move the
 partial file to the requested destination.
 
 Cancellation removes the partial file. Network and filesystem failures retain
-a non-empty partial file for the resume implementation in the next stage. The
-manager never overwrites an existing destination or partial file.
+a non-empty partial file. The manager never overwrites an existing destination
+or partial file.
+
+## Stage 3 pause and in-session resume
+
+`OfflineDownloadManager` now keeps an in-memory checkpoint containing the
+request, the strong ETag, and the exact number of bytes written. Pausing closes
+and synchronizes the partial file without deleting it. Resuming first verifies
+that the partial file still has the checkpoint's exact size, then requests only
+the remaining bytes with `Range: bytes=N-` and the original ETag in `If-Range`.
+
+The response is validated before the partial file is opened for appending. A
+full `200` response, changed ETag, incorrect `Content-Range`, or incorrect
+remaining `Content-Length` therefore fails safely without adding bytes to the
+partial file. Cancelling either an active or paused transfer deletes the partial
+file.
+
+Checkpoints currently live only for the running application session. Persisting
+and restoring downloads after an application restart belongs to Stage 4.

@@ -17,20 +17,81 @@ final class OfflineDownloadManager: ObservableObject {
         guard transfer == nil else {
             throw OfflineDownloadStartError.anotherDownloadIsActive
         }
-        try validate(request)
+        guard state.resumableCheckpoint == nil else {
+            throw OfflineDownloadStartError.resumableDownloadExists
+        }
 
-        state = .preparing(request)
+        try validateCommonRequestFields(request)
+        try validateNewDownloadFiles(request)
+        beginTransfer(request: request, checkpoint: nil)
+    }
+
+    func pause() {
+        guard let transfer,
+              case .downloading(let progress) = state else {
+            return
+        }
+
+        state = .pausing(progress)
+        transfer.pause()
+    }
+
+    func resume() throws {
+        guard transfer == nil else {
+            throw OfflineDownloadStartError.anotherDownloadIsActive
+        }
+        guard let checkpoint = state.resumableCheckpoint else {
+            throw OfflineDownloadStartError.noResumableDownload
+        }
+
+        try validateCheckpoint(checkpoint)
+        beginTransfer(request: checkpoint.request, checkpoint: checkpoint)
+    }
+
+    func cancel() {
+        if let transfer {
+            state = .cancelling(activeProgress)
+            transfer.cancel()
+            return
+        }
+
+        guard let checkpoint = state.resumableCheckpoint else { return }
+        do {
+            if FileManager.default.fileExists(atPath: checkpoint.request.partialFileURL.path) {
+                try FileManager.default.removeItem(at: checkpoint.request.partialFileURL)
+            }
+            state = .cancelled
+        } catch {
+            state = .failed(
+                .fileSystem(error.localizedDescription),
+                checkpoint: checkpoint
+            )
+        }
+    }
+
+    func reset() {
+        guard transfer == nil, state.resumableCheckpoint == nil else { return }
+        state = .idle
+    }
+
+    private func beginTransfer(
+        request: OfflineDownloadRequest,
+        checkpoint: OfflineDownloadCheckpoint?
+    ) {
+        if let checkpoint {
+            state = .resuming(checkpoint)
+        } else {
+            state = .preparing(request)
+        }
+
         let newTransferID = UUID()
         let newTransfer = OfflineDownloadTransfer(
             request: request,
+            checkpoint: checkpoint,
             sessionConfiguration: sessionConfiguration
         ) { [weak self] event in
             DispatchQueue.main.async { [weak self] in
-                self?.handle(
-                    event,
-                    transferID: newTransferID,
-                    request: request
-                )
+                self?.handle(event, transferID: newTransferID)
             }
         }
         transferID = newTransferID
@@ -38,24 +99,9 @@ final class OfflineDownloadManager: ObservableObject {
         newTransfer.start()
     }
 
-    func cancel() {
-        guard let transfer else { return }
-        let progress: OfflineDownloadProgress?
-        if case .downloading(let currentProgress) = state {
-            progress = currentProgress
-        } else {
-            progress = nil
-        }
-        state = .cancelling(progress)
-        transfer.cancel()
-    }
-
-    func reset() {
-        guard transfer == nil else { return }
-        state = .idle
-    }
-
-    private func validate(_ request: OfflineDownloadRequest) throws {
+    private func validateCommonRequestFields(
+        _ request: OfflineDownloadRequest
+    ) throws {
         guard let scheme = request.sourceURL.scheme?.lowercased(),
               scheme == "http" || scheme == "https" else {
             throw OfflineDownloadStartError.invalidSourceURL
@@ -69,13 +115,20 @@ final class OfflineDownloadManager: ObservableObject {
             throw OfflineDownloadStartError.invalidExpectedLength(request.expectedLength)
         }
 
-        let fileManager = FileManager.default
         let directoryURL = request.destinationURL.deletingLastPathComponent()
         var isDirectory: ObjCBool = false
-        guard fileManager.fileExists(atPath: directoryURL.path, isDirectory: &isDirectory),
-              isDirectory.boolValue else {
+        guard FileManager.default.fileExists(
+            atPath: directoryURL.path,
+            isDirectory: &isDirectory
+        ), isDirectory.boolValue else {
             throw OfflineDownloadStartError.destinationDirectoryMissing(directoryURL)
         }
+    }
+
+    private func validateNewDownloadFiles(
+        _ request: OfflineDownloadRequest
+    ) throws {
+        let fileManager = FileManager.default
         guard !fileManager.fileExists(atPath: request.destinationURL.path) else {
             throw OfflineDownloadStartError.destinationAlreadyExists(request.destinationURL)
         }
@@ -84,86 +137,166 @@ final class OfflineDownloadManager: ObservableObject {
         }
     }
 
+    private func validateCheckpoint(
+        _ checkpoint: OfflineDownloadCheckpoint
+    ) throws {
+        let request = checkpoint.request
+        try validateCommonRequestFields(request)
+
+        guard checkpoint.streamIdentity.contentLength == request.expectedLength else {
+            throw OfflineDownloadStartError.invalidExpectedLength(
+                checkpoint.streamIdentity.contentLength
+            )
+        }
+        guard checkpoint.bytesWritten >= 0,
+              checkpoint.bytesWritten < request.expectedLength else {
+            throw OfflineDownloadStartError.partialFileSizeMismatch(
+                expected: request.expectedLength,
+                actual: checkpoint.bytesWritten
+            )
+        }
+        guard !FileManager.default.fileExists(atPath: request.destinationURL.path) else {
+            throw OfflineDownloadStartError.destinationAlreadyExists(request.destinationURL)
+        }
+
+        var isDirectory: ObjCBool = false
+        let partialExists = FileManager.default.fileExists(
+            atPath: request.partialFileURL.path,
+            isDirectory: &isDirectory
+        )
+        if checkpoint.bytesWritten > 0, !partialExists {
+            throw OfflineDownloadStartError.partialFileMissing(request.partialFileURL)
+        }
+        if partialExists {
+            guard !isDirectory.boolValue else {
+                throw OfflineDownloadStartError.invalidDestinationURL
+            }
+            let actualSize = try partialFileSize(at: request.partialFileURL)
+            guard actualSize == checkpoint.bytesWritten else {
+                throw OfflineDownloadStartError.partialFileSizeMismatch(
+                    expected: checkpoint.bytesWritten,
+                    actual: actualSize
+                )
+            }
+        }
+    }
+
+    private func partialFileSize(at url: URL) throws -> Int64 {
+        do {
+            let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+            guard let size = attributes[.size] as? NSNumber else {
+                throw OfflineDownloadStartError.partialFileSizeMismatch(
+                    expected: 0,
+                    actual: -1
+                )
+            }
+            return size.int64Value
+        } catch let error as OfflineDownloadStartError {
+            throw error
+        } catch {
+            throw OfflineDownloadStartError.partialFileMissing(url)
+        }
+    }
+
     private func handle(
         _ event: OfflineDownloadTransfer.Event,
-        transferID: UUID,
-        request: OfflineDownloadRequest
+        transferID: UUID
     ) {
         guard self.transferID == transferID else { return }
 
         switch event {
-        case .responseAccepted:
-            guard !isCancelling else { return }
-            state = .downloading(progress(for: request, bytesWritten: 0))
-        case .progress(let bytesWritten):
-            guard !isCancelling else { return }
-            state = .downloading(progress(for: request, bytesWritten: bytesWritten))
-        case .completed:
-            transfer = nil
-            self.transferID = nil
-            state = .completed(request.destinationURL)
+        case .responseAccepted(let checkpoint), .progress(let checkpoint):
+            guard !isStopping else { return }
+            state = .downloading(checkpoint.progress)
+        case .paused(let checkpoint):
+            clearTransfer()
+            state = .paused(checkpoint)
+        case .completed(let destinationURL):
+            clearTransfer()
+            state = .completed(destinationURL)
         case .cancelled:
-            transfer = nil
-            self.transferID = nil
+            clearTransfer()
             state = .cancelled
-        case .failed(let failure, let partialFileURL):
-            transfer = nil
-            self.transferID = nil
-            state = .failed(failure, partialFileURL: partialFileURL)
+        case .failed(let failure, let checkpoint):
+            clearTransfer()
+            state = .failed(failure, checkpoint: checkpoint)
         }
     }
 
-    private var isCancelling: Bool {
-        if case .cancelling = state { return true }
-        return false
+    private var activeProgress: OfflineDownloadProgress? {
+        switch state {
+        case .downloading(let progress), .pausing(let progress):
+            return progress
+        case .resuming(let checkpoint):
+            return checkpoint.progress
+        case .idle, .preparing, .paused, .cancelling,
+             .completed, .cancelled, .failed:
+            return nil
+        }
     }
 
-    private func progress(
-        for request: OfflineDownloadRequest,
-        bytesWritten: Int64
-    ) -> OfflineDownloadProgress {
-        OfflineDownloadProgress(
-            destinationURL: request.destinationURL,
-            partialFileURL: request.partialFileURL,
-            bytesWritten: bytesWritten,
-            totalBytes: request.expectedLength
-        )
+    private var isStopping: Bool {
+        switch state {
+        case .pausing, .cancelling:
+            return true
+        case .idle, .preparing, .resuming, .downloading, .paused,
+             .completed, .cancelled, .failed:
+            return false
+        }
+    }
+
+    private func clearTransfer() {
+        transfer = nil
+        transferID = nil
     }
 }
 
 private final class OfflineDownloadTransfer: NSObject, URLSessionDataDelegate {
     enum Event: Sendable {
-        case responseAccepted(OfflineDownloadStreamIdentity)
-        case progress(Int64)
-        case completed
+        case responseAccepted(OfflineDownloadCheckpoint)
+        case progress(OfflineDownloadCheckpoint)
+        case paused(OfflineDownloadCheckpoint)
+        case completed(URL)
         case cancelled
-        case failed(OfflineDownloadFailure, partialFileURL: URL?)
+        case failed(OfflineDownloadFailure, checkpoint: OfflineDownloadCheckpoint?)
+    }
+
+    private enum StopRequest: Equatable {
+        case none
+        case pause
+        case cancel
     }
 
     private let request: OfflineDownloadRequest
+    private let originalCheckpoint: OfflineDownloadCheckpoint?
     private let sessionConfiguration: URLSessionConfiguration
     private let eventHandler: (Event) -> Void
     private let delegateQueue: OperationQueue
-    private let cancellationLock = NSLock()
+    private let stopLock = NSLock()
 
     private var session: URLSession?
     private var dataTask: URLSessionDataTask?
     private var fileHandle: FileHandle?
-    private var bytesWritten: Int64 = 0
-    private var partialFileWasCreated = false
-    private var cancellationRequested = false
+    private var streamIdentity: OfflineDownloadStreamIdentity?
+    private var bytesWritten: Int64
+    private var partialFileExists = false
+    private var stopRequest: StopRequest = .none
     private var terminalFailure: OfflineDownloadFailure?
     private var didFinish = false
     private var lastProgressDelivery = Date.distantPast
 
     init(
         request: OfflineDownloadRequest,
+        checkpoint: OfflineDownloadCheckpoint?,
         sessionConfiguration: URLSessionConfiguration,
         eventHandler: @escaping (Event) -> Void
     ) {
         self.request = request
+        originalCheckpoint = checkpoint
         self.sessionConfiguration = sessionConfiguration
         self.eventHandler = eventHandler
+        streamIdentity = checkpoint?.streamIdentity
+        bytesWritten = checkpoint?.bytesWritten ?? 0
 
         let queue = OperationQueue()
         queue.name = "com.holymayhem.torrserve.offline-download"
@@ -196,17 +329,28 @@ private final class OfflineDownloadTransfer: NSObject, URLSessionDataDelegate {
         urlRequest.httpMethod = "GET"
         urlRequest.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
         urlRequest.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
+        if let originalCheckpoint, originalCheckpoint.bytesWritten > 0 {
+            urlRequest.setValue(
+                "bytes=\(originalCheckpoint.bytesWritten)-",
+                forHTTPHeaderField: "Range"
+            )
+            urlRequest.setValue(
+                originalCheckpoint.streamIdentity.entityTag,
+                forHTTPHeaderField: "If-Range"
+            )
+        }
 
         let task = session.dataTask(with: urlRequest)
         dataTask = task
         task.resume()
     }
 
+    func pause() {
+        requestStop(.pause)
+    }
+
     func cancel() {
-        cancellationLock.lock()
-        cancellationRequested = true
-        cancellationLock.unlock()
-        dataTask?.cancel()
+        requestStop(.cancel)
     }
 
     func urlSession(
@@ -215,7 +359,7 @@ private final class OfflineDownloadTransfer: NSObject, URLSessionDataDelegate {
         didReceive response: URLResponse,
         completionHandler: @escaping (URLSession.ResponseDisposition) -> Void
     ) {
-        guard !isCancellationRequested else {
+        guard currentStopRequest == .none else {
             completionHandler(.cancel)
             return
         }
@@ -226,20 +370,35 @@ private final class OfflineDownloadTransfer: NSObject, URLSessionDataDelegate {
         }
 
         do {
-            let identity = try OfflineDownloadHTTPContract.validateInitialResponse(
-                httpResponse,
-                expectedLength: request.expectedLength
-            )
-            try Data().write(to: request.partialFileURL, options: .withoutOverwriting)
-            partialFileWasCreated = true
-            fileHandle = try FileHandle(forWritingTo: request.partialFileURL)
-            eventHandler(.responseAccepted(identity))
+            if let originalCheckpoint, originalCheckpoint.bytesWritten > 0 {
+                _ = try OfflineDownloadHTTPContract.validateResumeResponse(
+                    httpResponse,
+                    requestedOffset: originalCheckpoint.bytesWritten,
+                    identity: originalCheckpoint.streamIdentity
+                )
+            } else {
+                streamIdentity = try OfflineDownloadHTTPContract.validateInitialResponse(
+                    httpResponse,
+                    expectedLength: request.expectedLength
+                )
+            }
+
+            try openPartialFile()
+            guard let checkpoint = currentCheckpoint else {
+                throw OfflineDownloadFailure.fileSystem(
+                    "The TorrServer stream identity is missing."
+                )
+            }
+            eventHandler(.responseAccepted(checkpoint))
             completionHandler(.allow)
         } catch let contractError as OfflineDownloadHTTPContractError {
             terminalFailure = .contract(contractError)
             completionHandler(.cancel)
+        } catch let failure as OfflineDownloadFailure {
+            terminalFailure = failure
+            completionHandler(.cancel)
         } catch {
-            removeEmptyPartialFile()
+            closeAndRemoveEmptyPartialFile()
             terminalFailure = .fileSystem(error.localizedDescription)
             completionHandler(.cancel)
         }
@@ -250,7 +409,7 @@ private final class OfflineDownloadTransfer: NSObject, URLSessionDataDelegate {
         dataTask: URLSessionDataTask,
         didReceive data: Data
     ) {
-        guard terminalFailure == nil, !isCancellationRequested else { return }
+        guard terminalFailure == nil, currentStopRequest == .none else { return }
         guard let fileHandle else {
             terminalFailure = .fileSystem("The partial file is not open.")
             dataTask.cancel()
@@ -285,10 +444,17 @@ private final class OfflineDownloadTransfer: NSObject, URLSessionDataDelegate {
         guard !didFinish else { return }
         didFinish = true
 
-        if isCancellationRequested {
+        switch currentStopRequest {
+        case .cancel:
             finishCancellation()
             return
+        case .pause:
+            finishPause()
+            return
+        case .none:
+            break
         }
+
         if let terminalFailure {
             finishFailure(terminalFailure)
             return
@@ -313,19 +479,84 @@ private final class OfflineDownloadTransfer: NSObject, URLSessionDataDelegate {
                 at: request.partialFileURL,
                 to: request.destinationURL
             )
-            partialFileWasCreated = false
-            eventHandler(.progress(bytesWritten))
-            eventHandler(.completed)
+            partialFileExists = false
+            eventHandler(.completed(request.destinationURL))
             finishSession()
         } catch {
             finishFailure(.fileSystem(error.localizedDescription))
         }
     }
 
-    private var isCancellationRequested: Bool {
-        cancellationLock.lock()
-        defer { cancellationLock.unlock() }
-        return cancellationRequested
+    private func requestStop(_ requestedStop: StopRequest) {
+        stopLock.lock()
+        if requestedStop == .cancel || stopRequest == .none {
+            stopRequest = requestedStop
+        }
+        stopLock.unlock()
+        dataTask?.cancel()
+    }
+
+    private var currentStopRequest: StopRequest {
+        stopLock.lock()
+        defer { stopLock.unlock() }
+        return stopRequest
+    }
+
+    private var currentCheckpoint: OfflineDownloadCheckpoint? {
+        guard let streamIdentity else { return originalCheckpoint }
+        return OfflineDownloadCheckpoint(
+            request: request,
+            streamIdentity: streamIdentity,
+            bytesWritten: bytesWritten
+        )
+    }
+
+    private func openPartialFile() throws {
+        let fileManager = FileManager.default
+        var isDirectory: ObjCBool = false
+        let exists = fileManager.fileExists(
+            atPath: request.partialFileURL.path,
+            isDirectory: &isDirectory
+        )
+
+        if let originalCheckpoint {
+            if exists {
+                guard !isDirectory.boolValue else {
+                    throw OfflineDownloadFailure.fileSystem(
+                        "The partial download path is a directory."
+                    )
+                }
+                let attributes = try fileManager.attributesOfItem(
+                    atPath: request.partialFileURL.path
+                )
+                let actualSize = (attributes[.size] as? NSNumber)?.int64Value ?? -1
+                guard actualSize == originalCheckpoint.bytesWritten else {
+                    throw OfflineDownloadFailure.fileSystem(
+                        "The partial file size changed before resume."
+                    )
+                }
+            } else {
+                guard originalCheckpoint.bytesWritten == 0 else {
+                    throw OfflineDownloadFailure.fileSystem(
+                        "The partial download disappeared before resume."
+                    )
+                }
+                try Data().write(to: request.partialFileURL, options: .withoutOverwriting)
+            }
+        } else {
+            try Data().write(to: request.partialFileURL, options: .withoutOverwriting)
+        }
+
+        partialFileExists = true
+        let handle = try FileHandle(forWritingTo: request.partialFileURL)
+        let endOffset = try handle.seekToEnd()
+        guard endOffset == UInt64(bytesWritten) else {
+            try? handle.close()
+            throw OfflineDownloadFailure.fileSystem(
+                "The partial file offset changed before writing."
+            )
+        }
+        fileHandle = handle
     }
 
     private func deliverProgressIfNeeded() {
@@ -334,61 +565,110 @@ private final class OfflineDownloadTransfer: NSObject, URLSessionDataDelegate {
             || now.timeIntervalSince(lastProgressDelivery) >= 0.1 else {
             return
         }
+        guard let checkpoint = currentCheckpoint else { return }
         lastProgressDelivery = now
-        eventHandler(.progress(bytesWritten))
+        eventHandler(.progress(checkpoint))
+    }
+
+    private func finishPause() {
+        do {
+            try closeFileHandle(synchronize: bytesWritten > 0)
+        } catch {
+            finishFailure(.fileSystem(error.localizedDescription))
+            return
+        }
+        if bytesWritten == 0 {
+            removePartialFileIfPresent()
+        }
+
+        guard let checkpoint = currentCheckpoint else {
+            eventHandler(
+                .failed(
+                    .fileSystem("The paused stream identity is missing."),
+                    checkpoint: nil
+                )
+            )
+            finishSession()
+            return
+        }
+        eventHandler(.paused(checkpoint))
+        finishSession()
     }
 
     private func finishCancellation() {
         try? closeFileHandle(synchronize: false)
-        if partialFileWasCreated {
-            do {
+        do {
+            if FileManager.default.fileExists(atPath: request.partialFileURL.path) {
                 try FileManager.default.removeItem(at: request.partialFileURL)
-                partialFileWasCreated = false
-            } catch {
-                eventHandler(
-                    .failed(
-                        .fileSystem(error.localizedDescription),
-                        partialFileURL: request.partialFileURL
-                    )
-                )
-                finishSession()
-                return
             }
+            partialFileExists = false
+            eventHandler(.cancelled)
+        } catch {
+            eventHandler(
+                .failed(
+                    .fileSystem(error.localizedDescription),
+                    checkpoint: currentCheckpoint
+                )
+            )
         }
-        eventHandler(.cancelled)
         finishSession()
     }
 
     private func finishFailure(_ failure: OfflineDownloadFailure) {
-        try? closeFileHandle(synchronize: false)
+        try? closeFileHandle(synchronize: bytesWritten > 0)
 
-        var partialFileURL: URL?
-        if partialFileWasCreated, bytesWritten > 0 {
-            partialFileURL = request.partialFileURL
+        let checkpoint: OfflineDownloadCheckpoint?
+        if bytesWritten > 0 {
+            checkpoint = currentCheckpoint
+        } else if let originalCheckpoint, originalCheckpoint.bytesWritten > 0 {
+            checkpoint = originalCheckpoint
         } else {
-            removeEmptyPartialFile()
+            removePartialFileIfPresent()
+            checkpoint = nil
         }
 
-        eventHandler(.failed(failure, partialFileURL: partialFileURL))
+        eventHandler(.failed(failure, checkpoint: checkpoint))
         finishSession()
     }
 
     private func closeFileHandle(synchronize: Bool) throws {
         guard let fileHandle else { return }
-        if synchronize {
-            try fileHandle.synchronize()
-        }
-        try fileHandle.close()
         self.fileHandle = nil
+
+        var firstError: Error?
+        if synchronize {
+            do {
+                try fileHandle.synchronize()
+            } catch {
+                firstError = error
+            }
+        }
+        do {
+            try fileHandle.close()
+        } catch {
+            if firstError == nil {
+                firstError = error
+            }
+        }
+        if let firstError {
+            throw firstError
+        }
     }
 
-    private func removeEmptyPartialFile() {
+    private func closeAndRemoveEmptyPartialFile() {
         try? fileHandle?.close()
         fileHandle = nil
-        if partialFileWasCreated {
-            try? FileManager.default.removeItem(at: request.partialFileURL)
-            partialFileWasCreated = false
+        if bytesWritten == 0 {
+            removePartialFileIfPresent()
         }
+    }
+
+    private func removePartialFileIfPresent() {
+        if partialFileExists
+            || FileManager.default.fileExists(atPath: request.partialFileURL.path) {
+            try? FileManager.default.removeItem(at: request.partialFileURL)
+        }
+        partialFileExists = false
     }
 
     private func finishSession() {

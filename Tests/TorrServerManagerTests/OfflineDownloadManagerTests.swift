@@ -19,7 +19,7 @@ final class OfflineDownloadManagerTests: XCTestCase {
     }
 
     override func tearDownWithError() throws {
-        StubURLProtocol.stub = nil
+        StubURLProtocol.reset()
         cancellables = []
         if let temporaryDirectory {
             try? FileManager.default.removeItem(at: temporaryDirectory)
@@ -28,7 +28,7 @@ final class OfflineDownloadManagerTests: XCTestCase {
 
     func testCompletesDownloadThroughPartialFile() async throws {
         let payload = Data((0..<131_072).map { UInt8($0 % 251) })
-        StubURLProtocol.stub = .init(data: payload, chunkSize: 8_192)
+        StubURLProtocol.configure(.init(data: payload, chunkSize: 8_192))
         let destination = temporaryDirectory.appendingPathComponent("movie.mkv")
         let manager = makeManager()
         var observedProgress: [Int64] = []
@@ -51,11 +51,11 @@ final class OfflineDownloadManagerTests: XCTestCase {
 
     func testCancellationRemovesPartialFile() async throws {
         let payload = Data(repeating: 0xA5, count: 1_048_576)
-        StubURLProtocol.stub = .init(
+        StubURLProtocol.configure(.init(
             data: payload,
             chunkSize: 4_096,
             delayBetweenChunks: 0.005
-        )
+        ))
         let destination = temporaryDirectory.appendingPathComponent("cancelled.mkv")
         let request = makeRequest(destination: destination, length: Int64(payload.count))
         let manager = makeManager()
@@ -77,11 +77,11 @@ final class OfflineDownloadManagerTests: XCTestCase {
 
     func testRejectsResponseWithWrongContentLength() async throws {
         let payload = Data(repeating: 0x2A, count: 128)
-        StubURLProtocol.stub = .init(
+        StubURLProtocol.configure(.init(
             data: payload,
             advertisedLength: 127,
             chunkSize: 128
-        )
+        ))
         let destination = temporaryDirectory.appendingPathComponent("wrong-size.mkv")
         let request = makeRequest(destination: destination, length: 128)
         let manager = makeManager()
@@ -93,7 +93,7 @@ final class OfflineDownloadManagerTests: XCTestCase {
             state,
             .failed(
                 .contract(.invalidContentLength(expected: 128, actual: "127")),
-                partialFileURL: nil
+                checkpoint: nil
             )
         )
         XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
@@ -102,11 +102,11 @@ final class OfflineDownloadManagerTests: XCTestCase {
 
     func testInterruptedTransferKeepsNonEmptyPartialFile() async throws {
         let payload = Data(repeating: 0x7C, count: 4_096)
-        StubURLProtocol.stub = .init(
+        StubURLProtocol.configure(.init(
             data: payload,
             advertisedLength: 8_192,
             chunkSize: 1_024
-        )
+        ))
         let destination = temporaryDirectory.appendingPathComponent("interrupted.mkv")
         let request = makeRequest(destination: destination, length: 8_192)
         let manager = makeManager()
@@ -114,10 +114,11 @@ final class OfflineDownloadManagerTests: XCTestCase {
         try manager.start(request)
         let state = try await waitForTerminalState(manager)
 
-        guard case .failed(_, let partialFileURL) = state else {
+        guard case .failed(_, let checkpoint) = state else {
             return XCTFail("Expected a failed state, got \(state).")
         }
-        XCTAssertEqual(partialFileURL, request.partialFileURL)
+        XCTAssertEqual(checkpoint?.request.partialFileURL, request.partialFileURL)
+        XCTAssertEqual(checkpoint?.bytesWritten, Int64(payload.count))
         XCTAssertEqual(
             try FileManager.default.attributesOfItem(
                 atPath: request.partialFileURL.path
@@ -160,11 +161,11 @@ final class OfflineDownloadManagerTests: XCTestCase {
 
     func testAllowsOnlyOneActiveDownload() async throws {
         let payload = Data(repeating: 0x33, count: 1_048_576)
-        StubURLProtocol.stub = .init(
+        StubURLProtocol.configure(.init(
             data: payload,
             chunkSize: 4_096,
             delayBetweenChunks: 0.005
-        )
+        ))
         let firstRequest = makeRequest(
             destination: temporaryDirectory.appendingPathComponent("first.mkv"),
             length: Int64(payload.count)
@@ -189,6 +190,139 @@ final class OfflineDownloadManagerTests: XCTestCase {
         XCTAssertEqual(terminalState, .cancelled)
     }
 
+    func testPausesAndResumesWithRangeAndIfRange() async throws {
+        let payload = Data((0..<1_048_576).map { UInt8($0 % 239) })
+        let entityTag = #""fixture/resumable-movie.mkv""#
+        StubURLProtocol.configure(.init(
+            data: payload,
+            chunkSize: 4_096,
+            delayBetweenChunks: 0.002,
+            entityTag: entityTag
+        ))
+        let destination = temporaryDirectory.appendingPathComponent("resumed.mkv")
+        let request = makeRequest(destination: destination, length: Int64(payload.count))
+        let manager = makeManager()
+
+        try manager.start(request)
+        _ = try await waitForState(manager) { state in
+            if case .downloading(let progress) = state {
+                return progress.bytesWritten > 0
+            }
+            return false
+        }
+        manager.pause()
+
+        let pausedState = try await waitForState(manager) { state in
+            if case .paused = state { return true }
+            return false
+        }
+        guard case .paused(let checkpoint) = pausedState else {
+            return XCTFail("Expected a paused state, got \(pausedState).")
+        }
+        XCTAssertGreaterThan(checkpoint.bytesWritten, 0)
+        XCTAssertLessThan(checkpoint.bytesWritten, request.expectedLength)
+        XCTAssertEqual(
+            try partialFileSize(at: request.partialFileURL),
+            checkpoint.bytesWritten
+        )
+
+        try manager.resume()
+        let completedState = try await waitForTerminalState(manager, timeout: 5)
+
+        XCTAssertEqual(completedState, .completed(destination))
+        XCTAssertEqual(try Data(contentsOf: destination), payload)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: request.partialFileURL.path))
+
+        let resumedRequest = try XCTUnwrap(
+            StubURLProtocol.requestsSnapshot().first { request in
+                request.value(forHTTPHeaderField: "Range")
+                    == "bytes=\(checkpoint.bytesWritten)-"
+            }
+        )
+        XCTAssertEqual(
+            resumedRequest.value(forHTTPHeaderField: "If-Range"),
+            entityTag
+        )
+    }
+
+    func testResumeRejectsFullResponseWithoutAppending() async throws {
+        let payload = Data(repeating: 0x6D, count: 1_048_576)
+        StubURLProtocol.configure(.init(
+            data: payload,
+            chunkSize: 4_096,
+            delayBetweenChunks: 0.002
+        ))
+        let destination = temporaryDirectory.appendingPathComponent("ignored-range.mkv")
+        let request = makeRequest(destination: destination, length: Int64(payload.count))
+        let manager = makeManager()
+
+        try manager.start(request)
+        _ = try await waitForState(manager) { state in
+            if case .downloading(let progress) = state {
+                return progress.bytesWritten > 0
+            }
+            return false
+        }
+        manager.pause()
+        let pausedState = try await waitForState(manager) { state in
+            if case .paused = state { return true }
+            return false
+        }
+        guard case .paused(let checkpoint) = pausedState else {
+            return XCTFail("Expected a paused state, got \(pausedState).")
+        }
+        let sizeBeforeResume = try partialFileSize(at: request.partialFileURL)
+
+        StubURLProtocol.configure(.init(
+            data: payload,
+            chunkSize: payload.count,
+            honorsRanges: false
+        ))
+        try manager.resume()
+        let failedState = try await waitForTerminalState(manager)
+
+        XCTAssertEqual(
+            failedState,
+            .failed(.contract(.serverIgnoredRange), checkpoint: checkpoint)
+        )
+        XCTAssertEqual(
+            try partialFileSize(at: request.partialFileURL),
+            sizeBeforeResume
+        )
+        XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
+    }
+
+    func testCancellingPausedDownloadRemovesPartialFile() async throws {
+        let payload = Data(repeating: 0x4E, count: 1_048_576)
+        StubURLProtocol.configure(.init(
+            data: payload,
+            chunkSize: 4_096,
+            delayBetweenChunks: 0.002
+        ))
+        let destination = temporaryDirectory.appendingPathComponent("paused-cancel.mkv")
+        let request = makeRequest(destination: destination, length: Int64(payload.count))
+        let manager = makeManager()
+
+        try manager.start(request)
+        _ = try await waitForState(manager) { state in
+            if case .downloading(let progress) = state {
+                return progress.bytesWritten > 0
+            }
+            return false
+        }
+        manager.pause()
+        _ = try await waitForState(manager) { state in
+            if case .paused = state { return true }
+            return false
+        }
+
+        manager.cancel()
+
+        XCTAssertEqual(manager.state, .cancelled)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: request.partialFileURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
+    }
+
     private func makeManager() -> OfflineDownloadManager {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [StubURLProtocol.self]
@@ -203,10 +337,16 @@ final class OfflineDownloadManagerTests: XCTestCase {
         )
     }
 
+    private func partialFileSize(at url: URL) throws -> Int64 {
+        let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+        return try XCTUnwrap(attributes[.size] as? NSNumber).int64Value
+    }
+
     private func waitForTerminalState(
-        _ manager: OfflineDownloadManager
+        _ manager: OfflineDownloadManager,
+        timeout: TimeInterval = 3
     ) async throws -> OfflineDownloadState {
-        try await waitForState(manager) { !$0.isActive }
+        try await waitForState(manager, timeout: timeout) { !$0.isActive }
     }
 
     private func waitForState(
@@ -235,24 +375,51 @@ private final class StubURLProtocol: URLProtocol {
         let advertisedLength: Int
         let chunkSize: Int
         let delayBetweenChunks: TimeInterval
+        let honorsRanges: Bool
+        let entityTag: String
 
         init(
             data: Data,
             advertisedLength: Int? = nil,
             chunkSize: Int,
-            delayBetweenChunks: TimeInterval = 0
+            delayBetweenChunks: TimeInterval = 0,
+            honorsRanges: Bool = true,
+            entityTag: String = #""fixture/movie.mkv""#
         ) {
             self.data = data
             self.advertisedLength = advertisedLength ?? data.count
             self.chunkSize = chunkSize
             self.delayBetweenChunks = delayBetweenChunks
+            self.honorsRanges = honorsRanges
+            self.entityTag = entityTag
         }
     }
 
-    static var stub: Stub?
+    private static let configurationLock = NSLock()
+    private static var stub: Stub?
+    private static var receivedRequests: [URLRequest] = []
 
     private let stateLock = NSLock()
     private var stopped = false
+
+    static func configure(_ stub: Stub) {
+        configurationLock.lock()
+        self.stub = stub
+        configurationLock.unlock()
+    }
+
+    static func reset() {
+        configurationLock.lock()
+        stub = nil
+        receivedRequests = []
+        configurationLock.unlock()
+    }
+
+    static func requestsSnapshot() -> [URLRequest] {
+        configurationLock.lock()
+        defer { configurationLock.unlock() }
+        return receivedRequests
+    }
 
     override class func canInit(with request: URLRequest) -> Bool { true }
 
@@ -261,26 +428,38 @@ private final class StubURLProtocol: URLProtocol {
     }
 
     override func startLoading() {
-        guard let stub = Self.stub else {
+        guard let stub = Self.stubAndRecord(request) else {
             client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
             return
         }
 
+        let requestedOffset = Self.requestedOffset(from: request)
+        let isRangeResponse = stub.honorsRanges && requestedOffset != nil
+        let bodyOffset = isRangeResponse ? requestedOffset! : 0
+        let statusCode = isRangeResponse ? 206 : 200
+        let responseLength = isRangeResponse
+            ? stub.advertisedLength - bodyOffset
+            : stub.advertisedLength
+        var headerFields = [
+            "Accept-Ranges": "bytes",
+            "Content-Length": String(responseLength),
+            "ETag": stub.entityTag
+        ]
+        if isRangeResponse {
+            headerFields["Content-Range"] = "bytes \(bodyOffset)-\(stub.advertisedLength - 1)/\(stub.advertisedLength)"
+        }
+
         let response = HTTPURLResponse(
             url: request.url!,
-            statusCode: 200,
+            statusCode: statusCode,
             httpVersion: "HTTP/1.1",
-            headerFields: [
-                "Accept-Ranges": "bytes",
-                "Content-Length": String(stub.advertisedLength),
-                "ETag": #""fixture/movie.mkv""#
-            ]
+            headerFields: headerFields
         )!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
 
         DispatchQueue.global(qos: .utility).async { [weak self] in
             guard let self else { return }
-            var offset = 0
+            var offset = min(bodyOffset, stub.data.count)
             while offset < stub.data.count, !isStopped {
                 let end = min(offset + stub.chunkSize, stub.data.count)
                 client?.urlProtocol(self, didLoad: stub.data[offset..<end])
@@ -305,5 +484,21 @@ private final class StubURLProtocol: URLProtocol {
         stateLock.lock()
         defer { stateLock.unlock() }
         return stopped
+    }
+
+    private static func stubAndRecord(_ request: URLRequest) -> Stub? {
+        configurationLock.lock()
+        defer { configurationLock.unlock() }
+        receivedRequests.append(request)
+        return stub
+    }
+
+    private static func requestedOffset(from request: URLRequest) -> Int? {
+        guard let value = request.value(forHTTPHeaderField: "Range"),
+              value.hasPrefix("bytes="),
+              value.hasSuffix("-") else {
+            return nil
+        }
+        return Int(value.dropFirst("bytes=".count).dropLast())
     }
 }
