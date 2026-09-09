@@ -323,10 +323,125 @@ final class OfflineDownloadManagerTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
     }
 
-    private func makeManager() -> OfflineDownloadManager {
+    func testRestoresPausedDownloadAndResumesAfterManagerRecreation() async throws {
+        let payload = Data((0..<1_048_576).map { UInt8($0 % 227) })
+        StubURLProtocol.configure(.init(
+            data: payload,
+            chunkSize: 4_096,
+            delayBetweenChunks: 0.002
+        ))
+        let destination = temporaryDirectory.appendingPathComponent("restored.mkv")
+        let request = makeRequest(destination: destination, length: Int64(payload.count))
+        let checkpointStore = makeCheckpointStore()
+        let firstManager = makeManager(checkpointStore: checkpointStore)
+
+        try firstManager.start(request)
+        _ = try await waitForState(firstManager) { state in
+            if case .downloading(let progress) = state {
+                return progress.bytesWritten > 0
+            }
+            return false
+        }
+        firstManager.pause()
+        let pausedState = try await waitForState(firstManager) { state in
+            if case .paused = state { return true }
+            return false
+        }
+        guard case .paused(let pausedCheckpoint) = pausedState else {
+            return XCTFail("Expected a paused state, got \(pausedState).")
+        }
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: try XCTUnwrap(checkpointStore.fileURL).path
+        ))
+
+        let restoredManager = makeManager(checkpointStore: checkpointStore)
+
+        XCTAssertEqual(restoredManager.state, .paused(pausedCheckpoint))
+        try restoredManager.resume()
+        let completedState = try await waitForTerminalState(restoredManager, timeout: 5)
+
+        XCTAssertEqual(completedState, .completed(destination))
+        XCTAssertEqual(try Data(contentsOf: destination), payload)
+        XCTAssertNil(try checkpointStore.load())
+    }
+
+    func testRestorationReconcilesCheckpointWithActualPartialFileSize() throws {
+        let destination = temporaryDirectory.appendingPathComponent("reconciled.mkv")
+        let request = makeRequest(destination: destination, length: 8_192)
+        let checkpoint = makeCheckpoint(request: request, bytesWritten: 1_024)
+        let checkpointStore = makeCheckpointStore()
+        try Data(repeating: 0x3A, count: 4_096).write(to: request.partialFileURL)
+        try checkpointStore.save(checkpoint)
+
+        let restoredManager = makeManager(checkpointStore: checkpointStore)
+
+        guard case .paused(let reconciledCheckpoint) = restoredManager.state else {
+            return XCTFail("Expected a restored paused state, got \(restoredManager.state).")
+        }
+        XCTAssertEqual(reconciledCheckpoint.bytesWritten, 4_096)
+        XCTAssertEqual(try checkpointStore.load(), reconciledCheckpoint)
+    }
+
+    func testRestorationFinalizesCompletePartialFile() throws {
+        let payload = Data(repeating: 0x81, count: 8_192)
+        let destination = temporaryDirectory.appendingPathComponent("complete-partial.mkv")
+        let request = makeRequest(destination: destination, length: Int64(payload.count))
+        let checkpointStore = makeCheckpointStore()
+        try payload.write(to: request.partialFileURL)
+        try checkpointStore.save(
+            makeCheckpoint(request: request, bytesWritten: 4_096)
+        )
+
+        let restoredManager = makeManager(checkpointStore: checkpointStore)
+
+        XCTAssertEqual(restoredManager.state, .completed(destination))
+        XCTAssertEqual(try Data(contentsOf: destination), payload)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: request.partialFileURL.path))
+        XCTAssertNil(try checkpointStore.load())
+    }
+
+    func testRestorationRejectsMissingNonEmptyPartialFile() throws {
+        let destination = temporaryDirectory.appendingPathComponent("missing-partial.mkv")
+        let request = makeRequest(destination: destination, length: 8_192)
+        let checkpointStore = makeCheckpointStore()
+        try checkpointStore.save(makeCheckpoint(request: request, bytesWritten: 1_024))
+
+        let restoredManager = makeManager(checkpointStore: checkpointStore)
+
+        guard case .failed(.persistence, checkpoint: nil) = restoredManager.state else {
+            return XCTFail("Expected a persistence failure, got \(restoredManager.state).")
+        }
+        XCTAssertNil(try checkpointStore.load())
+    }
+
+    func testRestorationRejectsAndClearsCorruptCheckpoint() throws {
+        let checkpointStore = makeCheckpointStore()
+        let fileURL = try XCTUnwrap(checkpointStore.fileURL)
+        try Data("not-json".utf8).write(to: fileURL)
+
+        let restoredManager = makeManager(checkpointStore: checkpointStore)
+
+        guard case .failed(.persistence, checkpoint: nil) = restoredManager.state else {
+            return XCTFail("Expected a persistence failure, got \(restoredManager.state).")
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: fileURL.path))
+    }
+
+    private func makeManager(
+        checkpointStore: OfflineDownloadCheckpointStore? = nil
+    ) -> OfflineDownloadManager {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [StubURLProtocol.self]
-        return OfflineDownloadManager(sessionConfiguration: configuration)
+        return OfflineDownloadManager(
+            sessionConfiguration: configuration,
+            checkpointStore: checkpointStore ?? makeCheckpointStore()
+        )
+    }
+
+    private func makeCheckpointStore() -> OfflineDownloadCheckpointStore {
+        OfflineDownloadCheckpointStore(
+            fileURL: temporaryDirectory.appendingPathComponent("checkpoint.json")
+        )
     }
 
     private func makeRequest(destination: URL, length: Int64) -> OfflineDownloadRequest {
@@ -334,6 +449,20 @@ final class OfflineDownloadManagerTests: XCTestCase {
             sourceURL: URL(string: "http://127.0.0.1:8090/stream/movie.mkv")!,
             destinationURL: destination,
             expectedLength: length
+        )
+    }
+
+    private func makeCheckpoint(
+        request: OfflineDownloadRequest,
+        bytesWritten: Int64
+    ) -> OfflineDownloadCheckpoint {
+        OfflineDownloadCheckpoint(
+            request: request,
+            streamIdentity: OfflineDownloadStreamIdentity(
+                contentLength: request.expectedLength,
+                entityTag: #""fixture/movie.mkv""#
+            ),
+            bytesWritten: bytesWritten
         )
     }
 

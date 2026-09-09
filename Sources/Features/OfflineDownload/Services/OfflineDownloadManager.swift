@@ -6,11 +6,17 @@ final class OfflineDownloadManager: ObservableObject {
     @Published private(set) var state: OfflineDownloadState = .idle
 
     private let sessionConfiguration: URLSessionConfiguration
+    private let checkpointStore: OfflineDownloadCheckpointStore
     private var transfer: OfflineDownloadTransfer?
     private var transferID: UUID?
 
-    init(sessionConfiguration: URLSessionConfiguration = .ephemeral) {
+    init(
+        sessionConfiguration: URLSessionConfiguration = .ephemeral,
+        checkpointStore: OfflineDownloadCheckpointStore = OfflineDownloadCheckpointStore()
+    ) {
         self.sessionConfiguration = sessionConfiguration
+        self.checkpointStore = checkpointStore
+        restorePersistedState()
     }
 
     func start(_ request: OfflineDownloadRequest) throws {
@@ -60,11 +66,20 @@ final class OfflineDownloadManager: ObservableObject {
             if FileManager.default.fileExists(atPath: checkpoint.request.partialFileURL.path) {
                 try FileManager.default.removeItem(at: checkpoint.request.partialFileURL)
             }
+            try checkpointStore.clear()
             state = .cancelled
         } catch {
+            let failure: OfflineDownloadFailure
+            if error is OfflineDownloadCheckpointStoreError {
+                failure = persistenceFailure(for: error)
+            } else {
+                failure = .fileSystem(error.localizedDescription)
+            }
             state = .failed(
-                .fileSystem(error.localizedDescription),
-                checkpoint: checkpoint
+                failure,
+                checkpoint: FileManager.default.fileExists(
+                    atPath: checkpoint.request.partialFileURL.path
+                ) ? checkpoint : nil
             )
         }
     }
@@ -72,6 +87,96 @@ final class OfflineDownloadManager: ObservableObject {
     func reset() {
         guard transfer == nil, state.resumableCheckpoint == nil else { return }
         state = .idle
+    }
+
+    private func restorePersistedState() {
+        do {
+            guard let checkpoint = try checkpointStore.load() else { return }
+            state = try reconciledState(for: checkpoint)
+        } catch {
+            try? checkpointStore.clear()
+            state = .failed(persistenceFailure(for: error), checkpoint: nil)
+        }
+    }
+
+    private func reconciledState(
+        for savedCheckpoint: OfflineDownloadCheckpoint
+    ) throws -> OfflineDownloadState {
+        let request = savedCheckpoint.request
+        try validateCommonRequestFields(request)
+        guard savedCheckpoint.streamIdentity.contentLength == request.expectedLength else {
+            throw OfflineDownloadCheckpointStoreError.invalidData(
+                "The saved stream length does not match the download request."
+            )
+        }
+
+        let fileManager = FileManager.default
+        var partialIsDirectory: ObjCBool = false
+        let partialExists = fileManager.fileExists(
+            atPath: request.partialFileURL.path,
+            isDirectory: &partialIsDirectory
+        )
+        var destinationIsDirectory: ObjCBool = false
+        let destinationExists = fileManager.fileExists(
+            atPath: request.destinationURL.path,
+            isDirectory: &destinationIsDirectory
+        )
+
+        if destinationExists {
+            guard !destinationIsDirectory.boolValue, !partialExists else {
+                throw OfflineDownloadCheckpointStoreError.invalidData(
+                    "Both the final destination and partial download exist."
+                )
+            }
+            let destinationSize = try fileSize(at: request.destinationURL)
+            guard destinationSize == request.expectedLength else {
+                throw OfflineDownloadCheckpointStoreError.invalidData(
+                    "The existing destination has an unexpected size."
+                )
+            }
+            try checkpointStore.clear()
+            return .completed(request.destinationURL)
+        }
+
+        guard !partialIsDirectory.boolValue else {
+            throw OfflineDownloadCheckpointStoreError.invalidData(
+                "The partial download path is a directory."
+            )
+        }
+        guard partialExists else {
+            guard savedCheckpoint.bytesWritten == 0 else {
+                throw OfflineDownloadCheckpointStoreError.invalidData(
+                    "The saved partial download is missing."
+                )
+            }
+            return .paused(savedCheckpoint)
+        }
+
+        let actualSize = try fileSize(at: request.partialFileURL)
+        guard actualSize >= 0, actualSize <= request.expectedLength else {
+            throw OfflineDownloadCheckpointStoreError.invalidData(
+                "The partial download is larger than the expected file."
+            )
+        }
+        if actualSize == request.expectedLength {
+            try fileManager.moveItem(
+                at: request.partialFileURL,
+                to: request.destinationURL
+            )
+            try checkpointStore.clear()
+            return .completed(request.destinationURL)
+        }
+
+        let reconciledCheckpoint = OfflineDownloadCheckpoint(
+            request: request,
+            streamIdentity: savedCheckpoint.streamIdentity,
+            bytesWritten: actualSize
+        )
+        try validateCheckpoint(reconciledCheckpoint)
+        if reconciledCheckpoint != savedCheckpoint {
+            try checkpointStore.save(reconciledCheckpoint)
+        }
+        return .paused(reconciledCheckpoint)
     }
 
     private func beginTransfer(
@@ -198,6 +303,24 @@ final class OfflineDownloadManager: ObservableObject {
         }
     }
 
+    private func fileSize(at url: URL) throws -> Int64 {
+        do {
+            let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+            guard let size = attributes[.size] as? NSNumber else {
+                throw OfflineDownloadCheckpointStoreError.invalidData(
+                    "The file size is unavailable for \(url.path)."
+                )
+            }
+            return size.int64Value
+        } catch let error as OfflineDownloadCheckpointStoreError {
+            throw error
+        } catch {
+            throw OfflineDownloadCheckpointStoreError.fileSystem(
+                error.localizedDescription
+            )
+        }
+    }
+
     private func handle(
         _ event: OfflineDownloadTransfer.Event,
         transferID: UUID
@@ -205,22 +328,57 @@ final class OfflineDownloadManager: ObservableObject {
         guard self.transferID == transferID else { return }
 
         switch event {
-        case .responseAccepted(let checkpoint), .progress(let checkpoint):
+        case .responseAccepted(let checkpoint):
+            guard !isStopping else { return }
+            do {
+                try checkpointStore.save(checkpoint)
+                state = .downloading(checkpoint.progress)
+            } catch {
+                state = .pausing(checkpoint.progress)
+                transfer?.pause()
+            }
+        case .progress(let checkpoint):
             guard !isStopping else { return }
             state = .downloading(checkpoint.progress)
         case .paused(let checkpoint):
             clearTransfer()
-            state = .paused(checkpoint)
+            do {
+                try checkpointStore.save(checkpoint)
+                state = .paused(checkpoint)
+            } catch {
+                state = .failed(
+                    persistenceFailure(for: error),
+                    checkpoint: checkpoint
+                )
+            }
         case .completed(let destinationURL):
             clearTransfer()
+            try? checkpointStore.clear()
             state = .completed(destinationURL)
         case .cancelled:
             clearTransfer()
+            try? checkpointStore.clear()
             state = .cancelled
         case .failed(let failure, let checkpoint):
             clearTransfer()
-            state = .failed(failure, checkpoint: checkpoint)
+            do {
+                if let checkpoint {
+                    try checkpointStore.save(checkpoint)
+                } else {
+                    try checkpointStore.clear()
+                }
+                state = .failed(failure, checkpoint: checkpoint)
+            } catch {
+                state = .failed(
+                    persistenceFailure(for: error),
+                    checkpoint: checkpoint
+                )
+            }
         }
+    }
+
+    private func persistenceFailure(for error: Error) -> OfflineDownloadFailure {
+        .persistence(error.localizedDescription)
     }
 
     private var activeProgress: OfflineDownloadProgress? {

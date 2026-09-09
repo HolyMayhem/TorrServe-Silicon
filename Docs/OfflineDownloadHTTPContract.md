@@ -66,5 +66,24 @@ remaining `Content-Length` therefore fails safely without adding bytes to the
 partial file. Cancelling either an active or paused transfer deletes the partial
 file.
 
-Checkpoints currently live only for the running application session. Persisting
-and restoring downloads after an application restart belongs to Stage 4.
+## Stage 4 restart recovery
+
+`OfflineDownloadCheckpointStore` persists one versioned checkpoint as an atomic
+JSON file in:
+
+```text
+~/Library/Application Support/TorrServer/OfflineDownloads/checkpoint.json
+```
+
+The checkpoint is written after the initial response has established a strong
+ETag, and again when a download pauses or fails. On the next manager creation,
+the saved request and ETag are restored and the actual `.torrserve-part` size is
+used as the resume offset. This reconciles progress written immediately before
+an application interruption without rewriting the JSON file for every network
+chunk.
+
+Recovery never overwrites an existing destination. A partial file with the
+exact final length is moved into place automatically; a stale record for an
+already completed destination is cleared. Missing, oversized, conflicting, or
+corrupt state is rejected and its manifest is cleared without deleting the
+unverified partial or destination file.

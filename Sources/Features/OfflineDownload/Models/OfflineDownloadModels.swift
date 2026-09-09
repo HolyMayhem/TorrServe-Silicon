@@ -1,6 +1,6 @@
 import Foundation
 
-struct OfflineDownloadRequest: Equatable, Sendable {
+struct OfflineDownloadRequest: Codable, Equatable, Sendable {
     let sourceURL: URL
     let destinationURL: URL
     let expectedLength: Int64
@@ -22,7 +22,7 @@ struct OfflineDownloadProgress: Equatable, Sendable {
     }
 }
 
-struct OfflineDownloadCheckpoint: Equatable, Sendable {
+struct OfflineDownloadCheckpoint: Codable, Equatable, Sendable {
     let request: OfflineDownloadRequest
     let streamIdentity: OfflineDownloadStreamIdentity
     let bytesWritten: Int64
@@ -41,6 +41,7 @@ enum OfflineDownloadFailure: Error, Equatable, Sendable {
     case invalidHTTPResponse
     case contract(OfflineDownloadHTTPContractError)
     case fileSystem(String)
+    case persistence(String)
     case network(code: Int?, description: String)
     case incomplete(expected: Int64, actual: Int64)
     case exceededExpectedLength(expected: Int64, attempted: Int64)
@@ -55,6 +56,8 @@ extension OfflineDownloadFailure: LocalizedError {
             return error.localizedDescription
         case .fileSystem(let description):
             return "Could not write the offline file: \(description)"
+        case .persistence(let description):
+            return "Could not save or restore the offline download state: \(description)"
         case .network(_, let description):
             return "The download connection failed: \(description)"
         case .incomplete(let expected, let actual):

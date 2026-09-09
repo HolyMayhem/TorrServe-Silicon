@@ -1,6 +1,6 @@
 import Foundation
 
-struct OfflineDownloadStreamIdentity: Equatable, Sendable {
+struct OfflineDownloadStreamIdentity: Codable, Equatable, Sendable {
     let contentLength: Int64
     let entityTag: String
 }
