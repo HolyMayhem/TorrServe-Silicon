@@ -32,6 +32,11 @@ let package = Package(
                     "-Xlinker", "@executable_path/../Frameworks"
                 ])
             ]
+        ),
+        .testTarget(
+            name: "TorrServerManagerTests",
+            dependencies: ["TorrServerManager"],
+            path: "Tests/TorrServerManagerTests"
         )
     ]
 )

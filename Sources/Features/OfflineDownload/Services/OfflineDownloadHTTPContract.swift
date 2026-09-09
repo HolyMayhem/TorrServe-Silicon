@@ -11,7 +11,7 @@ struct OfflineDownloadByteRange: Equatable, Sendable {
     let totalLength: Int64
 }
 
-enum OfflineDownloadHTTPContractError: Error, Equatable {
+enum OfflineDownloadHTTPContractError: Error, Equatable, Sendable {
     case invalidExpectedLength(Int64)
     case invalidResumeOffset(offset: Int64, totalLength: Int64)
     case unexpectedStatus(expected: Int, actual: Int)

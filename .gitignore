@@ -11,9 +11,6 @@ Package.resolved
 **/xcuserdata/
 *.xcuserstate
 
-# Repository contains only the application sources and release tooling
-/Tests/
-
 # Release keys are embedded locally and must never be committed
 /Config/MetadataKeys.plist
 /Config/SparklePrivateKey*

@@ -36,6 +36,18 @@ but TorrServer currently records every stream request as viewed.
 ## Implementation rule
 
 `OfflineDownloadHTTPContract` is the single validator for initial and resumed
-responses. A future download manager must truncate/restart or ask the user when
-the server returns `200` to a resume request. It must never append that response
-to an existing partial file.
+responses. The download manager must truncate/restart or ask the user when the
+server returns `200` to a resume request. It must never append that response to
+an existing partial file.
+
+## Stage 2 baseline transfer
+
+`OfflineDownloadManager` implements one non-resumable transfer at a time. It
+validates the initial response, writes received chunks directly to
+`<filename>.torrserve-part`, publishes byte and fractional progress, and checks
+the exact final byte count. Only then does it close and atomically move the
+partial file to the requested destination.
+
+Cancellation removes the partial file. Network and filesystem failures retain
+a non-empty partial file for the resume implementation in the next stage. The
+manager never overwrites an existing destination or partial file.
