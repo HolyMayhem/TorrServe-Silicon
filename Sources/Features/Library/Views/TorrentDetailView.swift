@@ -4,6 +4,7 @@ import SwiftUI
 struct TorrentDetailView: View {
     let torrent: NativeTorrent
     @ObservedObject var model: LibraryViewModel
+    @ObservedObject var offlineDownloadManager: OfflineDownloadManager
     let metadata: LibraryMetadata?
     let language: AppLanguage
     let translationMode: OverviewTranslationMode
@@ -160,10 +161,35 @@ struct TorrentDetailView: View {
                         ForEach(torrent.allFiles, id: \.stableID) { file in
                             TorrentFileRow(
                                 file: file,
-                                texts: texts
-                            ) {
-                                model.play(file: file, language: language)
-                            }
+                                texts: texts,
+                                offlineState: model.offlineDownloadState(
+                                    torrent: torrent,
+                                    file: file
+                                ),
+                                offlineDownloadDisabled: model.offlineDownloadIsUnavailable(
+                                    torrent: torrent,
+                                    file: file
+                                ),
+                                play: {
+                                    model.play(file: file, language: language)
+                                },
+                                download: {
+                                    model.chooseOfflineDownloadDestination(
+                                        torrent: torrent,
+                                        file: file,
+                                        language: language
+                                    )
+                                },
+                                pauseDownload: model.pauseOfflineDownload,
+                                resumeDownload: {
+                                    model.resumeOfflineDownload(language: language)
+                                },
+                                retryDownload: {
+                                    model.retryOfflineDownload(language: language)
+                                },
+                                cancelDownload: model.cancelOfflineDownload,
+                                revealDownload: model.revealOfflineDownload
+                            )
                         }
                     }
                     .padding(.top, filesHeaderOverlayHeight)
@@ -214,7 +240,7 @@ struct TorrentDetailView: View {
             Label(texts.files, systemImage: "list.bullet.rectangle")
                 .font(.headline)
             Spacer()
-            Text(texts.playerHint)
+            Text(texts.fileActionsHint)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
@@ -377,7 +403,15 @@ extension View {
 struct TorrentFileRow: View {
     let file: NativeTorrentFile
     let texts: LibraryTexts
+    let offlineState: OfflineDownloadState?
+    let offlineDownloadDisabled: Bool
     let play: () -> Void
+    let download: () -> Void
+    let pauseDownload: () -> Void
+    let resumeDownload: () -> Void
+    let retryDownload: () -> Void
+    let cancelDownload: () -> Void
+    let revealDownload: () -> Void
 
     var body: some View {
         HStack(spacing: 10) {
@@ -398,12 +432,16 @@ struct TorrentFileRow: View {
             Spacer()
 
             if file.isPlayable {
-                Button(action: play) {
-                    Label(texts.watch, systemImage: "play.fill")
+                HStack(spacing: 7) {
+                    offlineDownloadControl
+
+                    Button(action: play) {
+                        Label(texts.watch, systemImage: "play.fill")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .tint(.green)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-                .tint(.green)
             }
         }
         .padding(.horizontal, 10)
@@ -412,5 +450,128 @@ struct TorrentFileRow: View {
             Color.secondary.opacity(0.07),
             in: RoundedRectangle(cornerRadius: 11, style: .continuous)
         )
+    }
+
+    @ViewBuilder
+    private var offlineDownloadControl: some View {
+        if let offlineState {
+            switch offlineState {
+            case .idle, .cancelled:
+                downloadButton
+            case .preparing:
+                activityLabel(texts.preparingDownload)
+                cancelButton
+            case .resuming(let checkpoint):
+                downloadProgress(checkpoint.progress)
+                activityLabel(texts.preparingDownload)
+                cancelButton
+            case .downloading(let progress):
+                downloadProgress(progress)
+                iconButton(
+                    systemImage: "pause.fill",
+                    help: texts.pauseDownload,
+                    action: pauseDownload
+                )
+                cancelButton
+            case .pausing(let progress):
+                downloadProgress(progress)
+                activityLabel(texts.pausingDownload)
+                cancelButton
+            case .paused(let checkpoint):
+                downloadProgress(checkpoint.progress)
+                iconButton(
+                    systemImage: "play.fill",
+                    help: texts.resumeDownload,
+                    action: resumeDownload
+                )
+                cancelButton
+            case .cancelling(let progress):
+                if let progress {
+                    downloadProgress(progress)
+                }
+                activityLabel(texts.cancellingDownload)
+            case .completed:
+                Button(action: revealDownload) {
+                    Label(texts.downloadedOffline, systemImage: "checkmark.circle.fill")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .tint(.green)
+                .help(texts.showInFinder)
+            case .failed(let failure, let checkpoint):
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                    .help(failure.localizedDescription)
+                if checkpoint != nil {
+                    iconButton(
+                        systemImage: "play.fill",
+                        help: texts.resumeDownload,
+                        action: resumeDownload
+                    )
+                    cancelButton
+                } else {
+                    Button(action: retryDownload) {
+                        Label(texts.retryDownload, systemImage: "arrow.clockwise")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+            }
+        } else {
+            downloadButton
+        }
+    }
+
+    private var downloadButton: some View {
+        Button(action: download) {
+            Label(texts.downloadOffline, systemImage: "arrow.down.to.line")
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .disabled(offlineDownloadDisabled)
+        .help(texts.downloadOffline)
+    }
+
+    private var cancelButton: some View {
+        iconButton(
+            systemImage: "xmark",
+            help: texts.cancelDownload,
+            action: cancelDownload
+        )
+    }
+
+    private func downloadProgress(_ progress: OfflineDownloadProgress) -> some View {
+        VStack(alignment: .trailing, spacing: 2) {
+            ProgressView(value: progress.fractionCompleted)
+                .frame(width: 72)
+            Text(progress.fractionCompleted, format: .percent.precision(.fractionLength(0)))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+        }
+    }
+
+    private func activityLabel(_ title: String) -> some View {
+        HStack(spacing: 4) {
+            ProgressView()
+                .controlSize(.mini)
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func iconButton(
+        systemImage: String,
+        help: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .frame(width: 12)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .help(help)
     }
 }

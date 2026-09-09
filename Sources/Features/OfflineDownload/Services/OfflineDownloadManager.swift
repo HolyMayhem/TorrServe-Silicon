@@ -4,6 +4,7 @@ import Foundation
 @MainActor
 final class OfflineDownloadManager: ObservableObject {
     @Published private(set) var state: OfflineDownloadState = .idle
+    @Published private(set) var currentRequest: OfflineDownloadRequest?
 
     private let sessionConfiguration: URLSessionConfiguration
     private let checkpointStore: OfflineDownloadCheckpointStore
@@ -67,6 +68,7 @@ final class OfflineDownloadManager: ObservableObject {
                 try FileManager.default.removeItem(at: checkpoint.request.partialFileURL)
             }
             try checkpointStore.clear()
+            currentRequest = nil
             state = .cancelled
         } catch {
             let failure: OfflineDownloadFailure
@@ -86,15 +88,18 @@ final class OfflineDownloadManager: ObservableObject {
 
     func reset() {
         guard transfer == nil, state.resumableCheckpoint == nil else { return }
+        currentRequest = nil
         state = .idle
     }
 
     private func restorePersistedState() {
         do {
             guard let checkpoint = try checkpointStore.load() else { return }
+            currentRequest = checkpoint.request
             state = try reconciledState(for: checkpoint)
         } catch {
             try? checkpointStore.clear()
+            currentRequest = nil
             state = .failed(persistenceFailure(for: error), checkpoint: nil)
         }
     }
@@ -183,6 +188,7 @@ final class OfflineDownloadManager: ObservableObject {
         request: OfflineDownloadRequest,
         checkpoint: OfflineDownloadCheckpoint?
     ) {
+        currentRequest = request
         if let checkpoint {
             state = .resuming(checkpoint)
         } else {
@@ -358,6 +364,7 @@ final class OfflineDownloadManager: ObservableObject {
         case .cancelled:
             clearTransfer()
             try? checkpointStore.clear()
+            currentRequest = nil
             state = .cancelled
         case .failed(let failure, let checkpoint):
             clearTransfer()

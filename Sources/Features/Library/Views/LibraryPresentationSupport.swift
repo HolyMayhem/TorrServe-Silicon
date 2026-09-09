@@ -60,8 +60,10 @@ struct LibraryTexts {
     }
     var downloaded: String { language == .russian ? "Загружено" : "Downloaded" }
     var files: String { language == .russian ? "Файлы" : "Files" }
-    var playerHint: String {
-        language == .russian ? "Воспроизведение во внешнем плеере" : "Playback in an external player"
+    var fileActionsHint: String {
+        language == .russian
+            ? "Воспроизведение или загрузка для офлайн-просмотра"
+            : "Play or download for offline viewing"
     }
     var metadataLoading: String {
         language == .russian ? "Получение метаданных torrent…" : "Fetching torrent metadata…"
@@ -96,6 +98,19 @@ struct LibraryTexts {
     var seeds: String { language == .russian ? "Сиды" : "Seeds" }
     var peers: String { language == .russian ? "Пиры" : "Peers" }
     var watch: String { language == .russian ? "Смотреть" : "Watch" }
+    var downloadOffline: String { language == .russian ? "Скачать" : "Download" }
+    var downloadForOfflineViewing: String {
+        language == .russian ? "Скачать для офлайн-просмотра" : "Download for Offline Viewing"
+    }
+    var preparingDownload: String { language == .russian ? "Подготовка…" : "Preparing…" }
+    var pausingDownload: String { language == .russian ? "Приостановка…" : "Pausing…" }
+    var cancellingDownload: String { language == .russian ? "Отмена…" : "Cancelling…" }
+    var pauseDownload: String { language == .russian ? "Приостановить" : "Pause" }
+    var resumeDownload: String { language == .russian ? "Продолжить" : "Resume" }
+    var cancelDownload: String { language == .russian ? "Отменить загрузку" : "Cancel download" }
+    var retryDownload: String { language == .russian ? "Повторить" : "Retry" }
+    var downloadedOffline: String { language == .russian ? "Загружено" : "Downloaded" }
+    var showInFinder: String { language == .russian ? "Показать в Finder" : "Show in Finder" }
     var play: String { language == .russian ? "Воспроизвести" : "Play" }
     var buffering: String { language == .russian ? "Буферизация" : "Buffering" }
     var openInAnotherPlayer: String {

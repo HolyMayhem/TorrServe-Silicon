@@ -167,6 +167,7 @@ struct LibraryModePicker: View {
 struct TorrentContextMenu: View {
     let torrent: NativeTorrent
     @ObservedObject var model: LibraryViewModel
+    @ObservedObject var offlineDownloadManager: OfflineDownloadManager
     let language: AppLanguage
 
     private var texts: LibraryTexts { LibraryTexts(language: language) }
@@ -189,6 +190,8 @@ struct TorrentContextMenu: View {
             Label(texts.openInAnotherPlayer, systemImage: "play.rectangle")
         }
         .disabled(torrent.playableFiles.isEmpty)
+
+        offlineDownloadActions
 
         Button {
             model.copyStreamURL(for: torrent)
@@ -224,6 +227,87 @@ struct TorrentContextMenu: View {
             model.requestRemoval(of: torrent)
         } label: {
             Label(texts.remove, systemImage: "trash")
+        }
+    }
+
+    @ViewBuilder
+    private var offlineDownloadActions: some View {
+        if model.offlineDownloadFile(in: torrent) != nil {
+            switch offlineDownloadManager.state {
+            case .preparing, .resuming:
+                Button(texts.preparingDownload) {}
+                    .disabled(true)
+                cancelOfflineDownloadButton
+            case .downloading:
+                Button {
+                    model.pauseOfflineDownload()
+                } label: {
+                    Label(texts.pauseDownload, systemImage: "pause.fill")
+                }
+                cancelOfflineDownloadButton
+            case .pausing:
+                Button(texts.pausingDownload) {}
+                    .disabled(true)
+                cancelOfflineDownloadButton
+            case .paused:
+                Button {
+                    model.resumeOfflineDownload(language: language)
+                } label: {
+                    Label(texts.resumeDownload, systemImage: "play.fill")
+                }
+                cancelOfflineDownloadButton
+            case .cancelling:
+                Button(texts.cancellingDownload) {}
+                    .disabled(true)
+            case .completed:
+                Button {
+                    model.revealOfflineDownload()
+                } label: {
+                    Label(texts.showInFinder, systemImage: "folder")
+                }
+            case .failed(_, let checkpoint):
+                if checkpoint != nil {
+                    Button {
+                        model.resumeOfflineDownload(language: language)
+                    } label: {
+                        Label(texts.resumeDownload, systemImage: "play.fill")
+                    }
+                    cancelOfflineDownloadButton
+                } else {
+                    Button {
+                        model.retryOfflineDownload(language: language)
+                    } label: {
+                        Label(texts.retryDownload, systemImage: "arrow.clockwise")
+                    }
+                }
+            case .idle, .cancelled:
+                startOfflineDownloadButton
+            }
+        } else {
+            startOfflineDownloadButton
+        }
+    }
+
+    private var startOfflineDownloadButton: some View {
+        Button {
+            model.chooseOfflineDownloadForFirstPlayableFile(
+                in: torrent,
+                language: language
+            )
+        } label: {
+            Label(texts.downloadForOfflineViewing, systemImage: "arrow.down.to.line")
+        }
+        .disabled(
+            torrent.playableFiles.isEmpty
+                || model.offlineDownloadIsUnavailable(for: torrent)
+        )
+    }
+
+    private var cancelOfflineDownloadButton: some View {
+        Button(role: .destructive) {
+            model.cancelOfflineDownload()
+        } label: {
+            Label(texts.cancelDownload, systemImage: "xmark")
         }
     }
 }

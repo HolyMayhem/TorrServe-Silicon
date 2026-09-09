@@ -78,12 +78,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     let appUpdateController = AppUpdateController()
     let releaseChecker = TorrServerReleaseChecker()
     let nativeTorrServerAPI = NativeTorrServerAPI()
+    let offlineDownloadManager = OfflineDownloadManager()
     lazy var diagnosticsService = TorrServerDiagnosticsService(api: nativeTorrServerAPI)
     let metadataAPIKeyValidator = MetadataAPIKeyValidator()
     let metadataSettings = MetadataSettingsStore.shared
     let menuBarPreferencesStore = MenuBarPreferencesStore()
     let mainWindowModel = MainWindowModel()
-    lazy var libraryModel = LibraryViewModel(api: nativeTorrServerAPI)
+    lazy var libraryModel = LibraryViewModel(
+        api: nativeTorrServerAPI,
+        offlineDownloadManager: offlineDownloadManager
+    )
     lazy var searchModel = SearchViewModel(torrServer: nativeTorrServerAPI)
     let popoverModel = MenuBarPopoverModel()
 

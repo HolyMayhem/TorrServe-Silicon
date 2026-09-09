@@ -128,6 +128,7 @@ struct LibraryView: View {
                                 TorrentContextMenu(
                                     torrent: torrent,
                                     model: model,
+                                    offlineDownloadManager: model.offlineDownloadManager,
                                     language: mainModel.language
                                 )
                             }
@@ -363,6 +364,7 @@ struct LibraryView: View {
                                     TorrentContextMenu(
                                         torrent: torrent,
                                         model: model,
+                                        offlineDownloadManager: model.offlineDownloadManager,
                                         language: mainModel.language
                                     )
                                 }
@@ -390,6 +392,7 @@ struct LibraryView: View {
                                     TorrentContextMenu(
                                         torrent: torrent,
                                         model: model,
+                                        offlineDownloadManager: model.offlineDownloadManager,
                                         language: mainModel.language
                                     )
                                 }
@@ -431,6 +434,7 @@ struct LibraryView: View {
             TorrentDetailView(
                 torrent: torrent,
                 model: model,
+                offlineDownloadManager: model.offlineDownloadManager,
                 metadata: model.metadata(for: torrent),
                 language: mainModel.language,
                 translationMode: mainModel.overviewTranslationMode

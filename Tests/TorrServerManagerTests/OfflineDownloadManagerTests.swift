@@ -42,6 +42,7 @@ final class OfflineDownloadManagerTests: XCTestCase {
         let state = try await waitForTerminalState(manager)
 
         XCTAssertEqual(state, .completed(destination))
+        XCTAssertEqual(manager.currentRequest?.destinationURL, destination)
         XCTAssertEqual(try Data(contentsOf: destination), payload)
         XCTAssertFalse(FileManager.default.fileExists(
             atPath: destination.appendingPathExtension("torrserve-part").path
@@ -71,6 +72,7 @@ final class OfflineDownloadManagerTests: XCTestCase {
         let state = try await waitForTerminalState(manager)
 
         XCTAssertEqual(state, .cancelled)
+        XCTAssertNil(manager.currentRequest)
         XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: request.partialFileURL.path))
     }
@@ -357,6 +359,7 @@ final class OfflineDownloadManagerTests: XCTestCase {
         let restoredManager = makeManager(checkpointStore: checkpointStore)
 
         XCTAssertEqual(restoredManager.state, .paused(pausedCheckpoint))
+        XCTAssertEqual(restoredManager.currentRequest, pausedCheckpoint.request)
         try restoredManager.resume()
         let completedState = try await waitForTerminalState(restoredManager, timeout: 5)
 

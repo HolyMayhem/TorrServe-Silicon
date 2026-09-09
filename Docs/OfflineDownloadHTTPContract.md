@@ -87,3 +87,17 @@ exact final length is moved into place automatically; a stale record for an
 already completed destination is cleared. Missing, oversized, conflicting, or
 corrupt state is rejected and its manifest is cleared without deleting the
 unverified partial or destination file.
+
+## Stage 5 library integration
+
+Playable files in the compact Library detail view now expose a native Download
+control next to Watch. The save panel defaults to the user's Movies folder and
+remembers the last chosen directory. The active file row shows progress and
+provides pause, resume, retry, cancel, and Show in Finder actions according to
+the manager state.
+
+Poster and large-card modes expose the same lifecycle actions in each torrent's
+context menu. The first playable file is used when a new download starts from a
+card. The application intentionally allows only one active or resumable offline
+download at a time; controls for other files remain unavailable until that job
+is completed or cancelled.

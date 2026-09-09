@@ -31,6 +31,7 @@ final class LibraryViewModel: ObservableObject {
     var onServerConnectionIssueChanged: ((String?) -> Void)?
 
     let api: any TorrServerServing
+    let offlineDownloadManager: OfflineDownloadManager
     private let metadataStore: LibraryMetadataStore
     private let metadataResolver: MetadataResolver
     private let metadataSettings: MetadataSettingsStore
@@ -42,11 +43,13 @@ final class LibraryViewModel: ObservableObject {
 
     init(
         api: any TorrServerServing = NativeTorrServerAPI(),
+        offlineDownloadManager: OfflineDownloadManager? = nil,
         metadataStore: LibraryMetadataStore = .shared,
         metadataResolver: MetadataResolver = MetadataResolver(),
         metadataSettings: MetadataSettingsStore = .shared
     ) {
         self.api = api
+        self.offlineDownloadManager = offlineDownloadManager ?? OfflineDownloadManager()
         self.metadataStore = metadataStore
         self.metadataResolver = metadataResolver
         self.metadataSettings = metadataSettings
