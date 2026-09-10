@@ -13,6 +13,7 @@ final class OfflineDownloadManager: ObservableObject {
     private let historyStore: OfflineDownloadHistoryStore
     private let fileManager: FileManager
     private let userDefaults: UserDefaults
+    private let recycleCompletedFile: (URL) throws -> Void
     private let legacyDownloadDirectoryURL: URL?
     private var transfer: OfflineDownloadTransfer?
     private var transferID: UUID?
@@ -24,7 +25,8 @@ final class OfflineDownloadManager: ObservableObject {
         checkpointStore: OfflineDownloadCheckpointStore = OfflineDownloadCheckpointStore(),
         historyStore: OfflineDownloadHistoryStore? = nil,
         fileManager: FileManager = .default,
-        userDefaults: UserDefaults = .standard
+        userDefaults: UserDefaults = .standard,
+        recycleCompletedFile: ((URL) throws -> Void)? = nil
     ) {
         self.sessionConfiguration = sessionConfiguration
         self.checkpointStore = checkpointStore
@@ -36,6 +38,10 @@ final class OfflineDownloadManager: ObservableObject {
         )
         self.fileManager = fileManager
         self.userDefaults = userDefaults
+        self.recycleCompletedFile = recycleCompletedFile ?? { url in
+            var resultingURL: NSURL?
+            try fileManager.trashItem(at: url, resultingItemURL: &resultingURL)
+        }
         if let legacyPath = userDefaults.string(forKey: "OfflineDownloadDirectory"),
            !legacyPath.isEmpty {
             legacyDownloadDirectoryURL = URL(
@@ -125,6 +131,33 @@ final class OfflineDownloadManager: ObservableObject {
             return nil
         }
         return record.destinationURL
+    }
+
+    func moveCompletedDownloadToTrash(
+        sourceURL: URL,
+        expectedLength: Int64
+    ) throws {
+        guard let record = completedDownloads.last(where: {
+            $0.sourceURL == sourceURL && $0.expectedLength == expectedLength
+        }) else {
+            return
+        }
+
+        if fileManager.fileExists(atPath: record.destinationURL.path) {
+            try recycleCompletedFile(record.destinationURL)
+        }
+
+        completedDownloads.removeAll {
+            $0.sourceURL == sourceURL && $0.expectedLength == expectedLength
+        }
+        try? historyStore.save(completedDownloads)
+
+        if currentRequest?.sourceURL == sourceURL,
+           currentRequest?.expectedLength == expectedLength,
+           case .completed = state {
+            currentRequest = nil
+            state = .idle
+        }
     }
 
     func reconcileCompletedDownload(

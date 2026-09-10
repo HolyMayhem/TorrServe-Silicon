@@ -109,6 +109,15 @@ struct LibraryTexts {
     var cancelDownload: String { language == .russian ? "Отменить загрузку" : "Cancel download" }
     var retryDownload: String { language == .russian ? "Повторить" : "Retry" }
     var showInFinder: String { language == .russian ? "Показать в Finder" : "Show in Finder" }
+    var deleteDownloadedFile: String { language == .russian ? "Удалить" : "Delete" }
+    var deleteDownloadedFileQuestion: String {
+        language == .russian ? "Удалить скачанный файл?" : "Delete the downloaded file?"
+    }
+    func deleteDownloadedFileHint(_ filename: String) -> String {
+        language == .russian
+            ? "Файл «\(filename)» будет перемещён в Корзину. Торрент останется в библиотеке."
+            : "\(filename) will be moved to the Trash. The torrent will remain in the library."
+    }
     var play: String { language == .russian ? "Воспроизвести" : "Play" }
     var buffering: String { language == .russian ? "Буферизация" : "Buffering" }
     var openInAnotherPlayer: String {

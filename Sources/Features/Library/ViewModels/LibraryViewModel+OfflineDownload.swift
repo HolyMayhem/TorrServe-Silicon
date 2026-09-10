@@ -206,6 +206,30 @@ extension LibraryViewModel {
         NSWorkspace.shared.activateFileViewerSelecting([destinationURL])
     }
 
+    func deleteOfflineDownload(
+        torrent: NativeTorrent,
+        file: NativeTorrentFile,
+        language: AppLanguage
+    ) {
+        guard let sourceURL = api.streamURL(torrent: torrent, file: file) else {
+            return
+        }
+
+        do {
+            try offlineDownloadManager.moveCompletedDownloadToTrash(
+                sourceURL: sourceURL,
+                expectedLength: file.length
+            )
+        } catch {
+            alert = AppAlert(
+                title: language == .russian
+                    ? "Не удалось удалить файл"
+                    : "Could Not Delete File",
+                message: error.localizedDescription
+            )
+        }
+    }
+
     private func offlineDownloadMatches(
         torrent: NativeTorrent,
         file: NativeTorrentFile

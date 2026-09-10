@@ -60,6 +60,37 @@ final class OfflineDownloadManagerTests: XCTestCase {
         )
     }
 
+    func testMovesCompletedDownloadToTrashAndClearsHistory() async throws {
+        let payload = Data(repeating: 0x4A, count: 32_768)
+        StubURLProtocol.configure(.init(data: payload, chunkSize: 4_096))
+        let destination = temporaryDirectory.appendingPathComponent("delete-me.mkv")
+        let request = makeRequest(destination: destination, length: Int64(payload.count))
+        var recycledURLs: [URL] = []
+        let manager = makeManager { url in
+            recycledURLs.append(url)
+            try FileManager.default.removeItem(at: url)
+        }
+
+        try manager.start(request)
+        _ = try await waitForTerminalState(manager)
+        try manager.moveCompletedDownloadToTrash(
+            sourceURL: request.sourceURL,
+            expectedLength: request.expectedLength
+        )
+
+        XCTAssertEqual(recycledURLs, [destination])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
+        XCTAssertTrue(manager.completedDownloads.isEmpty)
+        XCTAssertNil(manager.currentRequest)
+        XCTAssertEqual(manager.state, .idle)
+
+        let restoredManager = makeManager()
+        XCTAssertNil(restoredManager.completedDestination(
+            sourceURL: request.sourceURL,
+            expectedLength: request.expectedLength
+        ))
+    }
+
     func testDownloadDirectoryIsPersistedAndAvoidsFilenameCollisions() throws {
         let suiteName = "OfflineDownloadManagerTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -508,13 +539,15 @@ final class OfflineDownloadManagerTests: XCTestCase {
     }
 
     private func makeManager(
-        checkpointStore: OfflineDownloadCheckpointStore? = nil
+        checkpointStore: OfflineDownloadCheckpointStore? = nil,
+        recycleCompletedFile: ((URL) throws -> Void)? = nil
     ) -> OfflineDownloadManager {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [StubURLProtocol.self]
         return OfflineDownloadManager(
             sessionConfiguration: configuration,
-            checkpointStore: checkpointStore ?? makeCheckpointStore()
+            checkpointStore: checkpointStore ?? makeCheckpointStore(),
+            recycleCompletedFile: recycleCompletedFile
         )
     }
 

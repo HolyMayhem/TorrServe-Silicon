@@ -191,10 +191,11 @@ struct TorrentDetailView: View {
                                     model.retryOfflineDownload(language: language)
                                 },
                                 cancelDownload: model.cancelOfflineDownload,
-                                revealDownload: {
-                                    model.revealOfflineDownload(
+                                deleteDownload: {
+                                    model.deleteOfflineDownload(
                                         torrent: torrent,
-                                        file: file
+                                        file: file,
+                                        language: language
                                     )
                                 }
                             )
@@ -425,6 +426,8 @@ extension View {
 }
 
 struct TorrentFileRow: View {
+    @State private var showsDeleteConfirmation = false
+
     let file: NativeTorrentFile
     let texts: LibraryTexts
     let offlineState: OfflineDownloadState?
@@ -435,7 +438,7 @@ struct TorrentFileRow: View {
     let resumeDownload: () -> Void
     let retryDownload: () -> Void
     let cancelDownload: () -> Void
-    let revealDownload: () -> Void
+    let deleteDownload: () -> Void
 
     var body: some View {
         HStack(spacing: 10) {
@@ -480,6 +483,17 @@ struct TorrentFileRow: View {
             Color.secondary.opacity(0.07),
             in: RoundedRectangle(cornerRadius: 11, style: .continuous)
         )
+        .alert(
+            texts.deleteDownloadedFileQuestion,
+            isPresented: $showsDeleteConfirmation
+        ) {
+            Button(texts.cancel, role: .cancel) {}
+            Button(texts.deleteDownloadedFile, role: .destructive) {
+                deleteDownload()
+            }
+        } message: {
+            Text(texts.deleteDownloadedFileHint(file.displayName))
+        }
     }
 
     @ViewBuilder
@@ -521,14 +535,15 @@ struct TorrentFileRow: View {
                 }
                 activityLabel(texts.cancellingDownload)
             case .completed:
-                Button(action: revealDownload) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .frame(width: 12)
+                Button {
+                    showsDeleteConfirmation = true
+                } label: {
+                    Label(texts.deleteDownloadedFile, systemImage: "trash")
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                .tint(.green)
-                .help(texts.showInFinder)
+                .tint(.gray)
+                .help(texts.deleteDownloadedFile)
             case .failed(let failure, let checkpoint):
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
