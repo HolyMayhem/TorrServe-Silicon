@@ -58,7 +58,6 @@ struct LibraryTexts {
             ? "Выбрано материалов: \(count)"
             : "Selected items: \(count)"
     }
-    var downloaded: String { language == .russian ? "Загружено" : "Downloaded" }
     var files: String { language == .russian ? "Файлы" : "Files" }
     var fileActionsHint: String {
         language == .russian
@@ -109,7 +108,6 @@ struct LibraryTexts {
     var resumeDownload: String { language == .russian ? "Продолжить" : "Resume" }
     var cancelDownload: String { language == .russian ? "Отменить загрузку" : "Cancel download" }
     var retryDownload: String { language == .russian ? "Повторить" : "Retry" }
-    var downloadedOffline: String { language == .russian ? "Загружено" : "Downloaded" }
     var showInFinder: String { language == .russian ? "Показать в Finder" : "Show in Finder" }
     var play: String { language == .russian ? "Воспроизвести" : "Play" }
     var buffering: String { language == .russian ? "Буферизация" : "Buffering" }

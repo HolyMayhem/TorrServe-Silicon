@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 struct LibraryView: View {
     @ObservedObject var mainModel: MainWindowModel
     @ObservedObject var model: LibraryViewModel
+    @ObservedObject var offlineDownloadManager: OfflineDownloadManager
     @FocusState private var magnetFieldIsFocused: Bool
     @State private var compactHeaderOverlayHeight: CGFloat = 82
     @State private var compactFooterOverlayHeight: CGFloat = 40
@@ -120,7 +121,8 @@ struct LibraryView: View {
                                 torrent: torrent,
                                 metadata: model.metadata(for: torrent),
                                 language: mainModel.language,
-                                isSelected: model.selectedTorrentIDs.contains(torrent.id)
+                                isSelected: model.selectedTorrentIDs.contains(torrent.id),
+                                isDownloaded: model.isTorrentDownloaded(torrent)
                             ) {
                                 select(torrent)
                             }
@@ -128,7 +130,7 @@ struct LibraryView: View {
                                 TorrentContextMenu(
                                     torrent: torrent,
                                     model: model,
-                                    offlineDownloadManager: model.offlineDownloadManager,
+                                    offlineDownloadManager: offlineDownloadManager,
                                     language: mainModel.language
                                 )
                             }
@@ -352,6 +354,7 @@ struct LibraryView: View {
                                     metadata: model.metadata(for: torrent),
                                     language: mainModel.language,
                                     isSelected: model.selectedTorrentIDs.contains(torrent.id),
+                                    isDownloaded: model.isTorrentDownloaded(torrent),
                                     select: { select(torrent) },
                                     play: {
                                         model.playFirstFile(
@@ -364,7 +367,7 @@ struct LibraryView: View {
                                     TorrentContextMenu(
                                         torrent: torrent,
                                         model: model,
-                                        offlineDownloadManager: model.offlineDownloadManager,
+                                        offlineDownloadManager: offlineDownloadManager,
                                         language: mainModel.language
                                     )
                                 }
@@ -380,6 +383,7 @@ struct LibraryView: View {
                                     language: mainModel.language,
                                     translationMode: mainModel.overviewTranslationMode,
                                     isSelected: model.selectedTorrentIDs.contains(torrent.id),
+                                    isDownloaded: model.isTorrentDownloaded(torrent),
                                     select: { select(torrent) },
                                     play: {
                                         model.playFirstFile(
@@ -392,7 +396,7 @@ struct LibraryView: View {
                                     TorrentContextMenu(
                                         torrent: torrent,
                                         model: model,
-                                        offlineDownloadManager: model.offlineDownloadManager,
+                                        offlineDownloadManager: offlineDownloadManager,
                                         language: mainModel.language
                                     )
                                 }
@@ -434,7 +438,7 @@ struct LibraryView: View {
             TorrentDetailView(
                 torrent: torrent,
                 model: model,
-                offlineDownloadManager: model.offlineDownloadManager,
+                offlineDownloadManager: offlineDownloadManager,
                 metadata: model.metadata(for: torrent),
                 language: mainModel.language,
                 translationMode: mainModel.overviewTranslationMode

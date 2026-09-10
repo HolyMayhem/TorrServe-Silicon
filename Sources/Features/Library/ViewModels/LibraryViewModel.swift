@@ -117,6 +117,7 @@ final class LibraryViewModel: ObservableObject {
     }
 
     func applyServerSnapshot(_ values: [NativeTorrent]) {
+        reconcileOfflineDownloads(in: values)
         torrents = values
         metadataByHash = metadataStore.allMetadata()
         resolveMetadataIfNeeded(for: values)

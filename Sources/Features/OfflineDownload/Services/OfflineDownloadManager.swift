@@ -5,19 +5,162 @@ import Foundation
 final class OfflineDownloadManager: ObservableObject {
     @Published private(set) var state: OfflineDownloadState = .idle
     @Published private(set) var currentRequest: OfflineDownloadRequest?
+    @Published private(set) var completedDownloads: [OfflineDownloadRecord] = []
+    @Published private(set) var downloadDirectoryURL: URL?
 
     private let sessionConfiguration: URLSessionConfiguration
     private let checkpointStore: OfflineDownloadCheckpointStore
+    private let historyStore: OfflineDownloadHistoryStore
+    private let fileManager: FileManager
+    private let userDefaults: UserDefaults
+    private let legacyDownloadDirectoryURL: URL?
     private var transfer: OfflineDownloadTransfer?
     private var transferID: UUID?
 
+    private static let downloadDirectoryKey = "OfflineDownloadConfiguredDirectory"
+
     init(
         sessionConfiguration: URLSessionConfiguration = .ephemeral,
-        checkpointStore: OfflineDownloadCheckpointStore = OfflineDownloadCheckpointStore()
+        checkpointStore: OfflineDownloadCheckpointStore = OfflineDownloadCheckpointStore(),
+        historyStore: OfflineDownloadHistoryStore? = nil,
+        fileManager: FileManager = .default,
+        userDefaults: UserDefaults = .standard
     ) {
         self.sessionConfiguration = sessionConfiguration
         self.checkpointStore = checkpointStore
+        self.historyStore = historyStore ?? OfflineDownloadHistoryStore(
+            fileManager: fileManager,
+            fileURL: checkpointStore.fileURL?
+                .deletingLastPathComponent()
+                .appendingPathComponent("completed.json", isDirectory: false)
+        )
+        self.fileManager = fileManager
+        self.userDefaults = userDefaults
+        if let legacyPath = userDefaults.string(forKey: "OfflineDownloadDirectory"),
+           !legacyPath.isEmpty {
+            legacyDownloadDirectoryURL = URL(
+                fileURLWithPath: legacyPath,
+                isDirectory: true
+            ).standardizedFileURL
+        } else {
+            legacyDownloadDirectoryURL = nil
+        }
+        downloadDirectoryURL = Self.savedDownloadDirectory(
+            fileManager: fileManager,
+            userDefaults: userDefaults
+        )
+        restoreCompletedDownloads()
         restorePersistedState()
+    }
+
+    func setDownloadDirectory(_ directoryURL: URL) throws {
+        let standardizedURL = directoryURL.standardizedFileURL
+        var isDirectory: ObjCBool = false
+        guard fileManager.fileExists(
+            atPath: standardizedURL.path,
+            isDirectory: &isDirectory
+        ), isDirectory.boolValue else {
+            throw OfflineDownloadDirectoryError.notDirectory(standardizedURL)
+        }
+        guard fileManager.isWritableFile(atPath: standardizedURL.path) else {
+            throw OfflineDownloadDirectoryError.notWritable(standardizedURL)
+        }
+
+        userDefaults.set(standardizedURL.path, forKey: Self.downloadDirectoryKey)
+        downloadDirectoryURL = standardizedURL
+    }
+
+    func destinationURL(for filename: String) throws -> URL {
+        guard let directoryURL = downloadDirectoryURL else {
+            throw OfflineDownloadDirectoryError.unavailable
+        }
+
+        do {
+            try fileManager.createDirectory(
+                at: directoryURL,
+                withIntermediateDirectories: true
+            )
+        } catch {
+            throw OfflineDownloadDirectoryError.couldNotCreate(
+                error.localizedDescription
+            )
+        }
+
+        var isDirectory: ObjCBool = false
+        guard fileManager.fileExists(
+            atPath: directoryURL.path,
+            isDirectory: &isDirectory
+        ), isDirectory.boolValue else {
+            throw OfflineDownloadDirectoryError.notDirectory(directoryURL)
+        }
+        guard fileManager.isWritableFile(atPath: directoryURL.path) else {
+            throw OfflineDownloadDirectoryError.notWritable(directoryURL)
+        }
+
+        let safeFilename = URL(fileURLWithPath: filename).lastPathComponent
+        let preferredURL = directoryURL.appendingPathComponent(
+            safeFilename.isEmpty ? "TorrServe-download" : safeFilename,
+            isDirectory: false
+        )
+        return availableDestinationURL(startingAt: preferredURL)
+    }
+
+    func completedDestination(
+        sourceURL: URL,
+        expectedLength: Int64
+    ) -> URL? {
+        if currentRequest?.sourceURL == sourceURL,
+           currentRequest?.expectedLength == expectedLength,
+           case .completed(let destinationURL) = state,
+           completedFileIsValid(at: destinationURL, expectedLength: expectedLength) {
+            return destinationURL
+        }
+
+        guard let record = completedDownloads.last(where: {
+            $0.sourceURL == sourceURL && $0.expectedLength == expectedLength
+        }), completedFileIsValid(
+            at: record.destinationURL,
+            expectedLength: record.expectedLength
+        ) else {
+            return nil
+        }
+        return record.destinationURL
+    }
+
+    func reconcileCompletedDownload(
+        sourceURL: URL,
+        filename: String,
+        expectedLength: Int64
+    ) {
+        guard completedDestination(
+            sourceURL: sourceURL,
+            expectedLength: expectedLength
+        ) == nil else {
+            return
+        }
+
+        let safeFilename = URL(fileURLWithPath: filename).lastPathComponent
+        guard !safeFilename.isEmpty else { return }
+        let candidateDirectories = [downloadDirectoryURL, legacyDownloadDirectoryURL]
+            .compactMap { $0 }
+        for directoryURL in candidateDirectories {
+            let candidateURL = directoryURL.appendingPathComponent(
+                safeFilename,
+                isDirectory: false
+            )
+            guard completedFileIsValid(
+                at: candidateURL,
+                expectedLength: expectedLength
+            ) else {
+                continue
+            }
+            recordCompletedDownload(OfflineDownloadRequest(
+                sourceURL: sourceURL,
+                destinationURL: candidateURL,
+                expectedLength: expectedLength
+            ))
+            return
+        }
     }
 
     func start(_ request: OfflineDownloadRequest) throws {
@@ -97,6 +240,9 @@ final class OfflineDownloadManager: ObservableObject {
             guard let checkpoint = try checkpointStore.load() else { return }
             currentRequest = checkpoint.request
             state = try reconciledState(for: checkpoint)
+            if case .completed = state {
+                recordCompletedDownload(checkpoint.request)
+            }
         } catch {
             try? checkpointStore.clear()
             currentRequest = nil
@@ -360,6 +506,9 @@ final class OfflineDownloadManager: ObservableObject {
         case .completed(let destinationURL):
             clearTransfer()
             try? checkpointStore.clear()
+            if let currentRequest {
+                recordCompletedDownload(currentRequest)
+            }
             state = .completed(destinationURL)
         case .cancelled:
             clearTransfer()
@@ -413,6 +562,94 @@ final class OfflineDownloadManager: ObservableObject {
     private func clearTransfer() {
         transfer = nil
         transferID = nil
+    }
+
+    private func restoreCompletedDownloads() {
+        do {
+            let storedRecords = try historyStore.load()
+            let validRecords = storedRecords.filter {
+                completedFileIsValid(
+                    at: $0.destinationURL,
+                    expectedLength: $0.expectedLength
+                )
+            }
+            completedDownloads = validRecords
+            if validRecords != storedRecords {
+                try historyStore.save(validRecords)
+            }
+        } catch {
+            completedDownloads = []
+            try? historyStore.save([])
+        }
+    }
+
+    private func recordCompletedDownload(_ request: OfflineDownloadRequest) {
+        let record = OfflineDownloadRecord(
+            sourceURL: request.sourceURL,
+            destinationURL: request.destinationURL,
+            expectedLength: request.expectedLength,
+            completedAt: Date()
+        )
+        completedDownloads.removeAll {
+            $0.sourceURL == request.sourceURL
+                || $0.destinationURL == request.destinationURL
+        }
+        completedDownloads.append(record)
+        try? historyStore.save(completedDownloads)
+    }
+
+    private func completedFileIsValid(
+        at url: URL,
+        expectedLength: Int64
+    ) -> Bool {
+        guard let attributes = try? fileManager.attributesOfItem(atPath: url.path),
+              let size = attributes[.size] as? NSNumber else {
+            return false
+        }
+        return size.int64Value == expectedLength
+    }
+
+    private func availableDestinationURL(startingAt preferredURL: URL) -> URL {
+        guard destinationAndPartialAreAvailable(for: preferredURL) else {
+            let fileExtension = preferredURL.pathExtension
+            let basename = preferredURL.deletingPathExtension().lastPathComponent
+            let directoryURL = preferredURL.deletingLastPathComponent()
+            for suffix in 2...9_999 {
+                let filename = fileExtension.isEmpty
+                    ? "\(basename) (\(suffix))"
+                    : "\(basename) (\(suffix)).\(fileExtension)"
+                let candidateURL = directoryURL.appendingPathComponent(
+                    filename,
+                    isDirectory: false
+                )
+                if destinationAndPartialAreAvailable(for: candidateURL) {
+                    return candidateURL
+                }
+            }
+            return preferredURL
+        }
+        return preferredURL
+    }
+
+    private func destinationAndPartialAreAvailable(for destinationURL: URL) -> Bool {
+        !fileManager.fileExists(atPath: destinationURL.path)
+            && !fileManager.fileExists(
+                atPath: destinationURL.appendingPathExtension("torrserve-part").path
+            )
+    }
+
+    private static func savedDownloadDirectory(
+        fileManager: FileManager,
+        userDefaults: UserDefaults
+    ) -> URL? {
+        if let savedPath = userDefaults.string(forKey: downloadDirectoryKey),
+           !savedPath.isEmpty {
+            return URL(fileURLWithPath: savedPath, isDirectory: true)
+                .standardizedFileURL
+        }
+        return fileManager.urls(for: .moviesDirectory, in: .userDomainMask)
+            .first?
+            .appendingPathComponent("TorrServe Downloads", isDirectory: true)
     }
 }
 

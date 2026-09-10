@@ -260,10 +260,17 @@ struct TorrentContextMenu: View {
                 Button(texts.cancellingDownload) {}
                     .disabled(true)
             case .completed:
-                Button {
-                    model.revealOfflineDownload()
-                } label: {
-                    Label(texts.showInFinder, systemImage: "folder")
+                if let downloadedFile = model.offlineDownloadedFile(in: torrent) {
+                    Button {
+                        model.revealOfflineDownload(
+                            torrent: torrent,
+                            file: downloadedFile
+                        )
+                    } label: {
+                        Label(texts.showInFinder, systemImage: "folder")
+                    }
+                } else {
+                    startOfflineDownloadButton
                 }
             case .failed(_, let checkpoint):
                 if checkpoint != nil {
@@ -283,6 +290,15 @@ struct TorrentContextMenu: View {
             case .idle, .cancelled:
                 startOfflineDownloadButton
             }
+        } else if let downloadedFile = model.offlineDownloadedFile(in: torrent) {
+            Button {
+                model.revealOfflineDownload(
+                    torrent: torrent,
+                    file: downloadedFile
+                )
+            } label: {
+                Label(texts.showInFinder, systemImage: "folder")
+            }
         } else {
             startOfflineDownloadButton
         }
@@ -290,7 +306,7 @@ struct TorrentContextMenu: View {
 
     private var startOfflineDownloadButton: some View {
         Button {
-            model.chooseOfflineDownloadForFirstPlayableFile(
+            model.downloadFirstPlayableFile(
                 in: torrent,
                 language: language
             )

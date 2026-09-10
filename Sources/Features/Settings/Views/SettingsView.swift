@@ -1,9 +1,12 @@
+import AppKit
 import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject var model: MainWindowModel
+    @ObservedObject var offlineDownloadManager: OfflineDownloadManager
     @State private var scrollMetrics = AppScrollMetrics.zero
     @State private var scrollIndicatorIsVisible = false
+    @State private var offlineDownloadFolderError: String?
 
     private let pickerColumnWidth: CGFloat = 220
 
@@ -29,6 +32,7 @@ struct SettingsView: View {
 
                 applicationSection
                 appUpdatesSection
+                offlineDownloadsSection
                 menuBarSection
                 interfaceSection
                 metadataSection
@@ -69,6 +73,23 @@ struct SettingsView: View {
         .padding(.bottom, SettingsScreenLayout.bottomPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .ignoresSafeArea(.container, edges: [.top, .bottom])
+        .alert(
+            model.language == .russian
+                ? "Не удалось выбрать папку"
+                : "Could Not Select Folder",
+            isPresented: Binding(
+                get: { offlineDownloadFolderError != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        offlineDownloadFolderError = nil
+                    }
+                }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(offlineDownloadFolderError ?? "")
+        }
     }
 
     private var applicationSection: some View {
@@ -177,6 +198,59 @@ struct SettingsView: View {
                 }
                 .disabled(!model.canCheckForAppUpdates)
             }
+        }
+    }
+
+    private var offlineDownloadsSection: some View {
+        settingsSection(
+            title: model.language == .russian
+                ? "Офлайн-загрузки"
+                : "Offline Downloads",
+            footer: model.language == .russian
+                ? "Файлы хранятся отдельно от приложения и не удаляются при обновлении TorrServe Silicon."
+                : "Files are stored outside the app and remain in place when TorrServe Silicon is updated."
+        ) {
+            settingRow(model.language == .russian ? "Папка загрузок" : "Download folder") {
+                HStack(spacing: 8) {
+                    Text(offlineDownloadFolderPath)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .frame(width: 285, alignment: .trailing)
+                        .help(offlineDownloadFolderPath)
+
+                    Button(model.language == .russian ? "Выбрать…" : "Choose…") {
+                        chooseOfflineDownloadFolder()
+                    }
+                    .fixedSize()
+                }
+            }
+        }
+    }
+
+    private var offlineDownloadFolderPath: String {
+        offlineDownloadManager.downloadDirectoryURL?.path
+            ?? (model.language == .russian ? "Папка недоступна" : "Folder unavailable")
+    }
+
+    private func chooseOfflineDownloadFolder() {
+        let panel = NSOpenPanel()
+        panel.title = model.language == .russian
+            ? "Выберите папку для офлайн-загрузок"
+            : "Choose an Offline Download Folder"
+        panel.prompt = model.language == .russian ? "Выбрать" : "Choose"
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = offlineDownloadManager.downloadDirectoryURL
+
+        guard panel.runModal() == .OK, let directoryURL = panel.url else { return }
+        do {
+            try offlineDownloadManager.setDownloadDirectory(directoryURL)
+        } catch {
+            offlineDownloadFolderError = error.localizedDescription
         }
     }
 

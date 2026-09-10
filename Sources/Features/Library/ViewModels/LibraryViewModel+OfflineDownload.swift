@@ -1,10 +1,22 @@
 import AppKit
 import Foundation
-import UniformTypeIdentifiers
-
-private let offlineDownloadDirectoryKey = "OfflineDownloadDirectory"
 
 extension LibraryViewModel {
+    func reconcileOfflineDownloads(in torrents: [NativeTorrent]) {
+        for torrent in torrents {
+            for file in torrent.playableFiles {
+                guard let sourceURL = api.streamURL(torrent: torrent, file: file) else {
+                    continue
+                }
+                offlineDownloadManager.reconcileCompletedDownload(
+                    sourceURL: sourceURL,
+                    filename: file.displayName,
+                    expectedLength: file.length
+                )
+            }
+        }
+    }
+
     func offlineDownloadFile(in torrent: NativeTorrent) -> NativeTorrentFile? {
         guard let currentSourceURL = offlineDownloadManager.currentRequest?.sourceURL else {
             return nil
@@ -14,12 +26,28 @@ extension LibraryViewModel {
         }
     }
 
-    func chooseOfflineDownloadForFirstPlayableFile(
+    func offlineDownloadedFile(in torrent: NativeTorrent) -> NativeTorrentFile? {
+        torrent.playableFiles.first { file in
+            guard let sourceURL = api.streamURL(torrent: torrent, file: file) else {
+                return false
+            }
+            return offlineDownloadManager.completedDestination(
+                sourceURL: sourceURL,
+                expectedLength: file.length
+            ) != nil
+        }
+    }
+
+    func isTorrentDownloaded(_ torrent: NativeTorrent) -> Bool {
+        offlineDownloadedFile(in: torrent) != nil
+    }
+
+    func downloadFirstPlayableFile(
         in torrent: NativeTorrent,
         language: AppLanguage
     ) {
         guard let file = torrent.playableFiles.first else { return }
-        chooseOfflineDownloadDestination(
+        downloadOffline(
             torrent: torrent,
             file: file,
             language: language
@@ -38,8 +66,27 @@ extension LibraryViewModel {
         torrent: NativeTorrent,
         file: NativeTorrentFile
     ) -> OfflineDownloadState? {
-        guard offlineDownloadMatches(torrent: torrent, file: file) else { return nil }
-        return offlineDownloadManager.state
+        if offlineDownloadMatches(torrent: torrent, file: file) {
+            if case .completed = offlineDownloadManager.state {
+                guard let sourceURL = api.streamURL(torrent: torrent, file: file),
+                      let destinationURL = offlineDownloadManager.completedDestination(
+                        sourceURL: sourceURL,
+                        expectedLength: file.length
+                      ) else {
+                    return nil
+                }
+                return .completed(destinationURL)
+            }
+            return offlineDownloadManager.state
+        }
+        guard let sourceURL = api.streamURL(torrent: torrent, file: file),
+              let destinationURL = offlineDownloadManager.completedDestination(
+                sourceURL: sourceURL,
+                expectedLength: file.length
+              ) else {
+            return nil
+        }
+        return .completed(destinationURL)
     }
 
     func offlineDownloadIsUnavailable(
@@ -53,37 +100,27 @@ extension LibraryViewModel {
             || offlineDownloadManager.state.resumableCheckpoint != nil
     }
 
-    func chooseOfflineDownloadDestination(
+    func downloadOffline(
         torrent: NativeTorrent,
         file: NativeTorrentFile,
         language: AppLanguage
     ) {
-        let panel = NSSavePanel()
-        panel.title = language == .russian
-            ? "Сохранить для офлайн-просмотра"
-            : "Save for Offline Viewing"
-        panel.prompt = language == .russian ? "Скачать" : "Download"
-        panel.nameFieldStringValue = file.displayName.isEmpty
-            ? "TorrServe-download"
-            : file.displayName
-        panel.canCreateDirectories = true
-        panel.isExtensionHidden = false
-        if let contentType = UTType(filenameExtension: file.fileExtension) {
-            panel.allowedContentTypes = [contentType]
+        do {
+            let destinationURL = try offlineDownloadManager.destinationURL(
+                for: file.displayName
+            )
+            startOfflineDownload(
+                torrent: torrent,
+                file: file,
+                destinationURL: destinationURL,
+                language: language
+            )
+        } catch {
+            showOfflineDownloadError(
+                language: language,
+                message: error.localizedDescription
+            )
         }
-        panel.directoryURL = preferredOfflineDownloadDirectory()
-
-        guard panel.runModal() == .OK, let destinationURL = panel.url else { return }
-        UserDefaults.standard.set(
-            destinationURL.deletingLastPathComponent().path,
-            forKey: offlineDownloadDirectoryKey
-        )
-        startOfflineDownload(
-            torrent: torrent,
-            file: file,
-            destinationURL: destinationURL,
-            language: language
-        )
     }
 
     @discardableResult
@@ -155,6 +192,20 @@ extension LibraryViewModel {
         NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 
+    func revealOfflineDownload(
+        torrent: NativeTorrent,
+        file: NativeTorrentFile
+    ) {
+        guard let sourceURL = api.streamURL(torrent: torrent, file: file),
+              let destinationURL = offlineDownloadManager.completedDestination(
+                sourceURL: sourceURL,
+                expectedLength: file.length
+              ) else {
+            return
+        }
+        NSWorkspace.shared.activateFileViewerSelecting([destinationURL])
+    }
+
     private func offlineDownloadMatches(
         torrent: NativeTorrent,
         file: NativeTorrentFile
@@ -164,24 +215,6 @@ extension LibraryViewModel {
             return false
         }
         return currentSourceURL == sourceURL
-    }
-
-    private func preferredOfflineDownloadDirectory() -> URL? {
-        if let savedPath = UserDefaults.standard.string(
-            forKey: offlineDownloadDirectoryKey
-        ) {
-            var isDirectory: ObjCBool = false
-            if FileManager.default.fileExists(
-                atPath: savedPath,
-                isDirectory: &isDirectory
-            ), isDirectory.boolValue {
-                return URL(fileURLWithPath: savedPath, isDirectory: true)
-            }
-        }
-        return FileManager.default.urls(
-            for: .moviesDirectory,
-            in: .userDomainMask
-        ).first
     }
 
     private func showOfflineDownloadError(

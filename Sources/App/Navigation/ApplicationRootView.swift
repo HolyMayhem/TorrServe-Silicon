@@ -98,7 +98,8 @@ struct ApplicationRootView: View {
         case .library:
             LibraryView(
                 mainModel: mainModel,
-                model: libraryModel
+                model: libraryModel,
+                offlineDownloadManager: libraryModel.offlineDownloadManager
             )
             .padding(mainContentInset)
             .ignoresSafeArea(.container, edges: .top)
@@ -112,7 +113,10 @@ struct ApplicationRootView: View {
         case .server:
             MainWindowView(model: mainModel)
         case .settings:
-            SettingsView(model: mainModel)
+            SettingsView(
+                model: mainModel,
+                offlineDownloadManager: libraryModel.offlineDownloadManager
+            )
         }
     }
 

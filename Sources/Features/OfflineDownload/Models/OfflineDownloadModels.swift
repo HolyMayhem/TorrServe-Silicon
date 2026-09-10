@@ -37,6 +37,35 @@ struct OfflineDownloadCheckpoint: Codable, Equatable, Sendable {
     }
 }
 
+struct OfflineDownloadRecord: Codable, Equatable, Sendable {
+    let sourceURL: URL
+    let destinationURL: URL
+    let expectedLength: Int64
+    let completedAt: Date
+}
+
+enum OfflineDownloadDirectoryError: Error, Equatable, Sendable {
+    case unavailable
+    case notDirectory(URL)
+    case notWritable(URL)
+    case couldNotCreate(String)
+}
+
+extension OfflineDownloadDirectoryError: LocalizedError {
+    var errorDescription: String? {
+        switch self {
+        case .unavailable:
+            return "The download folder is unavailable."
+        case .notDirectory(let url):
+            return "The selected download location is not a folder: \(url.path)"
+        case .notWritable(let url):
+            return "The selected download folder is not writable: \(url.path)"
+        case .couldNotCreate(let description):
+            return "The download folder could not be created: \(description)"
+        }
+    }
+}
+
 enum OfflineDownloadFailure: Error, Equatable, Sendable {
     case invalidHTTPResponse
     case contract(OfflineDownloadHTTPContractError)

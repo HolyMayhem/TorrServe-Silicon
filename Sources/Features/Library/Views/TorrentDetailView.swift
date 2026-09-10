@@ -121,18 +121,21 @@ struct TorrentDetailView: View {
 
             statistics
 
-            if let progress = torrent.progress {
+            if let progress = offlineDownloadProgress {
                 VStack(spacing: 4) {
                     HStack {
-                        Text(texts.downloaded)
+                        Text(texts.downloadForOfflineViewing)
                         Spacer()
-                        Text(progress, format: .percent.precision(.fractionLength(0)))
+                        Text(
+                            progress.fractionCompleted,
+                            format: .percent.precision(.fractionLength(0))
+                        )
                             .monospacedDigit()
                     }
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    ProgressView(value: progress)
-                        .tint(.green)
+                    ProgressView(value: progress.fractionCompleted)
+                        .tint(.blue)
                 }
             }
 
@@ -174,7 +177,7 @@ struct TorrentDetailView: View {
                                     model.play(file: file, language: language)
                                 },
                                 download: {
-                                    model.chooseOfflineDownloadDestination(
+                                    model.downloadOffline(
                                         torrent: torrent,
                                         file: file,
                                         language: language
@@ -188,7 +191,12 @@ struct TorrentDetailView: View {
                                     model.retryOfflineDownload(language: language)
                                 },
                                 cancelDownload: model.cancelOfflineDownload,
-                                revealDownload: model.revealOfflineDownload
+                                revealDownload: {
+                                    model.revealOfflineDownload(
+                                        torrent: torrent,
+                                        file: file
+                                    )
+                                }
                             )
                         }
                     }
@@ -308,6 +316,22 @@ struct TorrentDetailView: View {
             Text(texts.status(for: torrent))
                 .font(.caption)
                 .foregroundStyle(torrent.isActive ? Color.green : .secondary)
+        }
+    }
+
+    private var offlineDownloadProgress: OfflineDownloadProgress? {
+        guard model.offlineDownloadFile(in: torrent) != nil else { return nil }
+        switch offlineDownloadManager.state {
+        case .downloading(let progress),
+             .pausing(let progress):
+            return progress
+        case .resuming(let checkpoint),
+             .paused(let checkpoint):
+            return checkpoint.progress
+        case .cancelling(let progress):
+            return progress
+        case .idle, .preparing, .completed, .cancelled, .failed:
+            return nil
         }
     }
 
@@ -436,11 +460,17 @@ struct TorrentFileRow: View {
                     offlineDownloadControl
 
                     Button(action: play) {
-                        Label(texts.watch, systemImage: "play.fill")
+                        if usesCompactWatchButton {
+                            Image(systemName: "play.fill")
+                                .frame(width: 12)
+                        } else {
+                            Label(texts.watch, systemImage: "play.fill")
+                        }
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                     .tint(.green)
+                    .help(texts.watch)
                 }
             }
         }
@@ -492,7 +522,8 @@ struct TorrentFileRow: View {
                 activityLabel(texts.cancellingDownload)
             case .completed:
                 Button(action: revealDownload) {
-                    Label(texts.downloadedOffline, systemImage: "checkmark.circle.fill")
+                    Image(systemName: "checkmark.circle.fill")
+                        .frame(width: 12)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
@@ -524,12 +555,24 @@ struct TorrentFileRow: View {
 
     private var downloadButton: some View {
         Button(action: download) {
-            Label(texts.downloadOffline, systemImage: "arrow.down.to.line")
+            Image(systemName: "arrow.down.to.line")
+                .frame(width: 12)
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
         .disabled(offlineDownloadDisabled)
         .help(texts.downloadOffline)
+    }
+
+    private var usesCompactWatchButton: Bool {
+        guard let offlineState else { return false }
+        switch offlineState {
+        case .preparing, .resuming, .downloading, .pausing,
+             .paused, .cancelling, .failed:
+            return true
+        case .idle, .completed, .cancelled:
+            return false
+        }
     }
 
     private var cancelButton: some View {

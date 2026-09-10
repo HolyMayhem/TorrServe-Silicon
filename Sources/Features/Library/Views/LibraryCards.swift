@@ -6,6 +6,7 @@ struct TorrentPosterCard: View {
     let metadata: LibraryMetadata?
     let language: AppLanguage
     let isSelected: Bool
+    let isDownloaded: Bool
     let select: () -> Void
     let play: () -> Void
 
@@ -52,6 +53,12 @@ struct TorrentPosterCard: View {
             .frame(minWidth: 0, maxWidth: .infinity)
             .aspectRatio(2.0 / 3.0, contentMode: .fit)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(alignment: .topTrailing) {
+                if isDownloaded {
+                    LibraryDownloadedIndicator(language: language)
+                        .padding(8)
+                }
+            }
 
             Text(metadata?.displayTitle ?? torrent.displayTitle)
                 .font(.system(size: 12.5, weight: .semibold))
@@ -92,6 +99,7 @@ struct TorrentLargeCard: View {
     let language: AppLanguage
     let translationMode: OverviewTranslationMode
     let isSelected: Bool
+    let isDownloaded: Bool
     let select: () -> Void
     let play: () -> Void
 
@@ -109,6 +117,9 @@ struct TorrentLargeCard: View {
                         .font(.title3.weight(.semibold))
                         .lineLimit(2)
                     Spacer()
+                    if isDownloaded {
+                        LibraryDownloadedIndicator(language: language)
+                    }
                     if let resolution = torrent.resolutionLabel {
                         Text(resolution)
                             .font(.caption.weight(.bold))
@@ -226,6 +237,7 @@ struct TorrentLibraryRow: View {
     let metadata: LibraryMetadata?
     let language: AppLanguage
     let isSelected: Bool
+    let isDownloaded: Bool
     let action: () -> Void
 
     private var texts: LibraryTexts {
@@ -274,10 +286,15 @@ struct TorrentLibraryRow: View {
 
                 Spacer(minLength: 4)
 
-                if torrent.downloadSpeed > 0 {
-                    Text(LibraryFormat.speed(torrent.downloadSpeed))
-                        .font(.caption2.monospacedDigit())
-                        .foregroundStyle(.green)
+                HStack(spacing: 7) {
+                    if torrent.downloadSpeed > 0 {
+                        Text(LibraryFormat.speed(torrent.downloadSpeed))
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(.green)
+                    }
+                    if isDownloaded {
+                        LibraryDownloadedIndicator(language: language)
+                    }
                 }
             }
             .padding(8)
@@ -288,5 +305,20 @@ struct TorrentLibraryRow: View {
             )
         }
         .buttonStyle(.plain)
+    }
+}
+
+private struct LibraryDownloadedIndicator: View {
+    let language: AppLanguage
+
+    var body: some View {
+        Image(systemName: "arrow.down.circle.fill")
+            .font(.system(size: 13, weight: .semibold))
+            .symbolRenderingMode(.hierarchical)
+            .foregroundStyle(.green)
+            .padding(3)
+            .background(.regularMaterial, in: Circle())
+            .help(language == .russian ? "Скачано" : "Downloaded")
+            .accessibilityLabel(language == .russian ? "Скачано" : "Downloaded")
     }
 }

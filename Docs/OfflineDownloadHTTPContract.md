@@ -91,13 +91,37 @@ unverified partial or destination file.
 ## Stage 5 library integration
 
 Playable files in the compact Library detail view now expose a native Download
-control next to Watch. The save panel defaults to the user's Movies folder and
-remembers the last chosen directory. The active file row shows progress and
-provides pause, resume, retry, cancel, and Show in Finder actions according to
-the manager state.
+control next to Watch. New downloads start in the configured download folder.
+The active file row shows progress and provides pause, resume, retry, cancel,
+and Show in Finder actions according to the manager state.
 
 Poster and large-card modes expose the same lifecycle actions in each torrent's
 context menu. The first playable file is used when a new download starts from a
 card. The application intentionally allows only one active or resumable offline
 download at a time; controls for other files remain unavailable until that job
 is completed or cancelled.
+
+## Stage 6 persistent download presentation
+
+The default destination is `~/Movies/TorrServe Downloads`. It deliberately
+lives outside the application bundle: Sparkle replaces that bundle during an
+update, and changing files inside a signed `.app` invalidates its signature.
+Users can choose another writable folder in General Settings. The setting is
+used by future downloads, while an active download continues at its original
+destination. Filename collisions are resolved with a numeric suffix.
+
+Completed files are recorded in a versioned manifest at:
+
+```text
+~/Library/Application Support/TorrServer/OfflineDownloads/completed.json
+```
+
+The manifest is validated against the file's current path and exact byte size.
+Valid downloads receive a compact indicator in list, poster, and large-card
+Library modes after relaunch. The file-row action is an icon-only checkmark, and
+the playback button becomes icon-only while download controls share the row.
+The detail header now derives its progress exclusively from the offline download
+manager, so ordinary TorrServer playback buffering no longer creates a false
+offline progress bar. Files produced by the earlier save-panel implementation
+are adopted from its last-used folder when their filename and exact byte size
+match a current torrent file.

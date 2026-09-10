@@ -31,6 +31,7 @@ final class OfflineDownloadManagerTests: XCTestCase {
         StubURLProtocol.configure(.init(data: payload, chunkSize: 8_192))
         let destination = temporaryDirectory.appendingPathComponent("movie.mkv")
         let manager = makeManager()
+        let request = makeRequest(destination: destination, length: Int64(payload.count))
         var observedProgress: [Int64] = []
         manager.$state.sink { state in
             if case .downloading(let progress) = state {
@@ -38,7 +39,7 @@ final class OfflineDownloadManagerTests: XCTestCase {
             }
         }.store(in: &cancellables)
 
-        try manager.start(makeRequest(destination: destination, length: Int64(payload.count)))
+        try manager.start(request)
         let state = try await waitForTerminalState(manager)
 
         XCTAssertEqual(state, .completed(destination))
@@ -48,6 +49,82 @@ final class OfflineDownloadManagerTests: XCTestCase {
             atPath: destination.appendingPathExtension("torrserve-part").path
         ))
         XCTAssertTrue(observedProgress.contains(where: { $0 > 0 }))
+
+        let restoredManager = makeManager()
+        XCTAssertEqual(
+            restoredManager.completedDestination(
+                sourceURL: request.sourceURL,
+                expectedLength: request.expectedLength
+            ),
+            destination
+        )
+    }
+
+    func testDownloadDirectoryIsPersistedAndAvoidsFilenameCollisions() throws {
+        let suiteName = "OfflineDownloadManagerTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let downloadDirectory = temporaryDirectory.appendingPathComponent(
+            "Downloads",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: downloadDirectory,
+            withIntermediateDirectories: true
+        )
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [StubURLProtocol.self]
+        let manager = OfflineDownloadManager(
+            sessionConfiguration: configuration,
+            checkpointStore: makeCheckpointStore(),
+            userDefaults: defaults
+        )
+
+        try manager.setDownloadDirectory(downloadDirectory)
+        let firstURL = try manager.destinationURL(for: "movie.mkv")
+        try Data([0x01]).write(to: firstURL)
+        let secondURL = try manager.destinationURL(for: "movie.mkv")
+
+        XCTAssertEqual(manager.downloadDirectoryURL, downloadDirectory)
+        XCTAssertEqual(
+            defaults.string(forKey: "OfflineDownloadConfiguredDirectory"),
+            downloadDirectory.path
+        )
+        XCTAssertEqual(firstURL.lastPathComponent, "movie.mkv")
+        XCTAssertEqual(secondURL.lastPathComponent, "movie (2).mkv")
+    }
+
+    func testReconcilesCompletedFileFromLegacyDownloadDirectory() throws {
+        let suiteName = "OfflineDownloadManagerTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(temporaryDirectory.path, forKey: "OfflineDownloadDirectory")
+        let destinationURL = temporaryDirectory.appendingPathComponent("legacy.mkv")
+        let payload = Data(repeating: 0xAB, count: 4_096)
+        try payload.write(to: destinationURL)
+        let sourceURL = URL(string: "http://127.0.0.1:8090/stream/legacy.mkv")!
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [StubURLProtocol.self]
+        let manager = OfflineDownloadManager(
+            sessionConfiguration: configuration,
+            checkpointStore: makeCheckpointStore(),
+            userDefaults: defaults
+        )
+
+        manager.reconcileCompletedDownload(
+            sourceURL: sourceURL,
+            filename: destinationURL.lastPathComponent,
+            expectedLength: Int64(payload.count)
+        )
+
+        XCTAssertEqual(
+            manager.completedDestination(
+                sourceURL: sourceURL,
+                expectedLength: Int64(payload.count)
+            ),
+            destinationURL
+        )
+        XCTAssertEqual(manager.completedDownloads.count, 1)
     }
 
     func testCancellationRemovesPartialFile() async throws {
