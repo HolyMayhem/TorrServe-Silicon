@@ -312,12 +312,9 @@ private struct LibraryDownloadedIndicator: View {
     let language: AppLanguage
 
     var body: some View {
-        Image(systemName: "arrow.down.circle.fill")
-            .font(.system(size: 13, weight: .semibold))
-            .symbolRenderingMode(.hierarchical)
-            .foregroundStyle(.green)
-            .padding(3)
-            .background(.regularMaterial, in: Circle())
+        Image(systemName: "arrow.down")
+            .font(.system(size: 7, weight: .semibold))
+            .foregroundStyle(.secondary)
             .help(language == .russian ? "Скачано" : "Downloaded")
             .accessibilityLabel(language == .russian ? "Скачано" : "Downloaded")
     }
