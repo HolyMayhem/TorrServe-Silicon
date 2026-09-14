@@ -16,70 +16,62 @@ struct MainWindowView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: SettingsScreenLayout.sectionSpacing) {
-                SettingsScreenTitle(title: screenTitle)
-
-                SettingsIntroCard(
-                    title: screenTitle,
-                    message: model.language == .russian
-                        ? "Управляйте сервером, исполняемым файлом, хранилищем и приложениями для воспроизведения."
-                        : "Manage the server, executable, storage, and playback apps.",
-                    systemImage: "network",
-                    tint: .green
-                )
-
-                HStack(alignment: .top, spacing: 10) {
-                    serverOverviewSection
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    storageSection
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-                .frame(height: 128)
-
-                ServerCacheSettingsSection(model: model)
-                executableSection
-                ServerDiagnosticsSection(model: model)
-                playerSection
-            }
-            .padding(.horizontal, SettingsScreenLayout.formContentInset)
-            .padding(.top, SettingsScreenLayout.scrollContentTopPadding)
-            .padding(.bottom, 12)
-        }
-        .scrollIndicators(.hidden)
-        .background {
-            AppNativeScrollIndicatorHider()
-        }
-        .onScrollGeometryChange(for: AppScrollMetrics.self) { geometry in
-            AppScrollMetrics(geometry)
-        } action: { _, metrics in
-            scrollMetrics = metrics
-        }
-        .onScrollPhaseChange { _, phase in
-            withAnimation(.easeOut(duration: phase.isScrolling ? 0.08 : 0.24)) {
-                scrollIndicatorIsVisible = phase.isScrolling
-            }
-        }
-        .overlay {
-            AppScrollIndicator(
-                metrics: scrollMetrics,
-                topInset: 0,
-                bottomInset: 0,
-                isVisible: scrollIndicatorIsVisible
+        VStack(spacing: 0) {
+            SettingsPageHeader(
+                title: screenTitle,
+                message: model.language == .russian
+                    ? "Управляйте сервером, исполняемым файлом, хранилищем и приложениями для воспроизведения."
+                    : "Manage the server, executable, storage, and playback apps."
             )
+
+            ScrollView {
+                VStack(spacing: SettingsScreenLayout.sectionSpacing) {
+                    serverOverviewSection
+                    storageSection
+                    ServerCacheSettingsSection(model: model)
+                    executableSection
+                    ServerDiagnosticsSection(model: model)
+                    playerSection
+                }
+                .padding(.horizontal, SettingsScreenLayout.formContentInset)
+                .padding(.top, SettingsScreenLayout.scrollContentTopPadding)
+                .padding(.bottom, 12)
+            }
+            .scrollIndicators(.hidden)
+            .background {
+                AppNativeScrollIndicatorHider()
+            }
+            .onScrollGeometryChange(for: AppScrollMetrics.self) { geometry in
+                AppScrollMetrics(geometry)
+            } action: { _, metrics in
+                scrollMetrics = metrics
+            }
+            .onScrollPhaseChange { _, phase in
+                withAnimation(.easeOut(duration: phase.isScrolling ? 0.08 : 0.24)) {
+                    scrollIndicatorIsVisible = phase.isScrolling
+                }
+            }
+            .overlay {
+                AppScrollIndicator(
+                    metrics: scrollMetrics,
+                    topInset: 0,
+                    bottomInset: 0,
+                    isVisible: scrollIndicatorIsVisible
+                )
+            }
         }
-        .settingsScrollEdgeFade()
         .frame(maxWidth: SettingsScreenLayout.contentMaxWidth)
         .padding(.horizontal, SettingsScreenLayout.horizontalPadding)
         .padding(.top, SettingsScreenLayout.topPadding)
         .padding(.bottom, SettingsScreenLayout.bottomPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .ignoresSafeArea(.container, edges: [.top, .bottom])
+        .background(SettingsVisualStyle.windowBackground)
+        .ignoresSafeArea(.container, edges: .top)
     }
 
     private var serverOverviewSection: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 12) {
+        ServerSettingsGroup(title: "TorrServer") {
+            HStack(spacing: 10) {
                 ZStack {
                     Circle()
                         .fill(model.effectiveStatusKind.color.opacity(0.14))
@@ -87,14 +79,14 @@ struct MainWindowView: View {
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(model.effectiveStatusKind.color)
                 }
-                .frame(width: 42, height: 42)
+                .frame(width: 34, height: 34)
                 .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("TorrServer")
-                        .font(.headline)
+                    Text(model.language == .russian ? "Состояние" : "Status")
+                        .font(.callout.weight(.medium))
                     Text(serverStatusDetail)
-                        .font(.callout)
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
@@ -103,40 +95,49 @@ struct MainWindowView: View {
 
                 serverPowerControl
             }
+            .frame(minHeight: 54)
+
+            if let activity = model.torrServerUpdateActivity {
+                Divider()
+                serverUpdateProgress(activity)
+                    .padding(.vertical, 10)
+            }
 
             Divider()
 
-            if let activity = model.torrServerUpdateActivity {
-                serverUpdateProgress(activity)
-            } else {
-                HStack(spacing: 12) {
-                    serverInfo(
-                        title: model.language == .russian ? "Адрес" : "Address",
-                        value: "localhost:8090",
-                        systemImage: "network"
-                    )
+            HStack(spacing: 12) {
+                Label(
+                    model.language == .russian ? "Адрес" : "Address",
+                    systemImage: "network"
+                )
+                .font(.callout)
 
-                    serverInfo(
-                        title: model.language == .russian ? "Версия" : "Version",
-                        value: model.torrServerVersion ?? "—",
-                        systemImage: "shippingbox"
-                    )
+                Spacer(minLength: 20)
 
-                    Spacer(minLength: 4)
+                Text("localhost:8090")
+                    .font(.callout.monospacedDigit())
+                    .foregroundStyle(.secondary)
 
-                    Button {
-                        model.onOpenWeb?()
-                    } label: {
-                        Label(texts.webUI, systemImage: "safari")
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(!model.canOpenWeb)
-                    .help(texts.openWebUI)
+                Button {
+                    model.onOpenWeb?()
+                } label: {
+                    Label(texts.webUI, systemImage: "safari")
                 }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(!model.canOpenWeb)
+                .help(texts.openWebUI)
             }
+            .frame(minHeight: 42)
+
+            Divider()
+
+            serverInfoRow(
+                title: model.language == .russian ? "Версия" : "Version",
+                value: model.torrServerVersion ?? "—",
+                systemImage: "shippingbox"
+            )
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .serverSettingsPanel()
         .help(
             model.serverConnectionIssue
                 ?? (model.statusTooltip.isEmpty ? serverStatusDetail : model.statusTooltip)
@@ -190,13 +191,12 @@ struct MainWindowView: View {
     }
 
     private var executableSection: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            Label(
-                model.language == .russian ? "Исполняемый файл" : "Executable",
-                systemImage: "terminal.fill"
-            )
-            .font(.headline)
-
+        ServerSettingsGroup(
+            title: model.language == .russian ? "Исполняемый файл" : "Executable",
+            footer: model.language == .russian
+                ? "Файл программы TorrServer, который используется для запуска сервера."
+                : "The TorrServer executable used to start the server."
+        ) {
             TextField(
                 model.language == .russian ? "Путь к TorrServer" : "Path to TorrServer",
                 text: Binding(
@@ -211,13 +211,6 @@ struct MainWindowView: View {
             .disabled(!model.canEditPath)
 
             HStack(spacing: 8) {
-                Text(model.language == .russian
-                    ? "Файл программы TorrServer, который запускает сервер."
-                    : "The TorrServer program file used to launch the server.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-
                 if let update = model.torrServerUpdate {
                     Label(
                         model.language == .russian
@@ -246,19 +239,53 @@ struct MainWindowView: View {
                 executableDownloadButton
             }
         }
-        .serverSettingsPanel()
     }
 
     private var storageSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Label(
-                    model.language == .russian ? "Хранилище" : "Storage",
-                    systemImage: "internaldrive"
-                )
-                .font(.headline)
+        ServerSettingsGroup(
+            title: model.language == .russian ? "Хранилище" : "Storage",
+            footer: texts.storageDescription
+        ) {
+            storageMetricRow(
+                title: model.language == .russian ? "Буфер" : "Buffer",
+                value: storageUsageText,
+                systemImage: "memorychip"
+            )
+            Divider()
+            storageMetricRow(
+                title: model.language == .russian ? "Дисковый кеш" : "Disk cache",
+                value: diskCacheText,
+                systemImage: "externaldrive"
+            )
+            Divider()
+            storageMetricRow(
+                title: model.language == .russian ? "Свободное место" : "Available space",
+                value: freeSpaceText,
+                systemImage: "internaldrive",
+                warning: model.storage.isLowOnDiskSpace
+            )
+            Divider()
 
-                Spacer()
+            HStack(spacing: 8) {
+                Button {
+                    model.onRefreshStorage?()
+                } label: {
+                    if model.isRefreshingStorage {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Label(
+                            model.language == .russian ? "Обновить" : "Refresh",
+                            systemImage: "arrow.clockwise"
+                        )
+                    }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(model.isRefreshingStorage)
+                .help(model.language == .russian ? "Обновить" : "Refresh")
+
+                Spacer(minLength: 12)
 
                 Button(role: .destructive) {
                     showsClearCacheConfirmation = true
@@ -274,66 +301,20 @@ struct MainWindowView: View {
                 .popover(isPresented: $showsClearCacheConfirmation) {
                     clearCacheConfirmation
                 }
-
-                Button {
-                    model.onRefreshStorage?()
-                } label: {
-                    if model.isRefreshingStorage {
-                        ProgressView()
-                            .controlSize(.small)
-                    } else {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                }
-                .buttonStyle(.borderless)
-                .disabled(model.isRefreshingStorage)
-                .help(model.language == .russian ? "Обновить" : "Refresh")
             }
-
-            Text(texts.storageDescription)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-
-            HStack(spacing: 7) {
-                storageMetric(
-                    title: model.language == .russian ? "Буфер" : "Buffer",
-                    value: storageUsageText
-                )
-                storageMetric(
-                    title: model.language == .russian ? "Кеш" : "Cache",
-                    value: diskCacheText
-                )
-                storageMetric(
-                    title: model.language == .russian ? "Свободно" : "Available",
-                    value: freeSpaceText,
-                    warning: model.storage.isLowOnDiskSpace
-                )
-            }
+            .frame(minHeight: 44)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .serverSettingsPanel()
     }
 
     private var playerSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label(texts.playerHelpTitle, systemImage: "play.rectangle.on.rectangle")
-                .font(.headline)
-
-            Text(texts.playerHelpMessage)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-
-            VStack(spacing: 5) {
-                ForEach(model.detectedPlayers) { player in
-                    playerRow(player)
+        ServerSettingsGroup(title: texts.playerHelpTitle, footer: texts.playerHelpMessage) {
+            ForEach(Array(model.detectedPlayers.enumerated()), id: \.element.id) { index, player in
+                if index > 0 {
+                    Divider()
                 }
+                playerRow(player)
             }
-
-            Spacer(minLength: 0)
         }
-        .serverSettingsPanel()
     }
 
     private func playerRow(_ player: DetectedPlayer) -> some View {
@@ -365,12 +346,7 @@ struct MainWindowView: View {
                     : (player.isInstalled ? "chevron.right" : "arrow.down.circle"))
                     .foregroundStyle(isPreferred ? Color.green : Color.secondary)
             }
-            .padding(.horizontal, 9)
-            .frame(height: 30)
-            .background(
-                Color.secondary.opacity(0.07),
-                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-            )
+            .frame(minHeight: 42)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -402,21 +378,20 @@ struct MainWindowView: View {
         .frame(width: 300)
     }
 
-    private func serverInfo(title: String, value: String, systemImage: String) -> some View {
-        HStack(spacing: 7) {
+    private func serverInfoRow(title: String, value: String, systemImage: String) -> some View {
+        HStack(spacing: 12) {
             Image(systemName: systemImage)
                 .foregroundStyle(.secondary)
-                .frame(width: 16)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                Text(value)
-                    .font(.caption.monospacedDigit())
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
+                .frame(width: 18)
+            Text(title)
+                .font(.callout)
+            Spacer(minLength: 20)
+            Text(value)
+                .font(.callout.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
         }
+        .frame(minHeight: 42)
     }
 
     private func serverUpdateProgress(_ activity: TorrServerUpdateActivity) -> some View {
@@ -474,24 +449,25 @@ struct MainWindowView: View {
         }
     }
 
-    private func storageMetric(title: String, value: String, warning: Bool = false) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title)
-                .font(.caption2)
+    private func storageMetricRow(
+        title: String,
+        value: String,
+        systemImage: String,
+        warning: Bool = false
+    ) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: systemImage)
                 .foregroundStyle(.secondary)
+                .frame(width: 18)
+            Text(title)
+                .font(.callout)
+            Spacer(minLength: 20)
             Text(value)
-                .font(.caption.weight(.medium).monospacedDigit())
-                .foregroundStyle(warning ? Color.orange : Color.primary)
+                .font(.callout.monospacedDigit())
+                .foregroundStyle(warning ? Color.orange : Color.secondary)
                 .lineLimit(1)
-                .minimumScaleFactor(0.75)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 9)
-        .frame(height: 42)
-        .background(
-            Color.secondary.opacity(0.07),
-            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-        )
+        .frame(minHeight: 42)
     }
 
     private var serverStatusDetail: String {
@@ -584,13 +560,49 @@ struct MainWindowView: View {
     }
 }
 
+struct ServerSettingsGroup<Content: View>: View {
+    let title: String
+    let footer: String?
+    let content: Content
+
+    init(
+        title: String,
+        footer: String? = nil,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.title = title
+        self.footer = footer
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.headline)
+                .padding(.horizontal, 14)
+
+            VStack(spacing: 0) {
+                content
+            }
+            .padding(.horizontal, 14)
+            .serverSettingsPanel()
+
+            if let footer {
+                Text(footer)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 14)
+            }
+        }
+    }
+}
+
 extension View {
     func serverSettingsPanel() -> some View {
-        padding(14)
-            .background(
-                SettingsVisualStyle.panelBackground,
-                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-            )
+        background(
+            SettingsVisualStyle.panelBackground,
+            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+        )
             .overlay {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .stroke(Color.primary.opacity(0.07), lineWidth: 1)

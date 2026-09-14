@@ -90,8 +90,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     )
     lazy var searchModel = SearchViewModel(torrServer: nativeTorrServerAPI)
     let popoverModel = MenuBarPopoverModel()
+    let settingsNavigationModel = SettingsWindowNavigationModel()
 
     var window: NSWindow!
+    var settingsWindow: NSWindow?
     var serverContentSize = NSSize(width: 580, height: 500)
 
     var statusItem: NSStatusItem!

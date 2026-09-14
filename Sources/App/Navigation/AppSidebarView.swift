@@ -43,7 +43,7 @@ struct AppSidebarView: View {
         .background(.thinMaterial)
         .animation(.easeInOut(duration: 0.16), value: isCompact)
         .onMoveCommand { direction in
-            let sections = primarySections + [.settings, .server]
+            let sections = primarySections
             guard let selection, let index = sections.firstIndex(of: selection) else { return }
             switch direction {
             case .up: self.selection = sections[max(index - 1, 0)]
@@ -69,16 +69,6 @@ struct AppSidebarView: View {
                     ForEach(primarySections) { section in
                         navigationButton(section)
                     }
-
-                    Text(mainModel.language == .russian ? "Настройки" : "Settings")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 12)
-                        .padding(.top, 16)
-                        .padding(.bottom, 4)
-
-                    navigationButton(.settings)
-                    navigationButton(.server)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
@@ -90,11 +80,15 @@ struct AppSidebarView: View {
                     update: update,
                     language: mainModel.language
                 ) {
-                    selection = .server
+                    mainModel.onOpenSettings?(.server)
                 }
                 .padding(.horizontal, 14)
                 .padding(.bottom, 10)
             }
+
+            expandedSettingsButton
+                .padding(.horizontal, 12)
+                .padding(.bottom, 10)
 
             Divider()
 
@@ -143,29 +137,13 @@ struct AppSidebarView: View {
                 Divider()
                     .frame(width: 34)
                     .padding(.vertical, 7)
-
-                CompactSidebarButton(
-                    section: .settings,
-                    language: mainModel.language,
-                    isSelected: selection == .settings
-                ) {
-                    selection = .settings
-                }
-
-                CompactSidebarButton(
-                    section: .server,
-                    language: mainModel.language,
-                    isSelected: selection == .server
-                ) {
-                    selection = .server
-                }
             }
 
             Spacer(minLength: 12)
 
             if let update = mainModel.torrServerUpdate {
                 Button {
-                    selection = .server
+                    mainModel.onOpenSettings?(.server)
                 } label: {
                     Image(systemName: "arrow.down.circle.fill")
                         .font(.system(size: 18, weight: .semibold))
@@ -183,11 +161,51 @@ struct AppSidebarView: View {
                 .padding(.bottom, 8)
             }
 
+            compactSettingsButton
+                .padding(.bottom, 10)
+
             Divider()
 
             CompactServerStatusView(mainModel: mainModel)
                 .padding(.vertical, 14)
         }
+    }
+
+    private var expandedSettingsButton: some View {
+        Button {
+            mainModel.onOpenSettings?(.general)
+        } label: {
+            Label(
+                mainModel.language == .russian ? "Настройки" : "Settings",
+                systemImage: "gearshape"
+            )
+            .font(.system(size: 15, weight: .medium))
+            .symbolRenderingMode(.hierarchical)
+            .imageScale(.large)
+            .frame(maxWidth: .infinity, minHeight: 38, alignment: .leading)
+            .padding(.horizontal, 12)
+            .contentShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .liquidGlassPanel(cornerRadius: 13, interactive: true)
+        .help(mainModel.language == .russian ? "Открыть настройки" : "Open Settings")
+    }
+
+    private var compactSettingsButton: some View {
+        Button {
+            mainModel.onOpenSettings?(.general)
+        } label: {
+            Image(systemName: "gearshape")
+                .font(.system(size: 18, weight: .medium))
+                .symbolRenderingMode(.hierarchical)
+                .frame(width: 42, height: 42)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .liquidGlassControl()
+        .buttonBorderShape(.circle)
+        .help(mainModel.language == .russian ? "Открыть настройки" : "Open Settings")
+        .accessibilityLabel(mainModel.language == .russian ? "Настройки" : "Settings")
     }
 }
 
@@ -314,19 +332,13 @@ struct SidebarNavigationItem: View {
         }
 
         switch section {
-        case .settings:
-            return "Общие\nнастройки"
-        case .server:
-            return "Настройки\nсервера"
         case .library, .search:
             return section.sidebarTitle(language: language)
         }
     }
 
     private var rowHeight: CGFloat {
-        language == .russian && (section == .settings || section == .server)
-            ? 52
-            : 40
+        40
     }
 
     var body: some View {

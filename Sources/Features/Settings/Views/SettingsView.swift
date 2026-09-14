@@ -4,6 +4,7 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var model: MainWindowModel
     @ObservedObject var offlineDownloadManager: OfflineDownloadManager
+    let category: SettingsCategory
     @State private var scrollMetrics = AppScrollMetrics.zero
     @State private var scrollIndicatorIsVisible = false
     @State private var offlineDownloadFolderError: String?
@@ -13,66 +14,82 @@ struct SettingsView: View {
     private var texts: Texts { Texts(language: model.language) }
 
     private var screenTitle: String {
-        model.language == .russian ? "Общие настройки" : "General Settings"
+        category.title(language: model.language)
+    }
+
+    private var screenMessage: String {
+        switch category {
+        case .general:
+            return model.language == .russian
+                ? "Настройте запуск приложения, уведомления и его поведение в macOS."
+                : "Configure app startup, notifications, and macOS behavior."
+        case .interface:
+            return model.language == .russian
+                ? "Выберите язык приложения и настройте поиск через Jackett."
+                : "Choose the app language and configure search through Jackett."
+        case .menuBar:
+            return model.language == .russian
+                ? "Настройте значок, скорость и содержимое меню TorrServe."
+                : "Configure the TorrServe menu icon, speed, and content."
+        case .updates:
+            return model.language == .russian
+                ? "Управляйте обновлениями приложения TorrServe Silicon."
+                : "Manage updates for the TorrServe Silicon application."
+        case .downloads:
+            return model.language == .russian
+                ? "Выберите папку для сохранения офлайн-загрузок."
+                : "Choose where offline downloads are stored."
+        case .metadata:
+            return model.language == .russian
+                ? "Выберите источники постеров и описаний и настройте ключи API."
+                : "Choose poster and description providers and configure API keys."
+        case .server:
+            return ""
+        }
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: SettingsScreenLayout.sectionSpacing) {
-                SettingsScreenTitle(title: screenTitle)
+        VStack(spacing: 0) {
+            SettingsPageHeader(title: screenTitle, message: screenMessage)
 
-                SettingsIntroCard(
-                    title: screenTitle,
-                    message: model.language == .russian
-                        ? "Настройте запуск приложения, уведомления, интерфейс, поиск и источники метаданных."
-                        : "Configure app startup, notifications, interface, search, and metadata providers.",
-                    systemImage: "gearshape.fill",
-                    tint: .blue
-                )
-
-                applicationSection
-                appUpdatesSection
-                offlineDownloadsSection
-                menuBarSection
-                interfaceSection
-                metadataSection
-                if model.metadataSource != .disabled {
-                    animeMetadataSection
+            ScrollView {
+                VStack(spacing: SettingsScreenLayout.sectionSpacing) {
+                    categorySections
+                }
+                .padding(.horizontal, SettingsScreenLayout.formContentInset)
+                .padding(.top, SettingsScreenLayout.scrollContentTopPadding)
+                .padding(.bottom, 12)
+            }
+            .scrollIndicators(.hidden)
+            .background {
+                AppNativeScrollIndicatorHider()
+            }
+            .onScrollGeometryChange(for: AppScrollMetrics.self) { geometry in
+                AppScrollMetrics(geometry)
+            } action: { _, metrics in
+                scrollMetrics = metrics
+            }
+            .onScrollPhaseChange { _, phase in
+                withAnimation(.easeOut(duration: phase.isScrolling ? 0.08 : 0.24)) {
+                    scrollIndicatorIsVisible = phase.isScrolling
                 }
             }
-            .padding(.horizontal, SettingsScreenLayout.formContentInset)
-            .padding(.top, SettingsScreenLayout.scrollContentTopPadding)
-            .padding(.bottom, 12)
-        }
-        .scrollIndicators(.hidden)
-        .background {
-            AppNativeScrollIndicatorHider()
-        }
-        .onScrollGeometryChange(for: AppScrollMetrics.self) { geometry in
-            AppScrollMetrics(geometry)
-        } action: { _, metrics in
-            scrollMetrics = metrics
-        }
-        .onScrollPhaseChange { _, phase in
-            withAnimation(.easeOut(duration: phase.isScrolling ? 0.08 : 0.24)) {
-                scrollIndicatorIsVisible = phase.isScrolling
+            .overlay {
+                AppScrollIndicator(
+                    metrics: scrollMetrics,
+                    topInset: 0,
+                    bottomInset: 0,
+                    isVisible: scrollIndicatorIsVisible
+                )
             }
         }
-        .overlay {
-            AppScrollIndicator(
-                metrics: scrollMetrics,
-                topInset: 0,
-                bottomInset: 0,
-                isVisible: scrollIndicatorIsVisible
-            )
-        }
-        .settingsScrollEdgeFade()
         .frame(maxWidth: SettingsScreenLayout.contentMaxWidth)
         .padding(.horizontal, SettingsScreenLayout.horizontalPadding)
         .padding(.top, SettingsScreenLayout.topPadding)
         .padding(.bottom, SettingsScreenLayout.bottomPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .ignoresSafeArea(.container, edges: [.top, .bottom])
+        .background(SettingsVisualStyle.windowBackground)
+        .ignoresSafeArea(.container, edges: .top)
         .alert(
             model.language == .russian
                 ? "Не удалось выбрать папку"
@@ -89,6 +106,29 @@ struct SettingsView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(offlineDownloadFolderError ?? "")
+        }
+    }
+
+    @ViewBuilder
+    private var categorySections: some View {
+        switch category {
+        case .general:
+            applicationSection
+        case .interface:
+            interfaceSection
+        case .menuBar:
+            menuBarSection
+        case .updates:
+            appUpdatesSection
+        case .downloads:
+            offlineDownloadsSection
+        case .metadata:
+            metadataSection
+            if model.metadataSource != .disabled {
+                animeMetadataSection
+            }
+        case .server:
+            EmptyView()
         }
     }
 

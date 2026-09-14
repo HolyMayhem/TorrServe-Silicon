@@ -197,6 +197,7 @@ extension AppDelegate {
 
         buildMainMenu()
         window?.title = texts.title
+        settingsWindow?.title = language == .russian ? "Настройки" : "Settings"
         mainWindowModel.language = language
         popoverModel.language = language
         libraryModel.setMetadataLanguage(language)

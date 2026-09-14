@@ -199,6 +199,7 @@ final class MainWindowModel: ObservableObject {
     var onSpeedUnitChanged: ((SpeedDisplayUnit) -> Void)?
     var onLanguageChanged: ((AppLanguage) -> Void)?
     var onSectionChanged: ((AppSection) -> Void)?
+    var onOpenSettings: ((SettingsCategory) -> Void)?
     var onOpenIINADownload: (() -> Void)?
     var onOpenVLCDownload: (() -> Void)?
     var onOpenInfuseDownload: (() -> Void)?

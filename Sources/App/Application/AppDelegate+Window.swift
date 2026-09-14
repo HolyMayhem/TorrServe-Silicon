@@ -107,12 +107,10 @@ extension AppDelegate {
             self?.setLanguage(language)
         }
         mainWindowModel.onSectionChanged = { [weak self] section in
-            guard let self else { return }
-            self.resizeWindow(for: section)
-            if section == .server {
-                self.loadTorrServerSettings()
-                self.scheduleTorrServerUpdateCheck()
-            }
+            self?.resizeWindow(for: section)
+        }
+        mainWindowModel.onOpenSettings = { [weak self] category in
+            self?.showSettingsWindow(category: category)
         }
         mainWindowModel.onOpenIINADownload = {
             NSWorkspace.shared.open(iinaDownloadURL)
@@ -198,6 +196,61 @@ extension AppDelegate {
         window.standardWindowButton(.zoomButton)?.isEnabled = false
     }
 
+    @objc func showSettingsWindow(_ sender: Any?) {
+        showSettingsWindow(category: .general)
+    }
+
+    func showSettingsWindow(category: SettingsCategory) {
+        settingsNavigationModel.selectedCategory = category
+
+        if settingsWindow == nil {
+            buildSettingsWindow()
+        }
+
+        if category == .server {
+            loadTorrServerSettings()
+            scheduleTorrServerUpdateCheck()
+        }
+
+        NSApp.activate(ignoringOtherApps: true)
+        settingsWindow?.makeKeyAndOrderFront(nil)
+    }
+
+    private func buildSettingsWindow() {
+        let settingsWindow = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 850, height: 620),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        settingsWindow.title = currentLanguage == .russian ? "Настройки" : "Settings"
+        settingsWindow.isReleasedWhenClosed = false
+        settingsWindow.titlebarAppearsTransparent = true
+        settingsWindow.titleVisibility = .hidden
+        settingsWindow.titlebarSeparatorStyle = .none
+        settingsWindow.toolbarStyle = .unified
+        settingsWindow.tabbingMode = .disallowed
+        settingsWindow.backgroundColor = SettingsVisualStyle.windowBackgroundNSColor
+        settingsWindow.isOpaque = true
+        settingsWindow.hasShadow = true
+        settingsWindow.contentMinSize = NSSize(width: 780, height: 540)
+        settingsWindow.setContentSize(NSSize(width: 850, height: 620))
+        settingsWindow.setFrameAutosaveName("TorrServeNativeSettingsWindow")
+
+        settingsWindow.contentView = NSHostingView(
+            rootView: SettingsWindowView(
+                model: mainWindowModel,
+                offlineDownloadManager: libraryModel.offlineDownloadManager,
+                navigation: settingsNavigationModel
+            )
+        )
+
+        if !settingsWindow.setFrameUsingName("TorrServeNativeSettingsWindow") {
+            settingsWindow.center()
+        }
+        self.settingsWindow = settingsWindow
+    }
+
     func buildMainMenu() {
         let mainMenu = NSMenu()
         let appMenuItem = NSMenuItem()
@@ -210,6 +263,14 @@ extension AppDelegate {
             keyEquivalent: ""
         )
         aboutItem.target = self
+        appMenu.addItem(.separator())
+        let settingsItem = appMenu.addItem(
+            withTitle: currentLanguage == .russian ? "Настройки…" : "Settings…",
+            action: #selector(showSettingsWindow(_:)),
+            keyEquivalent: ","
+        )
+        settingsItem.target = self
+        settingsItem.keyEquivalentModifierMask = [.command]
         appMenu.addItem(.separator())
         let checkForUpdatesItem = appMenu.addItem(
             withTitle: currentLanguage == .russian

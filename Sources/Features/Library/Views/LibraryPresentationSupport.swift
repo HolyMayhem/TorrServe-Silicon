@@ -27,8 +27,8 @@ struct LibraryTexts {
     var serverUnavailable: String { language == .russian ? "TorrServer не запущен" : "TorrServer is stopped" }
     var startServerFirst: String {
         language == .russian
-            ? "Сначала запустите сервер на вкладке «Сервер»."
-            : "Start the server from the Server tab first."
+            ? "Сначала запустите сервер в разделе «Настройки» → «Сервер»."
+            : "Start the server in Settings → Server first."
     }
     var emptyLibrary: String { language == .russian ? "Библиотека пуста" : "Library is empty" }
     var emptyLibraryHint: String {

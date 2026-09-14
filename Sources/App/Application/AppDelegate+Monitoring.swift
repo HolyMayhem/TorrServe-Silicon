@@ -83,7 +83,7 @@ extension AppDelegate {
                 menuStatus: texts.running(pid: pid)
             ))
             refreshStorage()
-            if mainWindowModel.selectedSection == .server,
+            if settingsWindow?.isVisible == true,
                !mainWindowModel.hasLoadedServerSettings {
                 loadTorrServerSettings()
             }

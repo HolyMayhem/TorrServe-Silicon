@@ -91,8 +91,8 @@ struct SearchTexts {
     var added: String { language == .russian ? "Добавлено" : "Added" }
     var startServerFirst: String {
         language == .russian
-            ? "Сначала запустите TorrServer на вкладке «Сервер»."
-            : "Start TorrServer from the Server tab first."
+            ? "Сначала запустите TorrServer в разделе «Настройки» → «Сервер»."
+            : "Start TorrServer in Settings → Server first."
     }
     var couldNotAdd: String {
         language == .russian ? "Не удалось добавить раздачу" : "Could not add release"

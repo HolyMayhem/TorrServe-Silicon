@@ -110,13 +110,6 @@ struct ApplicationRootView: View {
             )
             .padding(mainContentInset)
             .ignoresSafeArea(.container, edges: .top)
-        case .server:
-            MainWindowView(model: mainModel)
-        case .settings:
-            SettingsView(
-                model: mainModel,
-                offlineDownloadManager: libraryModel.offlineDownloadManager
-            )
         }
     }
 

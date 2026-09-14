@@ -9,55 +9,19 @@ struct ServerCacheSettingsSection: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            header
-
-            HStack(alignment: .top, spacing: 20) {
-                cacheControls
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-
-                Divider()
-
-                storageControls
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-            }
-            .disabled(!model.hasLoadedServerSettings || isBusy)
-
+        ServerSettingsGroup(title: isRussian ? "Настройки кеша" : "Cache Settings") {
+            cacheControls
+                .disabled(!model.hasLoadedServerSettings || isBusy)
             Divider()
-
+            storageControls
+                .disabled(!model.hasLoadedServerSettings || isBusy)
+            Divider()
             footer
-        }
-        .serverSettingsPanel()
-    }
-
-    private var header: some View {
-        HStack(spacing: 10) {
-            Label(
-                isRussian ? "Настройки кеша" : "Cache Settings",
-                systemImage: "memorychip"
-            )
-            .font(.headline)
-
-            Spacer()
-
-            if model.isLoadingServerSettings {
-                ProgressView()
-                    .controlSize(.small)
-            }
-
-            Button {
-                model.onLoadServerSettings?()
-            } label: {
-                Image(systemName: "arrow.clockwise")
-            }
-            .buttonStyle(.borderless)
-            .disabled(isBusy || model.statusKind != .running)
-            .help(isRussian ? "Обновить настройки" : "Refresh settings")
         }
     }
 
     private var cacheControls: some View {
-        VStack(alignment: .leading, spacing: 13) {
+        VStack(alignment: .leading, spacing: 0) {
             settingSlider(
                 title: isRussian ? "Размер кеша" : "Cache size",
                 value: cacheSizeBinding,
@@ -68,6 +32,8 @@ struct ServerCacheSettingsSection: View {
 
             cacheAllocationBar
 
+            Divider()
+
             settingSlider(
                 title: isRussian ? "Опережающий кеш" : "Read-ahead cache",
                 value: readAheadBinding,
@@ -75,6 +41,8 @@ struct ServerCacheSettingsSection: View {
                 step: 1,
                 valueText: "\(model.serverSettingsDraft.readerReadAhead)%"
             )
+
+            Divider()
 
             settingSlider(
                 title: isRussian ? "Буфер предзагрузки" : "Preload buffer",
@@ -87,68 +55,27 @@ struct ServerCacheSettingsSection: View {
     }
 
     private var cacheAllocationBar: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            GeometryReader { geometry in
-                let trailingWidth = geometry.size.width
-                    * CGFloat(model.serverSettingsDraft.trailingCachePercent) / 100
-                let preloadWidth = geometry.size.width
-                    * CGFloat(model.serverSettingsDraft.preloadCache) / 100
-
-                VStack(spacing: 3) {
-                    ZStack(alignment: .leading) {
-                        Capsule()
-                            .fill(Color.green.opacity(0.92))
-
-                        Color.blue.opacity(0.88)
-                            .frame(width: trailingWidth)
-
-                        Rectangle()
-                            .fill(Color.primary.opacity(0.72))
-                            .frame(width: 1)
-                            .offset(x: trailingWidth)
-                    }
-                    .clipShape(Capsule())
-
-                    ZStack(alignment: .leading) {
-                        Capsule()
-                            .fill(Color.secondary.opacity(0.16))
-
-                        Capsule()
-                            .fill(Color.orange.opacity(0.95))
-                            .frame(width: preloadWidth)
-                    }
-                }
-                .animation(.easeInOut(duration: 0.16), value: trailingWidth)
-                .animation(.easeInOut(duration: 0.16), value: preloadWidth)
-            }
-            .frame(height: 13)
-
-            HStack(spacing: 12) {
-                allocationLegend(
-                    color: .blue,
-                    text: isRussian
-                        ? "Позади \(model.serverSettingsDraft.trailingCachePercent)%"
-                        : "Behind \(model.serverSettingsDraft.trailingCachePercent)%"
-                )
-                allocationLegend(
-                    color: .green,
-                    text: isRussian
-                        ? "Впереди \(model.serverSettingsDraft.readerReadAhead)%"
-                        : "Ahead \(model.serverSettingsDraft.readerReadAhead)%"
-                )
-                allocationLegend(
-                    color: .orange,
-                    text: isRussian
-                        ? "Предзагрузка \(model.serverSettingsDraft.preloadCache)%"
-                        : "Preload \(model.serverSettingsDraft.preloadCache)%"
-                )
-            }
+        HStack(spacing: 6) {
+            Text(isRussian
+                ? "Позади \(model.serverSettingsDraft.trailingCachePercent)%"
+                : "Behind \(model.serverSettingsDraft.trailingCachePercent)%")
+            Text("·")
+            Text(isRussian
+                ? "Впереди \(model.serverSettingsDraft.readerReadAhead)%"
+                : "Ahead \(model.serverSettingsDraft.readerReadAhead)%")
+            Text("·")
+            Text(isRussian
+                ? "Предзагрузка \(model.serverSettingsDraft.preloadCache)%"
+                : "Preload \(model.serverSettingsDraft.preloadCache)%")
         }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .padding(.bottom, 10)
         .accessibilityElement(children: .combine)
     }
 
     private var storageControls: some View {
-        VStack(alignment: .leading, spacing: 13) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(isRussian ? "Место хранения" : "Cache storage")
@@ -163,76 +90,76 @@ struct ServerCacheSettingsSection: View {
 
                 Spacer(minLength: 12)
 
-                HStack(spacing: 9) {
-                    Image(systemName: model.serverSettingsDraft.useDisk
-                        ? "externaldrive.fill"
-                        : "memorychip.fill")
-                        .foregroundStyle(Color.blue)
-                        .contentTransition(.symbolEffect(.replace))
+                Image(systemName: model.serverSettingsDraft.useDisk
+                    ? "externaldrive.fill"
+                    : "memorychip.fill")
+                    .foregroundStyle(Color.blue)
+                    .contentTransition(.symbolEffect(.replace))
 
-                    Text(model.serverSettingsDraft.useDisk
-                        ? (isRussian ? "Диск" : "Disk")
-                        : (isRussian ? "Память" : "Memory"))
-                        .font(.callout.weight(.medium))
-                        .frame(minWidth: 58, alignment: .leading)
+                Text(model.serverSettingsDraft.useDisk
+                    ? (isRussian ? "Диск" : "Disk")
+                    : (isRussian ? "Память" : "Memory"))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
 
-                    Toggle("", isOn: useDiskBinding)
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                }
-                .padding(.leading, 10)
-                .padding(.trailing, 6)
-                .frame(height: 36)
-                .liquidGlassPanel(cornerRadius: 18, interactive: true)
-                .animation(
-                    .easeInOut(duration: 0.18),
-                    value: model.serverSettingsDraft.useDisk
-                )
+                Toggle("", isOn: useDiskBinding)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
             }
+            .frame(minHeight: 56)
+            .animation(.easeInOut(duration: 0.18), value: model.serverSettingsDraft.useDisk)
 
             if model.serverSettingsDraft.useDisk {
-                VStack(alignment: .leading, spacing: 7) {
+                Divider()
+
+                HStack(spacing: 12) {
                     Text(isRussian ? "Папка кеша" : "Cache folder")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.callout)
 
-                    HStack(spacing: 8) {
-                        TextField(
-                            isRussian ? "Выберите папку" : "Choose a folder",
-                            text: Binding(
-                                get: { model.serverSettingsDraft.torrentsSavePath },
-                                set: {
-                                    model.serverSettingsDraft.torrentsSavePath = $0
-                                    model.serverSettingsResult = .idle
-                                }
-                            )
-                        )
-                        .textFieldStyle(.roundedBorder)
+                    Spacer(minLength: 20)
 
-                        Button {
-                            model.onChooseServerCacheFolder?()
-                        } label: {
-                            Image(systemName: "folder")
-                        }
-                        .liquidGlassControl()
-                        .help(isRussian ? "Выбрать папку кеша" : "Choose cache folder")
-                    }
-
-                    Toggle(
-                        isRussian
-                            ? "Удалять кеш при удалении материала"
-                            : "Remove cache when an item is dropped",
-                        isOn: Binding(
-                            get: { model.serverSettingsDraft.removeCacheOnDrop },
+                    TextField(
+                        isRussian ? "Выберите папку" : "Choose a folder",
+                        text: Binding(
+                            get: { model.serverSettingsDraft.torrentsSavePath },
                             set: {
-                                model.serverSettingsDraft.removeCacheOnDrop = $0
+                                model.serverSettingsDraft.torrentsSavePath = $0
                                 model.serverSettingsResult = .idle
                             }
                         )
                     )
-                    .toggleStyle(.switch)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 310)
+
+                    Button {
+                        model.onChooseServerCacheFolder?()
+                    } label: {
+                        Image(systemName: "folder")
+                    }
+                    .buttonStyle(.bordered)
+                    .help(isRussian ? "Выбрать папку кеша" : "Choose cache folder")
                 }
+                .frame(minHeight: 46)
+
+                Divider()
+
+                Toggle(
+                    isRussian
+                        ? "Удалять кеш при удалении материала"
+                        : "Remove cache when an item is dropped",
+                    isOn: Binding(
+                        get: { model.serverSettingsDraft.removeCacheOnDrop },
+                        set: {
+                            model.serverSettingsDraft.removeCacheOnDrop = $0
+                            model.serverSettingsResult = .idle
+                        }
+                    )
+                )
+                .toggleStyle(.switch)
+                .frame(minHeight: 42)
             } else {
+                Divider()
+
                 Label(
                     isRussian
                         ? "Кеш хранится только в оперативной памяти."
@@ -241,7 +168,7 @@ struct ServerCacheSettingsSection: View {
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, minHeight: 50, alignment: .leading)
+                .frame(maxWidth: .infinity, minHeight: 42, alignment: .leading)
             }
         }
     }
@@ -268,6 +195,24 @@ struct ServerCacheSettingsSection: View {
                 .easeInOut(duration: 0.18),
                 value: model.hasUnsavedServerSettings
             )
+
+            if model.isLoadingServerSettings {
+                ProgressView()
+                    .controlSize(.small)
+            } else {
+                Button {
+                    model.onLoadServerSettings?()
+                } label: {
+                    Label(
+                        isRussian ? "Обновить" : "Refresh",
+                        systemImage: "arrow.clockwise"
+                    )
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(isBusy || model.statusKind != .running)
+                .help(isRussian ? "Обновить настройки" : "Refresh settings")
+            }
 
             Spacer()
 
@@ -297,6 +242,7 @@ struct ServerCacheSettingsSection: View {
             )
             .keyboardShortcut("s", modifiers: [.command])
         }
+        .frame(minHeight: 48)
     }
 
     @ViewBuilder
@@ -341,17 +287,7 @@ struct ServerCacheSettingsSection: View {
             }
             Slider(value: value, in: range, step: step)
         }
-    }
-
-    private func allocationLegend(color: Color, text: String) -> some View {
-        HStack(spacing: 5) {
-            Circle()
-                .fill(color)
-                .frame(width: 7, height: 7)
-            Text(text)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        }
+        .padding(.vertical, 10)
     }
 
     private var cacheSizeBinding: Binding<Double> {

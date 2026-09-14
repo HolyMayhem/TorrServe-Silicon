@@ -3,11 +3,6 @@ import SwiftUI
 struct ServerDiagnosticsSection: View {
     @ObservedObject var model: MainWindowModel
 
-    private let columns = [
-        GridItem(.flexible(), spacing: 8),
-        GridItem(.flexible(), spacing: 8)
-    ]
-
     private var language: AppLanguage { model.language }
 
     private var isServerCheckRunning: Bool {
@@ -24,101 +19,89 @@ struct ServerDiagnosticsSection: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 9) {
-                Label(title, systemImage: "stethoscope")
-                    .font(.headline)
-
-                Spacer()
-
-                if isBusy {
-                    ProgressView()
-                        .controlSize(.small)
-                }
-            }
-
-            Text(description)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
+        ServerSettingsGroup(title: title, footer: description) {
             primaryDiagnosticAction
-
-            Text(language == .russian ? "ИНСТРУМЕНТЫ" : "TOOLS")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.tertiary)
-                .padding(.top, 1)
-
-            LazyVGrid(columns: columns, spacing: 8) {
-                diagnosticAction(
-                    title: language == .russian ? "Проверить порт 8090" : "Check port 8090",
-                    systemImage: "network",
-                    result: model.portDiagnostic,
-                    action: { model.onCheckPort?() }
-                )
-
-                diagnosticAction(
-                    title: language == .russian ? "Проверить файл" : "Check executable",
-                    systemImage: "checkmark.shield",
-                    result: model.executableDiagnostic,
-                    action: { model.onCheckExecutable?() }
-                )
-
-                diagnosticAction(
-                    title: testKeysTitle,
-                    systemImage: "key.horizontal",
-                    result: model.metadataKeysDiagnostic,
-                    action: { model.onTestAllMetadataAPIKeys?() }
-                )
-
-                diagnosticAction(
-                    title: processCleanupTitle,
-                    systemImage: "stop.circle",
-                    result: processCleanupResult,
-                    action: { model.onStopExternalProcesses?() }
-                )
-
-                diagnosticAction(
-                    title: language == .russian ? "Скопировать отчёт" : "Copy report",
-                    systemImage: "doc.on.doc",
-                    action: { model.onCopyDiagnosticReport?() }
-                )
-
-                diagnosticAction(
-                    title: language == .russian ? "Сохранить отчёт" : "Save report",
-                    systemImage: "square.and.arrow.down",
-                    action: { model.onSaveDiagnosticReport?() }
-                )
-            }
+            Divider()
+            diagnosticAction(
+                title: language == .russian ? "Проверить порт 8090" : "Check port 8090",
+                systemImage: "network",
+                result: model.portDiagnostic,
+                action: { model.onCheckPort?() }
+            )
+            Divider()
+            diagnosticAction(
+                title: language == .russian ? "Проверить файл" : "Check executable",
+                systemImage: "checkmark.shield",
+                result: model.executableDiagnostic,
+                action: { model.onCheckExecutable?() }
+            )
+            Divider()
+            diagnosticAction(
+                title: testKeysTitle,
+                systemImage: "key.horizontal",
+                result: model.metadataKeysDiagnostic,
+                action: { model.onTestAllMetadataAPIKeys?() }
+            )
+            Divider()
+            diagnosticAction(
+                title: processCleanupTitle,
+                systemImage: "stop.circle",
+                result: processCleanupResult,
+                action: { model.onStopExternalProcesses?() }
+            )
+            Divider()
+            diagnosticAction(
+                title: language == .russian ? "Скопировать отчёт" : "Copy report",
+                systemImage: "doc.on.doc",
+                action: { model.onCopyDiagnosticReport?() }
+            )
+            Divider()
+            diagnosticAction(
+                title: language == .russian ? "Сохранить отчёт" : "Save report",
+                systemImage: "square.and.arrow.down",
+                action: { model.onSaveDiagnosticReport?() }
+            )
 
             if !model.latestDiagnostic.message.isEmpty,
                model.latestDiagnostic.kind != .checking {
+                Divider()
                 diagnosticResultBanner(model.latestDiagnostic)
             }
+
+            Divider()
 
             Button {
                 model.onDownload?()
             } label: {
-                Label(
-                    language == .russian ? "Скачать свежий TorrServer" : "Download latest TorrServer",
-                    systemImage: "arrow.down.circle"
-                )
+                HStack(spacing: 10) {
+                    Image(systemName: "arrow.down.circle")
+                        .foregroundStyle(.secondary)
+                        .frame(width: 20)
+                    Text(language == .russian
+                        ? "Скачать свежий TorrServer"
+                        : "Download latest TorrServer")
+                    Spacer()
+                    Image(systemName: "arrow.up.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .frame(minHeight: 42)
+                .contentShape(Rectangle())
             }
-            .buttonStyle(.link)
+            .buttonStyle(.plain)
             .disabled(isBusy || !model.canDownload)
         }
-        .serverSettingsPanel()
     }
 
     private var primaryDiagnosticAction: some View {
         Button {
             model.onRunFullDiagnostics?()
         } label: {
-            HStack(spacing: 11) {
+            HStack(spacing: 10) {
                 Image(systemName: "waveform.path.ecg")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 32, height: 32)
-                    .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 8))
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 20)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(fullCheckTitle)
@@ -132,21 +115,17 @@ struct ServerDiagnosticsSection: View {
 
                 Spacer(minLength: 8)
 
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.tertiary)
+                if isBusy {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
             }
-            .padding(.horizontal, 11)
             .frame(maxWidth: .infinity)
-            .frame(height: 54)
-            .background(
-                Color.accentColor.opacity(0.09),
-                in: RoundedRectangle(cornerRadius: 11, style: .continuous)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .stroke(Color.accentColor.opacity(0.16), lineWidth: 1)
-            }
+            .frame(minHeight: 54)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -181,17 +160,8 @@ struct ServerDiagnosticsSection: View {
                         .controlSize(.mini)
                 }
             }
-            .padding(.horizontal, 10)
             .frame(maxWidth: .infinity)
-            .frame(height: 42)
-            .background(
-                tint.opacity(0.065),
-                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .stroke(tint.opacity(0.1), lineWidth: 1)
-            }
+            .frame(minHeight: 42)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
