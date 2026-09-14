@@ -9,6 +9,18 @@ enum SettingsScreenLayout {
     static let bottomPadding: CGFloat = 0
     static let sectionSpacing: CGFloat = 14
     static let scrollContentTopPadding: CGFloat = 14
+    static let collapsedHeaderLeadingPadding: CGFloat = 180
+}
+
+private struct SettingsSidebarVisibilityKey: EnvironmentKey {
+    static let defaultValue = true
+}
+
+extension EnvironmentValues {
+    var settingsSidebarIsVisible: Bool {
+        get { self[SettingsSidebarVisibilityKey.self] }
+        set { self[SettingsSidebarVisibilityKey.self] = newValue }
+    }
 }
 
 enum SettingsVisualStyle {
@@ -62,6 +74,7 @@ enum SettingsVisualStyle {
 struct SettingsPageHeader: View {
     let title: String
     let message: String
+    @Environment(\.settingsSidebarIsVisible) private var isSidebarVisible
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -76,12 +89,16 @@ struct SettingsPageHeader: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
         }
-        .frame(maxWidth: .infinity, minHeight: 66, alignment: .leading)
-        .padding(.horizontal, 18)
+        .frame(maxWidth: .infinity, minHeight: 50, alignment: .leading)
+        .padding(.leading, isSidebarVisible
+            ? 18
+            : SettingsScreenLayout.collapsedHeaderLeadingPadding)
+        .padding(.trailing, 18)
         .background(SettingsVisualStyle.windowBackground)
         .overlay(alignment: .bottom) {
             Divider()
         }
+        .animation(.snappy(duration: 0.24, extraBounce: 0), value: isSidebarVisible)
         .accessibilityElement(children: .combine)
     }
 }

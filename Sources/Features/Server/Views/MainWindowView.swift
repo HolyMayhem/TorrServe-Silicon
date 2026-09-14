@@ -209,8 +209,11 @@ struct MainWindowView: View {
             )
             .textFieldStyle(.roundedBorder)
             .disabled(!model.canEditPath)
+            .padding(.vertical, 11)
 
-            HStack(spacing: 8) {
+            Divider()
+
+            HStack(spacing: 10) {
                 if let update = model.torrServerUpdate {
                     Label(
                         model.language == .russian
@@ -226,7 +229,7 @@ struct MainWindowView: View {
                         : "Installed \(update.installedVersion), available \(update.latestVersion)")
                 }
 
-                Spacer()
+                Spacer(minLength: 12)
 
                 Button {
                     model.onChoose?()
@@ -238,6 +241,7 @@ struct MainWindowView: View {
 
                 executableDownloadButton
             }
+            .frame(minHeight: 50)
         }
     }
 

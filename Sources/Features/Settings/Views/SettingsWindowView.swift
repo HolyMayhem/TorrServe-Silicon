@@ -65,6 +65,7 @@ struct SettingsWindowView: View {
     @ObservedObject var offlineDownloadManager: OfflineDownloadManager
     @ObservedObject var navigation: SettingsWindowNavigationModel
     @State private var searchText = ""
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     private var filteredCategories: [SettingsCategory] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -79,7 +80,7 @@ struct SettingsWindowView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
             ZStack {
                 SettingsVisualStyle.sidebarBackground
                     .ignoresSafeArea()
@@ -112,6 +113,10 @@ struct SettingsWindowView: View {
             .id(selectedCategory)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(SettingsVisualStyle.windowBackground)
+            .environment(
+                \.settingsSidebarIsVisible,
+                columnVisibility != .detailOnly
+            )
         }
         .navigationSplitViewStyle(.balanced)
         .frame(minWidth: 780, minHeight: 540)
