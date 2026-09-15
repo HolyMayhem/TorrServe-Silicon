@@ -6,27 +6,41 @@ final class OfflineDownloadManager: ObservableObject {
     @Published private(set) var state: OfflineDownloadState = .idle
     @Published private(set) var currentRequest: OfflineDownloadRequest?
     @Published private(set) var completedDownloads: [OfflineDownloadRecord] = []
+    @Published private(set) var queuedRequests: [OfflineDownloadRequest] = []
     @Published private(set) var downloadDirectoryURL: URL?
+
+    var onCompleted: ((OfflineDownloadRequest, URL) -> Void)?
+    var onFailed: ((OfflineDownloadRequest, OfflineDownloadFailure) -> Void)?
 
     private let sessionConfiguration: URLSessionConfiguration
     private let checkpointStore: OfflineDownloadCheckpointStore
     private let historyStore: OfflineDownloadHistoryStore
+    private let queueStore: OfflineDownloadQueueStore
     private let fileManager: FileManager
     private let userDefaults: UserDefaults
     private let recycleCompletedFile: (URL) throws -> Void
+    private let availableDiskCapacity: (URL) throws -> Int64
     private let legacyDownloadDirectoryURL: URL?
     private var transfer: OfflineDownloadTransfer?
     private var transferID: UUID?
+    private var powerActivity: NSObjectProtocol?
+    private var queueProcessingEnabled = false
+    private var interruptionCompletions: [() -> Void] = []
+    private var requeueCurrentAfterCancellation = false
 
     private static let downloadDirectoryKey = "OfflineDownloadConfiguredDirectory"
+    private static let autoResumeKey = "OfflineDownloadAutoResumePending"
+    private static let diskSafetyReserve: Int64 = 1_073_741_824
 
     init(
         sessionConfiguration: URLSessionConfiguration = .ephemeral,
         checkpointStore: OfflineDownloadCheckpointStore = OfflineDownloadCheckpointStore(),
         historyStore: OfflineDownloadHistoryStore? = nil,
+        queueStore: OfflineDownloadQueueStore? = nil,
         fileManager: FileManager = .default,
         userDefaults: UserDefaults = .standard,
-        recycleCompletedFile: ((URL) throws -> Void)? = nil
+        recycleCompletedFile: ((URL) throws -> Void)? = nil,
+        availableDiskCapacity: ((URL) throws -> Int64)? = nil
     ) {
         self.sessionConfiguration = sessionConfiguration
         self.checkpointStore = checkpointStore
@@ -36,11 +50,26 @@ final class OfflineDownloadManager: ObservableObject {
                 .deletingLastPathComponent()
                 .appendingPathComponent("completed.json", isDirectory: false)
         )
+        self.queueStore = queueStore ?? OfflineDownloadQueueStore(
+            fileManager: fileManager,
+            fileURL: checkpointStore.fileURL?
+                .deletingLastPathComponent()
+                .appendingPathComponent("queue.json", isDirectory: false)
+        )
         self.fileManager = fileManager
         self.userDefaults = userDefaults
         self.recycleCompletedFile = recycleCompletedFile ?? { url in
             var resultingURL: NSURL?
             try fileManager.trashItem(at: url, resultingItemURL: &resultingURL)
+        }
+        self.availableDiskCapacity = availableDiskCapacity ?? { url in
+            let attributes = try fileManager.attributesOfFileSystem(
+                forPath: url.path
+            )
+            guard let value = attributes[.systemFreeSize] as? NSNumber else {
+                throw OfflineDownloadDirectoryError.unavailable
+            }
+            return value.int64Value
         }
         if let legacyPath = userDefaults.string(forKey: "OfflineDownloadDirectory"),
            !legacyPath.isEmpty {
@@ -57,6 +86,7 @@ final class OfflineDownloadManager: ObservableObject {
         )
         restoreCompletedDownloads()
         restorePersistedState()
+        restoreQueuedDownloads()
     }
 
     func setDownloadDirectory(_ directoryURL: URL) throws {
@@ -133,6 +163,10 @@ final class OfflineDownloadManager: ObservableObject {
         return record.destinationURL
     }
 
+    func refreshCompletedDownloads() {
+        restoreCompletedDownloads()
+    }
+
     func moveCompletedDownloadToTrash(
         sourceURL: URL,
         expectedLength: Int64
@@ -196,6 +230,129 @@ final class OfflineDownloadManager: ObservableObject {
         }
     }
 
+    func containsRequest(sourceURL: URL, expectedLength: Int64) -> Bool {
+        if currentRequest?.sourceURL == sourceURL,
+           currentRequest?.expectedLength == expectedLength,
+           completedDestination(
+            sourceURL: sourceURL,
+            expectedLength: expectedLength
+           ) == nil {
+            return true
+        }
+        return queuedRequest(
+            sourceURL: sourceURL,
+            expectedLength: expectedLength
+        ) != nil
+    }
+
+    func queuedRequest(
+        sourceURL: URL,
+        expectedLength: Int64
+    ) -> OfflineDownloadRequest? {
+        queuedRequests.first {
+            $0.sourceURL == sourceURL && $0.expectedLength == expectedLength
+        }
+    }
+
+    func enqueue(_ request: OfflineDownloadRequest) throws {
+        guard !containsRequest(
+            sourceURL: request.sourceURL,
+            expectedLength: request.expectedLength
+        ) else {
+            throw OfflineDownloadStartError.alreadyQueued
+        }
+        guard currentRequest?.destinationURL != request.destinationURL,
+              !queuedRequests.contains(where: {
+                  $0.destinationURL == request.destinationURL
+              }) else {
+            throw OfflineDownloadStartError.destinationAlreadyExists(
+                request.destinationURL
+            )
+        }
+
+        try validateCommonRequestFields(request)
+        try validateNewDownloadFiles(request)
+        try validateAvailableDiskSpace(for: request, bytesAlreadyWritten: 0)
+
+        queuedRequests.append(request)
+        do {
+            try queueStore.save(queuedRequests)
+        } catch {
+            queuedRequests.removeLast()
+            throw error
+        }
+
+        queueProcessingEnabled = true
+        startNextQueuedDownloadIfPossible()
+    }
+
+    func cancel(sourceURL: URL, expectedLength: Int64) {
+        if currentRequest?.sourceURL == sourceURL,
+           currentRequest?.expectedLength == expectedLength {
+            cancel()
+            return
+        }
+
+        let oldCount = queuedRequests.count
+        queuedRequests.removeAll {
+            $0.sourceURL == sourceURL && $0.expectedLength == expectedLength
+        }
+        if queuedRequests.count != oldCount {
+            try? queueStore.save(queuedRequests)
+        }
+    }
+
+    func prepareForInterruption(completion: @escaping () -> Void) {
+        queueProcessingEnabled = false
+
+        guard let transfer else {
+            completion()
+            return
+        }
+
+        interruptionCompletions.append(completion)
+
+        switch state {
+        case .preparing:
+            userDefaults.set(true, forKey: Self.autoResumeKey)
+            requeueCurrentAfterCancellation = true
+            state = .cancelling(activeProgress)
+            transfer.cancel()
+        case .resuming, .downloading:
+            pause(markForAutoResume: true)
+        case .pausing, .cancelling:
+            break
+        case .idle, .queued, .paused, .completed, .cancelled, .failed:
+            finishInterruption()
+        }
+    }
+
+    func resumePendingDownloadsIfPossible() {
+        queueProcessingEnabled = true
+        guard transfer == nil else { return }
+
+        if userDefaults.bool(forKey: Self.autoResumeKey),
+           state.resumableCheckpoint != nil {
+            do {
+                try resume()
+                userDefaults.set(false, forKey: Self.autoResumeKey)
+                return
+            } catch {
+                if let request = currentRequest {
+                    let failure = startFailure(for: error)
+                    state = .failed(failure, checkpoint: state.resumableCheckpoint)
+                    onFailed?(request, failure)
+                }
+                return
+            }
+        }
+
+        if userDefaults.bool(forKey: Self.autoResumeKey) {
+            userDefaults.set(false, forKey: Self.autoResumeKey)
+        }
+        startNextQueuedDownloadIfPossible()
+    }
+
     func start(_ request: OfflineDownloadRequest) throws {
         guard transfer == nil else {
             throw OfflineDownloadStartError.anotherDownloadIsActive
@@ -206,15 +363,28 @@ final class OfflineDownloadManager: ObservableObject {
 
         try validateCommonRequestFields(request)
         try validateNewDownloadFiles(request)
+        try validateAvailableDiskSpace(for: request, bytesAlreadyWritten: 0)
         beginTransfer(request: request, checkpoint: nil)
     }
 
     func pause() {
-        guard let transfer,
-              case .downloading(let progress) = state else {
+        pause(markForAutoResume: false)
+    }
+
+    private func pause(markForAutoResume: Bool) {
+        guard let transfer else { return }
+
+        let progress: OfflineDownloadProgress
+        switch state {
+        case .downloading(let currentProgress):
+            progress = currentProgress
+        case .resuming(let checkpoint):
+            progress = checkpoint.progress
+        default:
             return
         }
 
+        userDefaults.set(markForAutoResume, forKey: Self.autoResumeKey)
         state = .pausing(progress)
         transfer.pause()
     }
@@ -228,10 +398,15 @@ final class OfflineDownloadManager: ObservableObject {
         }
 
         try validateCheckpoint(checkpoint)
+        try validateAvailableDiskSpace(
+            for: checkpoint.request,
+            bytesAlreadyWritten: checkpoint.bytesWritten
+        )
         beginTransfer(request: checkpoint.request, checkpoint: checkpoint)
     }
 
     func cancel() {
+        userDefaults.set(false, forKey: Self.autoResumeKey)
         if let transfer {
             state = .cancelling(activeProgress)
             transfer.cancel()
@@ -246,6 +421,8 @@ final class OfflineDownloadManager: ObservableObject {
             try checkpointStore.clear()
             currentRequest = nil
             state = .cancelled
+            userDefaults.set(false, forKey: Self.autoResumeKey)
+            startNextQueuedDownloadIfPossible()
         } catch {
             let failure: OfflineDownloadFailure
             if error is OfflineDownloadCheckpointStoreError {
@@ -281,6 +458,76 @@ final class OfflineDownloadManager: ObservableObject {
             currentRequest = nil
             state = .failed(persistenceFailure(for: error), checkpoint: nil)
         }
+    }
+
+    private func restoreQueuedDownloads() {
+        do {
+            var seen = Set<String>()
+            queuedRequests = try queueStore.load().filter { request in
+                let key = "\(request.sourceURL.absoluteString)|\(request.expectedLength)"
+                guard !seen.contains(key),
+                      request != currentRequest,
+                      completedDestination(
+                        sourceURL: request.sourceURL,
+                        expectedLength: request.expectedLength
+                      ) == nil else {
+                    return false
+                }
+                seen.insert(key)
+                return true
+            }
+            try queueStore.save(queuedRequests)
+        } catch {
+            queuedRequests = []
+            try? queueStore.clear()
+        }
+    }
+
+    private func startNextQueuedDownloadIfPossible() {
+        guard queueProcessingEnabled,
+              transfer == nil,
+              state.resumableCheckpoint == nil,
+              let request = queuedRequests.first else {
+            return
+        }
+
+        queuedRequests.removeFirst()
+        do {
+            try queueStore.save(queuedRequests)
+            try validateCommonRequestFields(request)
+            try validateNewDownloadFiles(request)
+            try validateAvailableDiskSpace(for: request, bytesAlreadyWritten: 0)
+            beginTransfer(request: request, checkpoint: nil)
+        } catch {
+            currentRequest = request
+            let failure = startFailure(for: error)
+            state = .failed(failure, checkpoint: nil)
+            onFailed?(request, failure)
+        }
+    }
+
+    private func validateAvailableDiskSpace(
+        for request: OfflineDownloadRequest,
+        bytesAlreadyWritten: Int64
+    ) throws {
+        let remainingBytes = max(request.expectedLength - bytesAlreadyWritten, 0)
+        let (requiredBytes, overflow) = remainingBytes.addingReportingOverflow(
+            Self.diskSafetyReserve
+        )
+        let required = overflow ? Int64.max : requiredBytes
+        let available = try availableDiskCapacity(
+            request.destinationURL.deletingLastPathComponent()
+        )
+        guard available >= required else {
+            throw OfflineDownloadStartError.insufficientDiskSpace(
+                required: required,
+                available: max(available, 0)
+            )
+        }
+    }
+
+    private func startFailure(for error: Error) -> OfflineDownloadFailure {
+        .preflight(error.localizedDescription)
     }
 
     private func reconciledState(
@@ -367,6 +614,7 @@ final class OfflineDownloadManager: ObservableObject {
         request: OfflineDownloadRequest,
         checkpoint: OfflineDownloadCheckpoint?
     ) {
+        beginPowerActivityIfNeeded()
         currentRequest = request
         if let checkpoint {
             state = .resuming(checkpoint)
@@ -536,19 +784,35 @@ final class OfflineDownloadManager: ObservableObject {
                     checkpoint: checkpoint
                 )
             }
+            finishInterruption()
         case .completed(let destinationURL):
+            let completedRequest = currentRequest
             clearTransfer()
             try? checkpointStore.clear()
-            if let currentRequest {
-                recordCompletedDownload(currentRequest)
+            if let completedRequest {
+                recordCompletedDownload(completedRequest)
             }
             state = .completed(destinationURL)
+            if let completedRequest {
+                onCompleted?(completedRequest, destinationURL)
+            }
+            finishInterruption()
+            startNextQueuedDownloadIfPossible()
         case .cancelled:
+            let cancelledRequest = currentRequest
             clearTransfer()
             try? checkpointStore.clear()
             currentRequest = nil
             state = .cancelled
+            if requeueCurrentAfterCancellation, let cancelledRequest {
+                requeueCurrentAfterCancellation = false
+                queuedRequests.insert(cancelledRequest, at: 0)
+                try? queueStore.save(queuedRequests)
+            }
+            finishInterruption()
+            startNextQueuedDownloadIfPossible()
         case .failed(let failure, let checkpoint):
+            let failedRequest = currentRequest
             clearTransfer()
             do {
                 if let checkpoint {
@@ -563,6 +827,10 @@ final class OfflineDownloadManager: ObservableObject {
                     checkpoint: checkpoint
                 )
             }
+            if let failedRequest {
+                onFailed?(failedRequest, failure)
+            }
+            finishInterruption()
         }
     }
 
@@ -576,7 +844,7 @@ final class OfflineDownloadManager: ObservableObject {
             return progress
         case .resuming(let checkpoint):
             return checkpoint.progress
-        case .idle, .preparing, .paused, .cancelling,
+        case .idle, .queued, .preparing, .paused, .cancelling,
              .completed, .cancelled, .failed:
             return nil
         }
@@ -586,7 +854,7 @@ final class OfflineDownloadManager: ObservableObject {
         switch state {
         case .pausing, .cancelling:
             return true
-        case .idle, .preparing, .resuming, .downloading, .paused,
+        case .idle, .queued, .preparing, .resuming, .downloading, .paused,
              .completed, .cancelled, .failed:
             return false
         }
@@ -595,6 +863,28 @@ final class OfflineDownloadManager: ObservableObject {
     private func clearTransfer() {
         transfer = nil
         transferID = nil
+        endPowerActivityIfNeeded()
+    }
+
+    private func beginPowerActivityIfNeeded() {
+        guard powerActivity == nil else { return }
+        powerActivity = ProcessInfo.processInfo.beginActivity(
+            options: [.userInitiated, .idleSystemSleepDisabled, .suddenTerminationDisabled],
+            reason: "Downloading media for offline playback"
+        )
+    }
+
+    private func endPowerActivityIfNeeded() {
+        guard let powerActivity else { return }
+        ProcessInfo.processInfo.endActivity(powerActivity)
+        self.powerActivity = nil
+    }
+
+    private func finishInterruption() {
+        guard !interruptionCompletions.isEmpty else { return }
+        let completions = interruptionCompletions
+        interruptionCompletions.removeAll()
+        completions.forEach { $0() }
     }
 
     private func restoreCompletedDownloads() {
@@ -669,6 +959,8 @@ final class OfflineDownloadManager: ObservableObject {
             && !fileManager.fileExists(
                 atPath: destinationURL.appendingPathExtension("torrserve-part").path
             )
+            && currentRequest?.destinationURL != destinationURL
+            && !queuedRequests.contains { $0.destinationURL == destinationURL }
     }
 
     private static func savedDownloadDirectory(
@@ -866,7 +1158,7 @@ private final class OfflineDownloadTransfer: NSObject, URLSessionDataDelegate {
             bytesWritten = attemptedLength
             deliverProgressIfNeeded()
         } catch {
-            terminalFailure = .fileSystem(error.localizedDescription)
+            terminalFailure = fileFailure(for: error)
             dataTask.cancel()
         }
     }
@@ -1064,6 +1356,15 @@ private final class OfflineDownloadTransfer: NSObject, URLSessionDataDelegate {
 
         eventHandler(.failed(failure, checkpoint: checkpoint))
         finishSession()
+    }
+
+    private func fileFailure(for error: Error) -> OfflineDownloadFailure {
+        let nsError = error as NSError
+        if nsError.domain == NSCocoaErrorDomain,
+           nsError.code == CocoaError.Code.fileWriteOutOfSpace.rawValue {
+            return .diskFull
+        }
+        return .fileSystem(error.localizedDescription)
     }
 
     private func closeFileHandle(synchronize: Bool) throws {

@@ -30,6 +30,46 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         }
     }
 
+    func pageTitle(language: AppLanguage) -> String {
+        if self == .server {
+            return language == .russian ? "Настройки сервера" : "Server Settings"
+        }
+        return title(language: language)
+    }
+
+    func message(language: AppLanguage) -> String {
+        switch self {
+        case .general:
+            return language == .russian
+                ? "Настройте запуск приложения, уведомления и его поведение в macOS."
+                : "Configure app startup, notifications, and macOS behavior."
+        case .server:
+            return language == .russian
+                ? "Управляйте сервером, исполняемым файлом, хранилищем и приложениями для воспроизведения."
+                : "Manage the server, executable, storage, and playback apps."
+        case .interface:
+            return language == .russian
+                ? "Выберите язык приложения и настройте поиск через Jackett."
+                : "Choose the app language and configure search through Jackett."
+        case .menuBar:
+            return language == .russian
+                ? "Настройте значок, скорость и содержимое меню TorrServe."
+                : "Configure the TorrServe menu icon, speed, and content."
+        case .updates:
+            return language == .russian
+                ? "Управляйте обновлениями приложения TorrServe Silicon."
+                : "Manage updates for the TorrServe Silicon application."
+        case .downloads:
+            return language == .russian
+                ? "Выберите папку для сохранения офлайн-загрузок."
+                : "Choose where offline downloads are stored."
+        case .metadata:
+            return language == .russian
+                ? "Выберите источники постеров и описаний и настройте ключи API."
+                : "Choose poster and description providers and configure API keys."
+        }
+    }
+
     var systemImage: String {
         switch self {
         case .general: return "gearshape.fill"
@@ -99,20 +139,30 @@ struct SettingsWindowView: View {
             }
             .navigationSplitViewColumnWidth(min: 185, ideal: 195, max: 210)
         } detail: {
-            Group {
-                if selectedCategory == .server {
-                    MainWindowView(model: model)
-                } else {
-                    SettingsView(
-                        model: model,
-                        offlineDownloadManager: offlineDownloadManager,
-                        category: selectedCategory
-                    )
+            VStack(spacing: 0) {
+                SettingsPageHeader(
+                    title: selectedCategory.pageTitle(language: model.language),
+                    message: selectedCategory.message(language: model.language)
+                )
+                .zIndex(1)
+
+                Group {
+                    if selectedCategory == .server {
+                        MainWindowView(model: model)
+                    } else {
+                        SettingsView(
+                            model: model,
+                            offlineDownloadManager: offlineDownloadManager,
+                            category: selectedCategory
+                        )
+                    }
                 }
+                .id(selectedCategory)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .id(selectedCategory)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(SettingsVisualStyle.windowBackground)
+            .ignoresSafeArea(.container, edges: .top)
             .environment(
                 \.settingsSidebarIsVisible,
                 columnVisibility != .detailOnly

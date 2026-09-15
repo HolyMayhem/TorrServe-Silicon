@@ -89,7 +89,7 @@ struct SettingsPageHeader: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
         }
-        .frame(maxWidth: .infinity, minHeight: 50, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: 50, maxHeight: 50, alignment: .leading)
         .padding(.leading, isSidebarVisible
             ? 18
             : SettingsScreenLayout.collapsedHeaderLeadingPadding)

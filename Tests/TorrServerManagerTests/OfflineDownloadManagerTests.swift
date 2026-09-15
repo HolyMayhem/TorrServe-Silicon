@@ -6,6 +6,7 @@ import XCTest
 @MainActor
 final class OfflineDownloadManagerTests: XCTestCase {
     private var temporaryDirectory: URL!
+    private var userDefaults: UserDefaults!
     private var cancellables: Set<AnyCancellable> = []
 
     override func setUpWithError() throws {
@@ -15,12 +16,21 @@ final class OfflineDownloadManagerTests: XCTestCase {
             at: temporaryDirectory,
             withIntermediateDirectories: true
         )
+        userDefaults = UserDefaults(
+            suiteName: "OfflineDownloadManagerTests.\(temporaryDirectory.lastPathComponent)"
+        )!
         cancellables = []
     }
 
     override func tearDownWithError() throws {
         StubURLProtocol.reset()
         cancellables = []
+        if let userDefaults {
+            userDefaults.removePersistentDomain(
+                forName: "OfflineDownloadManagerTests.\(temporaryDirectory.lastPathComponent)"
+            )
+        }
+        userDefaults = nil
         if let temporaryDirectory {
             try? FileManager.default.removeItem(at: temporaryDirectory)
         }
@@ -66,10 +76,10 @@ final class OfflineDownloadManagerTests: XCTestCase {
         let destination = temporaryDirectory.appendingPathComponent("delete-me.mkv")
         let request = makeRequest(destination: destination, length: Int64(payload.count))
         var recycledURLs: [URL] = []
-        let manager = makeManager { url in
+        let manager = makeManager(recycleCompletedFile: { url in
             recycledURLs.append(url)
             try FileManager.default.removeItem(at: url)
-        }
+        })
 
         try manager.start(request)
         _ = try await waitForTerminalState(manager)
@@ -538,16 +548,177 @@ final class OfflineDownloadManagerTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: fileURL.path))
     }
 
+    func testEnqueuesAndCancelsAWaitingDownload() async throws {
+        let payload = Data(repeating: 0x33, count: 262_144)
+        StubURLProtocol.configure(.init(
+            data: payload,
+            chunkSize: 4_096,
+            delayBetweenChunks: 0.01
+        ))
+        let manager = makeManager()
+        let first = makeRequest(
+            destination: temporaryDirectory.appendingPathComponent("first.mkv"),
+            length: Int64(payload.count)
+        )
+        let second = OfflineDownloadRequest(
+            sourceURL: URL(string: "http://127.0.0.1:8090/stream/second.mkv")!,
+            destinationURL: temporaryDirectory.appendingPathComponent("second.mkv"),
+            expectedLength: Int64(payload.count)
+        )
+
+        try manager.enqueue(first)
+        _ = try await waitForState(manager) {
+            if case .downloading = $0 { return true }
+            return false
+        }
+        try manager.enqueue(second)
+
+        XCTAssertEqual(manager.queuedRequests, [second])
+        manager.cancel(
+            sourceURL: second.sourceURL,
+            expectedLength: second.expectedLength
+        )
+        XCTAssertTrue(manager.queuedRequests.isEmpty)
+        XCTAssertEqual(manager.currentRequest, first)
+        manager.cancel()
+        _ = try await waitForTerminalState(manager)
+    }
+
+    func testQueueDownloadsSequentially() async throws {
+        let payload = Data(repeating: 0x44, count: 32_768)
+        StubURLProtocol.configure(.init(data: payload, chunkSize: 4_096))
+        let manager = makeManager()
+        let first = makeRequest(
+            destination: temporaryDirectory.appendingPathComponent("first.mkv"),
+            length: Int64(payload.count)
+        )
+        let second = OfflineDownloadRequest(
+            sourceURL: URL(string: "http://127.0.0.1:8090/stream/second.mkv")!,
+            destinationURL: temporaryDirectory.appendingPathComponent("second.mkv"),
+            expectedLength: Int64(payload.count)
+        )
+
+        try manager.enqueue(first)
+        try manager.enqueue(second)
+
+        _ = try await waitForState(manager, timeout: 5) {
+            $0 == .completed(second.destinationURL)
+        }
+        XCTAssertEqual(try Data(contentsOf: first.destinationURL), payload)
+        XCTAssertEqual(try Data(contentsOf: second.destinationURL), payload)
+        XCTAssertTrue(manager.queuedRequests.isEmpty)
+        XCTAssertEqual(StubURLProtocol.requestsSnapshot().count, 2)
+    }
+
+    func testRestoresQueueWithoutStartingBeforeServerIsReady() throws {
+        let request = makeRequest(
+            destination: temporaryDirectory.appendingPathComponent("queued.mkv"),
+            length: 16_384
+        )
+        let queueStore = OfflineDownloadQueueStore(
+            fileURL: temporaryDirectory.appendingPathComponent("queue.json")
+        )
+        try queueStore.save([request])
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [StubURLProtocol.self]
+
+        let restoredManager = OfflineDownloadManager(
+            sessionConfiguration: configuration,
+            checkpointStore: makeCheckpointStore(),
+            queueStore: queueStore,
+            userDefaults: userDefaults
+        )
+
+        XCTAssertEqual(restoredManager.queuedRequests, [request])
+        XCTAssertEqual(restoredManager.state, .idle)
+        XCTAssertTrue(StubURLProtocol.requestsSnapshot().isEmpty)
+    }
+
+    func testRejectsDownloadWhenDiskReserveIsUnavailable() throws {
+        let destination = temporaryDirectory.appendingPathComponent("movie.mkv")
+        let manager = makeManager(availableDiskCapacity: { _ in 1_024 })
+        let request = makeRequest(destination: destination, length: 2_048)
+
+        XCTAssertThrowsError(try manager.start(request)) { error in
+            guard let startError = error as? OfflineDownloadStartError,
+                  case .insufficientDiskSpace = startError else {
+                return XCTFail("Expected insufficient disk space, got \(error).")
+            }
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: request.partialFileURL.path))
+    }
+
+    func testInterruptionPausesAndAutomaticallyResumes() async throws {
+        let payload = Data(repeating: 0x55, count: 262_144)
+        StubURLProtocol.configure(.init(
+            data: payload,
+            chunkSize: 4_096,
+            delayBetweenChunks: 0.01
+        ))
+        let manager = makeManager()
+        let request = makeRequest(
+            destination: temporaryDirectory.appendingPathComponent("interrupted.mkv"),
+            length: Int64(payload.count)
+        )
+        let interrupted = expectation(description: "interruption completed")
+
+        try manager.enqueue(request)
+        _ = try await waitForState(manager) {
+            if case .downloading(let progress) = $0 {
+                return progress.bytesWritten > 0
+            }
+            return false
+        }
+        manager.prepareForInterruption {
+            interrupted.fulfill()
+        }
+        _ = try await waitForState(manager) {
+            if case .paused = $0 { return true }
+            return false
+        }
+        await fulfillment(of: [interrupted], timeout: 1)
+
+        manager.resumePendingDownloadsIfPossible()
+        let completed = try await waitForState(manager, timeout: 5) {
+            if case .completed = $0 { return true }
+            return false
+        }
+        XCTAssertEqual(completed, .completed(request.destinationURL))
+    }
+
+    func testCallsCompletionCallback() async throws {
+        let payload = Data(repeating: 0x77, count: 32_768)
+        StubURLProtocol.configure(.init(data: payload, chunkSize: 4_096))
+        let manager = makeManager()
+        let request = makeRequest(
+            destination: temporaryDirectory.appendingPathComponent("callback.mkv"),
+            length: Int64(payload.count)
+        )
+        var callbackDestination: URL?
+        manager.onCompleted = { callbackRequest, destinationURL in
+            XCTAssertEqual(callbackRequest, request)
+            callbackDestination = destinationURL
+        }
+
+        try manager.start(request)
+        _ = try await waitForTerminalState(manager)
+
+        XCTAssertEqual(callbackDestination, request.destinationURL)
+    }
+
     private func makeManager(
         checkpointStore: OfflineDownloadCheckpointStore? = nil,
-        recycleCompletedFile: ((URL) throws -> Void)? = nil
+        recycleCompletedFile: ((URL) throws -> Void)? = nil,
+        availableDiskCapacity: ((URL) throws -> Int64)? = nil
     ) -> OfflineDownloadManager {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [StubURLProtocol.self]
         return OfflineDownloadManager(
             sessionConfiguration: configuration,
             checkpointStore: checkpointStore ?? makeCheckpointStore(),
-            recycleCompletedFile: recycleCompletedFile
+            userDefaults: userDefaults,
+            recycleCompletedFile: recycleCompletedFile,
+            availableDiskCapacity: availableDiskCapacity
         )
     }
 

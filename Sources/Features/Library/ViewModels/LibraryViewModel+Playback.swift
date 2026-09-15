@@ -38,16 +38,23 @@ extension LibraryViewModel {
     ) {
         guard let streamURL = api.streamURL(torrent: torrent, file: file) else { return }
 
-        Task {
-            await api.beginPreloading(
-                torrentHash: torrent.hash,
-                fileID: file.id
-            )
+        let playbackURL = offlineDownloadManager.completedDestination(
+            sourceURL: streamURL,
+            expectedLength: file.length
+        ) ?? streamURL
+
+        if !playbackURL.isFileURL {
+            Task {
+                await api.beginPreloading(
+                    torrentHash: torrent.hash,
+                    fileID: file.id
+                )
+            }
         }
 
         do {
             try ExternalPlayerLauncher.open(
-                streamURL,
+                playbackURL,
                 using: choice,
                 customPlayerPath: customPlayerPath
             )

@@ -15,6 +15,19 @@ PARTIAL_INFO_PLIST="$GENERATED_DIR/AppIcon-Info.plist"
 SOURCE_ICON="$PROJECT_DIR/Resources/AppIcon.icon"
 XCODE_DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 ACTOOL="$XCODE_DEVELOPER_DIR/usr/bin/actool"
+MACOS_DEPLOYMENT_TARGET="15.0"
+MACOS_SDKROOT="$(
+  DEVELOPER_DIR="$XCODE_DEVELOPER_DIR" xcrun --sdk macosx --show-sdk-path
+)"
+MACOS_SDK_VERSION="$(
+  DEVELOPER_DIR="$XCODE_DEVELOPER_DIR" xcrun --sdk macosx --show-sdk-platform-version
+)"
+SWIFT_LINKER_PLATFORM_FLAGS=(
+  -Xlinker -platform_version
+  -Xlinker macos
+  -Xlinker "$MACOS_DEPLOYMENT_TARGET"
+  -Xlinker "$MACOS_SDK_VERSION"
+)
 TORRSERVER_ASSET_NAME="TorrServer-darwin-arm64"
 TORRSERVER_DOWNLOAD_URL="https://github.com/YouROK/TorrServer/releases/latest/download/$TORRSERVER_ASSET_NAME"
 TORRSERVER_CACHE_DIR="$GENERATED_DIR/TorrServer"
@@ -38,9 +51,14 @@ if [[ ! -x "$ACTOOL" ]]; then
   exit 1
 fi
 
-DEVELOPER_DIR="$XCODE_DEVELOPER_DIR" swift build -c release --package-path "$PROJECT_DIR"
+DEVELOPER_DIR="$XCODE_DEVELOPER_DIR" \
+  SDKROOT="$MACOS_SDKROOT" \
+  swift build \
+    -c release \
+    --package-path "$PROJECT_DIR" \
+    "${SWIFT_LINKER_PLATFORM_FLAGS[@]}"
 BIN_DIR="$(
-  DEVELOPER_DIR="$XCODE_DEVELOPER_DIR" \
+  DEVELOPER_DIR="$XCODE_DEVELOPER_DIR" SDKROOT="$MACOS_SDKROOT" \
     swift build -c release --package-path "$PROJECT_DIR" --show-bin-path
 )"
 SPARKLE_FRAMEWORK_PATH="$BIN_DIR/Sparkle.framework"
@@ -95,7 +113,7 @@ chmod 755 "$TORRSERVER_CACHE_PATH"
 DEVELOPER_DIR="$XCODE_DEVELOPER_DIR" "$ACTOOL" \
   --compile "$COMPILED_ICON_DIR" \
   --platform macosx \
-  --minimum-deployment-target 15.0 \
+  --minimum-deployment-target "$MACOS_DEPLOYMENT_TARGET" \
   --app-icon AppIcon \
   --output-partial-info-plist "$PARTIAL_INFO_PLIST" \
   --warnings \

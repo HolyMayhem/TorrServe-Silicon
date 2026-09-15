@@ -67,6 +67,8 @@ extension OfflineDownloadDirectoryError: LocalizedError {
 }
 
 enum OfflineDownloadFailure: Error, Equatable, Sendable {
+    case preflight(String)
+    case diskFull
     case invalidHTTPResponse
     case contract(OfflineDownloadHTTPContractError)
     case fileSystem(String)
@@ -79,6 +81,10 @@ enum OfflineDownloadFailure: Error, Equatable, Sendable {
 extension OfflineDownloadFailure: LocalizedError {
     var errorDescription: String? {
         switch self {
+        case .preflight(let description):
+            return description
+        case .diskFull:
+            return "The disk ran out of free space while downloading the file."
         case .invalidHTTPResponse:
             return "TorrServer returned an invalid HTTP response."
         case .contract(let error):
@@ -99,6 +105,7 @@ extension OfflineDownloadFailure: LocalizedError {
 
 enum OfflineDownloadState: Equatable, Sendable {
     case idle
+    case queued(OfflineDownloadRequest)
     case preparing(OfflineDownloadRequest)
     case resuming(OfflineDownloadCheckpoint)
     case downloading(OfflineDownloadProgress)
@@ -113,7 +120,7 @@ enum OfflineDownloadState: Equatable, Sendable {
         switch self {
         case .preparing, .resuming, .downloading, .pausing, .cancelling:
             return true
-        case .idle, .paused, .completed, .cancelled, .failed:
+        case .idle, .queued, .paused, .completed, .cancelled, .failed:
             return false
         }
     }
@@ -124,7 +131,7 @@ enum OfflineDownloadState: Equatable, Sendable {
             return checkpoint
         case .failed(_, let checkpoint):
             return checkpoint
-        case .idle, .preparing, .resuming, .downloading, .pausing,
+        case .idle, .queued, .preparing, .resuming, .downloading, .pausing,
              .cancelling, .completed, .cancelled:
             return nil
         }
@@ -134,6 +141,7 @@ enum OfflineDownloadState: Equatable, Sendable {
 enum OfflineDownloadStartError: Error, Equatable, Sendable {
     case anotherDownloadIsActive
     case resumableDownloadExists
+    case alreadyQueued
     case noResumableDownload
     case invalidSourceURL
     case invalidDestinationURL
@@ -143,6 +151,7 @@ enum OfflineDownloadStartError: Error, Equatable, Sendable {
     case partialFileAlreadyExists(URL)
     case partialFileMissing(URL)
     case partialFileSizeMismatch(expected: Int64, actual: Int64)
+    case insufficientDiskSpace(required: Int64, available: Int64)
 }
 
 extension OfflineDownloadStartError: LocalizedError {
@@ -152,6 +161,8 @@ extension OfflineDownloadStartError: LocalizedError {
             return "Another offline download is already active."
         case .resumableDownloadExists:
             return "Pause, resume, or cancel the existing offline download first."
+        case .alreadyQueued:
+            return "This file is already in the offline download queue."
         case .noResumableDownload:
             return "There is no paused or interrupted download to resume."
         case .invalidSourceURL:
@@ -170,6 +181,10 @@ extension OfflineDownloadStartError: LocalizedError {
             return "The partial download is missing: \(url.path)"
         case .partialFileSizeMismatch(let expected, let actual):
             return "The partial file contains \(actual) bytes; expected \(expected)."
+        case .insufficientDiskSpace(let required, let available):
+            let formatter = ByteCountFormatter()
+            formatter.countStyle = .file
+            return "Not enough free disk space. Required: \(formatter.string(fromByteCount: required)); available: \(formatter.string(fromByteCount: available))."
         }
     }
 }

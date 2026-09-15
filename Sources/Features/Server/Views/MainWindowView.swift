@@ -11,54 +11,41 @@ struct MainWindowView: View {
         Texts(language: model.language)
     }
 
-    private var screenTitle: String {
-        model.language == .russian ? "Настройки сервера" : "Server Settings"
-    }
-
     var body: some View {
-        VStack(spacing: 0) {
-            SettingsPageHeader(
-                title: screenTitle,
-                message: model.language == .russian
-                    ? "Управляйте сервером, исполняемым файлом, хранилищем и приложениями для воспроизведения."
-                    : "Manage the server, executable, storage, and playback apps."
+        ScrollView {
+            VStack(spacing: SettingsScreenLayout.sectionSpacing) {
+                serverOverviewSection
+                storageSection
+                ServerCacheSettingsSection(model: model)
+                executableSection
+                ServerDiagnosticsSection(model: model)
+                playerSection
+            }
+            .padding(.horizontal, SettingsScreenLayout.formContentInset)
+            .padding(.top, SettingsScreenLayout.scrollContentTopPadding)
+            .padding(.bottom, 12)
+        }
+        .scrollIndicators(.hidden)
+        .background {
+            AppNativeScrollIndicatorHider()
+        }
+        .onScrollGeometryChange(for: AppScrollMetrics.self) { geometry in
+            AppScrollMetrics(geometry)
+        } action: { _, metrics in
+            scrollMetrics = metrics
+        }
+        .onScrollPhaseChange { _, phase in
+            withAnimation(.easeOut(duration: phase.isScrolling ? 0.08 : 0.24)) {
+                scrollIndicatorIsVisible = phase.isScrolling
+            }
+        }
+        .overlay {
+            AppScrollIndicator(
+                metrics: scrollMetrics,
+                topInset: 0,
+                bottomInset: 0,
+                isVisible: scrollIndicatorIsVisible
             )
-
-            ScrollView {
-                VStack(spacing: SettingsScreenLayout.sectionSpacing) {
-                    serverOverviewSection
-                    storageSection
-                    ServerCacheSettingsSection(model: model)
-                    executableSection
-                    ServerDiagnosticsSection(model: model)
-                    playerSection
-                }
-                .padding(.horizontal, SettingsScreenLayout.formContentInset)
-                .padding(.top, SettingsScreenLayout.scrollContentTopPadding)
-                .padding(.bottom, 12)
-            }
-            .scrollIndicators(.hidden)
-            .background {
-                AppNativeScrollIndicatorHider()
-            }
-            .onScrollGeometryChange(for: AppScrollMetrics.self) { geometry in
-                AppScrollMetrics(geometry)
-            } action: { _, metrics in
-                scrollMetrics = metrics
-            }
-            .onScrollPhaseChange { _, phase in
-                withAnimation(.easeOut(duration: phase.isScrolling ? 0.08 : 0.24)) {
-                    scrollIndicatorIsVisible = phase.isScrolling
-                }
-            }
-            .overlay {
-                AppScrollIndicator(
-                    metrics: scrollMetrics,
-                    topInset: 0,
-                    bottomInset: 0,
-                    isVisible: scrollIndicatorIsVisible
-                )
-            }
         }
         .frame(maxWidth: SettingsScreenLayout.contentMaxWidth)
         .padding(.horizontal, SettingsScreenLayout.horizontalPadding)
@@ -66,7 +53,6 @@ struct MainWindowView: View {
         .padding(.bottom, SettingsScreenLayout.bottomPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(SettingsVisualStyle.windowBackground)
-        .ignoresSafeArea(.container, edges: .top)
     }
 
     private var serverOverviewSection: some View {

@@ -190,7 +190,12 @@ struct TorrentDetailView: View {
                                 retryDownload: {
                                     model.retryOfflineDownload(language: language)
                                 },
-                                cancelDownload: model.cancelOfflineDownload,
+                                cancelDownload: {
+                                    model.cancelOfflineDownload(
+                                        torrent: torrent,
+                                        file: file
+                                    )
+                                },
                                 deleteDownload: {
                                     model.deleteOfflineDownload(
                                         torrent: torrent,
@@ -331,7 +336,7 @@ struct TorrentDetailView: View {
             return checkpoint.progress
         case .cancelling(let progress):
             return progress
-        case .idle, .preparing, .completed, .cancelled, .failed:
+        case .idle, .queued, .preparing, .completed, .cancelled, .failed:
             return nil
         }
     }
@@ -502,6 +507,9 @@ struct TorrentFileRow: View {
             switch offlineState {
             case .idle, .cancelled:
                 downloadButton
+            case .queued:
+                activityLabel(texts.queuedDownload)
+                cancelButton
             case .preparing:
                 activityLabel(texts.preparingDownload)
                 cancelButton
@@ -582,7 +590,7 @@ struct TorrentFileRow: View {
     private var usesCompactWatchButton: Bool {
         guard let offlineState else { return false }
         switch offlineState {
-        case .preparing, .resuming, .downloading, .pausing,
+        case .queued, .preparing, .resuming, .downloading, .pausing,
              .paused, .cancelling, .failed:
             return true
         case .idle, .completed, .cancelled:

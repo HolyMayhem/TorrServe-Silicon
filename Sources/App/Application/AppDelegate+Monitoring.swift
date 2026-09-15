@@ -83,6 +83,7 @@ extension AppDelegate {
                 menuStatus: texts.running(pid: pid)
             ))
             refreshStorage()
+            offlineDownloadManager.resumePendingDownloadsIfPossible()
             if settingsWindow?.isVisible == true,
                !mainWindowModel.hasLoadedServerSettings {
                 loadTorrServerSettings()

@@ -107,6 +107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     var isDownloading = false
     var hasRepliedToTermination = false
+    var isPreparingForTermination = false
     var currentSpeedBytesPerSecond: Double?
     var currentTorrents: [NativeTorrent] = []
     var speedHistory: [Double] = []
@@ -127,6 +128,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         appUpdateController.start()
         notificationController.synchronizeEnabledState { [weak self] enabled in
             self?.mainWindowModel.notificationsEnabled = enabled
+        }
+        offlineDownloadManager.onCompleted = { [weak self] _, destinationURL in
+            guard let self else { return }
+            self.notificationController.send(
+                title: self.currentLanguage == .russian
+                    ? "Фильм загружен"
+                    : "Offline download completed",
+                body: destinationURL.lastPathComponent
+            )
+        }
+        offlineDownloadManager.onFailed = { [weak self] request, failure in
+            guard let self else { return }
+            self.notificationController.send(
+                title: self.currentLanguage == .russian
+                    ? "Ошибка офлайн-загрузки"
+                    : "Offline download failed",
+                body: "\(request.destinationURL.lastPathComponent): \(failure.localizedDescription)"
+            )
         }
 
         processController.onStateChange = { [weak self] state in
@@ -162,18 +181,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard processController.isRunning else {
+        guard processController.isRunning || offlineDownloadManager.state.isActive else {
             return .terminateNow
         }
 
         guard !hasRepliedToTermination else {
             return .terminateLater
         }
+        guard !isPreparingForTermination else {
+            return .terminateLater
+        }
+        isPreparingForTermination = true
 
-        processController.stop { [weak self, weak sender] in
-            guard let self, !self.hasRepliedToTermination else { return }
-            self.hasRepliedToTermination = true
-            sender?.reply(toApplicationShouldTerminate: true)
+        offlineDownloadManager.prepareForInterruption { [weak self, weak sender] in
+            guard let self else { return }
+            let finishTermination = { [weak self, weak sender] in
+                guard let self, !self.hasRepliedToTermination else { return }
+                self.hasRepliedToTermination = true
+                sender?.reply(toApplicationShouldTerminate: true)
+            }
+            if self.processController.isRunning {
+                self.processController.stop(completion: finishTermination)
+            } else {
+                finishTermination()
+            }
         }
         return .terminateLater
     }

@@ -102,6 +102,7 @@ struct LibraryTexts {
         language == .russian ? "Скачать для офлайн-просмотра" : "Download for Offline Viewing"
     }
     var preparingDownload: String { language == .russian ? "Подготовка…" : "Preparing…" }
+    var queuedDownload: String { language == .russian ? "В очереди" : "Queued" }
     var pausingDownload: String { language == .russian ? "Приостановка…" : "Pausing…" }
     var cancellingDownload: String { language == .russian ? "Отмена…" : "Cancelling…" }
     var pauseDownload: String { language == .russian ? "Приостановить" : "Pause" }

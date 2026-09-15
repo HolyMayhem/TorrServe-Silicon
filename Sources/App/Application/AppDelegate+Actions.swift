@@ -159,7 +159,9 @@ extension AppDelegate {
 
                 if shouldRestartServer {
                     self.advanceTorrServerTransfer(to: .restarting, progress: 0.97)
-                    self.processController.stop(completion: finishInstallation)
+                    self.offlineDownloadManager.prepareForInterruption {
+                        self.processController.stop(completion: finishInstallation)
+                    }
                 } else {
                     finishInstallation()
                 }
@@ -285,7 +287,9 @@ extension AppDelegate {
     }
 
     @objc func stopServer(_ sender: Any?) {
-        processController.stop()
+        offlineDownloadManager.prepareForInterruption { [weak self] in
+            self?.processController.stop()
+        }
     }
 
     @objc func openWebUI(_ sender: Any?) {

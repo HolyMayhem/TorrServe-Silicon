@@ -18,11 +18,21 @@ extension LibraryViewModel {
     }
 
     func offlineDownloadFile(in torrent: NativeTorrent) -> NativeTorrentFile? {
-        guard let currentSourceURL = offlineDownloadManager.currentRequest?.sourceURL else {
-            return nil
+        if let currentSourceURL = offlineDownloadManager.currentRequest?.sourceURL,
+           let currentFile = torrent.allFiles.first(where: { file in
+               api.streamURL(torrent: torrent, file: file) == currentSourceURL
+           }) {
+            return currentFile
         }
+
         return torrent.allFiles.first { file in
-            api.streamURL(torrent: torrent, file: file) == currentSourceURL
+            guard let sourceURL = api.streamURL(torrent: torrent, file: file) else {
+                return false
+            }
+            return offlineDownloadManager.queuedRequest(
+                sourceURL: sourceURL,
+                expectedLength: file.length
+            ) != nil
         }
     }
 
@@ -55,11 +65,7 @@ extension LibraryViewModel {
     }
 
     func offlineDownloadIsUnavailable(for torrent: NativeTorrent) -> Bool {
-        if offlineDownloadFile(in: torrent) != nil {
-            return false
-        }
-        return offlineDownloadManager.state.isActive
-            || offlineDownloadManager.state.resumableCheckpoint != nil
+        offlineDownloadFile(in: torrent) != nil
     }
 
     func offlineDownloadState(
@@ -67,6 +73,13 @@ extension LibraryViewModel {
         file: NativeTorrentFile
     ) -> OfflineDownloadState? {
         if offlineDownloadMatches(torrent: torrent, file: file) {
+            if let sourceURL = api.streamURL(torrent: torrent, file: file),
+               let queuedRequest = offlineDownloadManager.queuedRequest(
+                sourceURL: sourceURL,
+                expectedLength: file.length
+               ) {
+                return .queued(queuedRequest)
+            }
             if case .completed = offlineDownloadManager.state {
                 guard let sourceURL = api.streamURL(torrent: torrent, file: file),
                       let destinationURL = offlineDownloadManager.completedDestination(
@@ -93,11 +106,7 @@ extension LibraryViewModel {
         torrent: NativeTorrent,
         file: NativeTorrentFile
     ) -> Bool {
-        guard !offlineDownloadMatches(torrent: torrent, file: file) else {
-            return false
-        }
-        return offlineDownloadManager.state.isActive
-            || offlineDownloadManager.state.resumableCheckpoint != nil
+        offlineDownloadMatches(torrent: torrent, file: file)
     }
 
     func downloadOffline(
@@ -141,7 +150,7 @@ extension LibraryViewModel {
         }
 
         do {
-            try offlineDownloadManager.start(OfflineDownloadRequest(
+            try offlineDownloadManager.enqueue(OfflineDownloadRequest(
                 sourceURL: sourceURL,
                 destinationURL: destinationURL,
                 expectedLength: file.length
@@ -185,6 +194,19 @@ extension LibraryViewModel {
 
     func cancelOfflineDownload() {
         offlineDownloadManager.cancel()
+    }
+
+    func cancelOfflineDownload(
+        torrent: NativeTorrent,
+        file: NativeTorrentFile
+    ) {
+        guard let sourceURL = api.streamURL(torrent: torrent, file: file) else {
+            return
+        }
+        offlineDownloadManager.cancel(
+            sourceURL: sourceURL,
+            expectedLength: file.length
+        )
     }
 
     func revealOfflineDownload() {
@@ -234,11 +256,13 @@ extension LibraryViewModel {
         torrent: NativeTorrent,
         file: NativeTorrentFile
     ) -> Bool {
-        guard let currentSourceURL = offlineDownloadManager.currentRequest?.sourceURL,
-              let sourceURL = api.streamURL(torrent: torrent, file: file) else {
+        guard let sourceURL = api.streamURL(torrent: torrent, file: file) else {
             return false
         }
-        return currentSourceURL == sourceURL
+        return offlineDownloadManager.containsRequest(
+            sourceURL: sourceURL,
+            expectedLength: file.length
+        )
     }
 
     private func showOfflineDownloadError(

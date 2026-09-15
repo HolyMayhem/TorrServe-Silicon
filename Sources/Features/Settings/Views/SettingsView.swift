@@ -7,81 +7,44 @@ struct SettingsView: View {
     let category: SettingsCategory
     @State private var scrollMetrics = AppScrollMetrics.zero
     @State private var scrollIndicatorIsVisible = false
-    @State private var offlineDownloadFolderError: String?
+    @State private var offlineDownloadError: String?
+    @State private var offlineDownloadErrorTitle: String?
+    @State private var pendingOfflineDownloadDeletion: OfflineDownloadRecord?
 
     private let pickerColumnWidth: CGFloat = 220
 
     private var texts: Texts { Texts(language: model.language) }
 
-    private var screenTitle: String {
-        category.title(language: model.language)
-    }
-
-    private var screenMessage: String {
-        switch category {
-        case .general:
-            return model.language == .russian
-                ? "Настройте запуск приложения, уведомления и его поведение в macOS."
-                : "Configure app startup, notifications, and macOS behavior."
-        case .interface:
-            return model.language == .russian
-                ? "Выберите язык приложения и настройте поиск через Jackett."
-                : "Choose the app language and configure search through Jackett."
-        case .menuBar:
-            return model.language == .russian
-                ? "Настройте значок, скорость и содержимое меню TorrServe."
-                : "Configure the TorrServe menu icon, speed, and content."
-        case .updates:
-            return model.language == .russian
-                ? "Управляйте обновлениями приложения TorrServe Silicon."
-                : "Manage updates for the TorrServe Silicon application."
-        case .downloads:
-            return model.language == .russian
-                ? "Выберите папку для сохранения офлайн-загрузок."
-                : "Choose where offline downloads are stored."
-        case .metadata:
-            return model.language == .russian
-                ? "Выберите источники постеров и описаний и настройте ключи API."
-                : "Choose poster and description providers and configure API keys."
-        case .server:
-            return ""
-        }
-    }
-
     var body: some View {
-        VStack(spacing: 0) {
-            SettingsPageHeader(title: screenTitle, message: screenMessage)
-
-            ScrollView {
-                VStack(spacing: SettingsScreenLayout.sectionSpacing) {
-                    categorySections
-                }
-                .padding(.horizontal, SettingsScreenLayout.formContentInset)
-                .padding(.top, SettingsScreenLayout.scrollContentTopPadding)
-                .padding(.bottom, 12)
+        ScrollView {
+            VStack(spacing: SettingsScreenLayout.sectionSpacing) {
+                categorySections
             }
-            .scrollIndicators(.hidden)
-            .background {
-                AppNativeScrollIndicatorHider()
+            .padding(.horizontal, SettingsScreenLayout.formContentInset)
+            .padding(.top, SettingsScreenLayout.scrollContentTopPadding)
+            .padding(.bottom, 12)
+        }
+        .scrollIndicators(.hidden)
+        .background {
+            AppNativeScrollIndicatorHider()
+        }
+        .onScrollGeometryChange(for: AppScrollMetrics.self) { geometry in
+            AppScrollMetrics(geometry)
+        } action: { _, metrics in
+            scrollMetrics = metrics
+        }
+        .onScrollPhaseChange { _, phase in
+            withAnimation(.easeOut(duration: phase.isScrolling ? 0.08 : 0.24)) {
+                scrollIndicatorIsVisible = phase.isScrolling
             }
-            .onScrollGeometryChange(for: AppScrollMetrics.self) { geometry in
-                AppScrollMetrics(geometry)
-            } action: { _, metrics in
-                scrollMetrics = metrics
-            }
-            .onScrollPhaseChange { _, phase in
-                withAnimation(.easeOut(duration: phase.isScrolling ? 0.08 : 0.24)) {
-                    scrollIndicatorIsVisible = phase.isScrolling
-                }
-            }
-            .overlay {
-                AppScrollIndicator(
-                    metrics: scrollMetrics,
-                    topInset: 0,
-                    bottomInset: 0,
-                    isVisible: scrollIndicatorIsVisible
-                )
-            }
+        }
+        .overlay {
+            AppScrollIndicator(
+                metrics: scrollMetrics,
+                topInset: 0,
+                bottomInset: 0,
+                isVisible: scrollIndicatorIsVisible
+            )
         }
         .frame(maxWidth: SettingsScreenLayout.contentMaxWidth)
         .padding(.horizontal, SettingsScreenLayout.horizontalPadding)
@@ -89,23 +52,52 @@ struct SettingsView: View {
         .padding(.bottom, SettingsScreenLayout.bottomPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(SettingsVisualStyle.windowBackground)
-        .ignoresSafeArea(.container, edges: .top)
+        .onAppear {
+            if category == .downloads {
+                offlineDownloadManager.refreshCompletedDownloads()
+            }
+        }
         .alert(
-            model.language == .russian
-                ? "Не удалось выбрать папку"
-                : "Could Not Select Folder",
+            offlineDownloadErrorTitle
+                ?? (model.language == .russian ? "Ошибка" : "Error"),
             isPresented: Binding(
-                get: { offlineDownloadFolderError != nil },
+                get: { offlineDownloadError != nil },
                 set: { isPresented in
                     if !isPresented {
-                        offlineDownloadFolderError = nil
+                        offlineDownloadError = nil
+                        offlineDownloadErrorTitle = nil
                     }
                 }
             )
         ) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text(offlineDownloadFolderError ?? "")
+            Text(offlineDownloadError ?? "")
+        }
+        .confirmationDialog(
+            model.language == .russian
+                ? "Удалить загруженный фильм?"
+                : "Delete downloaded movie?",
+            isPresented: Binding(
+                get: { pendingOfflineDownloadDeletion != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        pendingOfflineDownloadDeletion = nil
+                    }
+                }
+            )
+        ) {
+            Button(
+                model.language == .russian ? "Удалить" : "Delete",
+                role: .destructive
+            ) {
+                deletePendingOfflineDownload()
+            }
+            Button(model.language == .russian ? "Отмена" : "Cancel", role: .cancel) {
+                pendingOfflineDownloadDeletion = nil
+            }
+        } message: {
+            Text(pendingOfflineDownloadDeletion?.destinationURL.lastPathComponent ?? "")
         }
     }
 
@@ -241,6 +233,7 @@ struct SettingsView: View {
         }
     }
 
+    @ViewBuilder
     private var offlineDownloadsSection: some View {
         settingsSection(
             title: model.language == .russian
@@ -267,6 +260,114 @@ struct SettingsView: View {
                 }
             }
         }
+
+        settingsSection(
+            title: model.language == .russian
+                ? "Загруженные фильмы"
+                : "Downloaded Movies",
+            footer: completedOfflineDownloadsFooter
+        ) {
+            if completedOfflineDownloads.isEmpty {
+                HStack(spacing: 10) {
+                    Image(systemName: "film")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(.secondary)
+
+                    Text(model.language == .russian
+                        ? "Загруженных фильмов пока нет"
+                        : "No downloaded movies yet")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+
+                    Spacer()
+                }
+                .frame(minHeight: 52)
+            } else {
+                ForEach(completedOfflineDownloads, id: \.destinationURL) { record in
+                    completedOfflineDownloadRow(record)
+
+                    if record.destinationURL
+                        != completedOfflineDownloads.last?.destinationURL {
+                        Divider()
+                    }
+                }
+            }
+        }
+    }
+
+    private var completedOfflineDownloads: [OfflineDownloadRecord] {
+        offlineDownloadManager.completedDownloads.sorted {
+            $0.completedAt > $1.completedAt
+        }
+    }
+
+    private var completedOfflineDownloadsFooter: String {
+        guard !completedOfflineDownloads.isEmpty else {
+            return model.language == .russian
+                ? "Завершённые офлайн-загрузки появятся здесь."
+                : "Completed offline downloads will appear here."
+        }
+
+        let totalSize = completedOfflineDownloads.reduce(Int64(0)) {
+            $0 + $1.expectedLength
+        }
+        let size = ByteCountFormatter.string(
+            fromByteCount: totalSize,
+            countStyle: .file
+        )
+        return model.language == .russian
+            ? "Всего файлов: \(completedOfflineDownloads.count) · \(size)"
+            : "Total files: \(completedOfflineDownloads.count) · \(size)"
+    }
+
+    private func completedOfflineDownloadRow(
+        _ record: OfflineDownloadRecord
+    ) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "film.fill")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(.blue)
+                .frame(width: 22)
+
+            Text(record.destinationURL.lastPathComponent)
+                .font(.callout.weight(.medium))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .help(record.destinationURL.path)
+
+            Spacer(minLength: 12)
+
+            Text(ByteCountFormatter.string(
+                fromByteCount: record.expectedLength,
+                countStyle: .file
+            ))
+            .font(.caption.monospacedDigit())
+            .foregroundStyle(.secondary)
+            .fixedSize()
+
+            Button {
+                playOfflineDownload(record)
+            } label: {
+                Label(
+                    model.language == .russian ? "Смотреть" : "Watch",
+                    systemImage: "play.fill"
+                )
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+
+            Button(role: .destructive) {
+                pendingOfflineDownloadDeletion = record
+            } label: {
+                Label(
+                    model.language == .russian ? "Удалить" : "Delete",
+                    systemImage: "trash"
+                )
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+        .frame(minHeight: 48)
     }
 
     private var offlineDownloadFolderPath: String {
@@ -290,7 +391,44 @@ struct SettingsView: View {
         do {
             try offlineDownloadManager.setDownloadDirectory(directoryURL)
         } catch {
-            offlineDownloadFolderError = error.localizedDescription
+            offlineDownloadErrorTitle = model.language == .russian
+                ? "Не удалось выбрать папку"
+                : "Could Not Select Folder"
+            offlineDownloadError = error.localizedDescription
+        }
+    }
+
+    private func playOfflineDownload(_ record: OfflineDownloadRecord) {
+        do {
+            try ExternalPlayerLauncher.open(
+                record.destinationURL,
+                using: model.preferredPlayer,
+                customPlayerPath: UserDefaults.standard.string(
+                    forKey: libraryCustomPlayerPathKey
+                ) ?? ""
+            )
+        } catch {
+            offlineDownloadErrorTitle = model.language == .russian
+                ? "Не удалось открыть фильм"
+                : "Could Not Open Movie"
+            offlineDownloadError = error.localizedDescription
+        }
+    }
+
+    private func deletePendingOfflineDownload() {
+        guard let record = pendingOfflineDownloadDeletion else { return }
+        pendingOfflineDownloadDeletion = nil
+
+        do {
+            try offlineDownloadManager.moveCompletedDownloadToTrash(
+                sourceURL: record.sourceURL,
+                expectedLength: record.expectedLength
+            )
+        } catch {
+            offlineDownloadErrorTitle = model.language == .russian
+                ? "Не удалось удалить фильм"
+                : "Could Not Delete Movie"
+            offlineDownloadError = error.localizedDescription
         }
     }
 

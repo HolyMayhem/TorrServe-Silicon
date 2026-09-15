@@ -232,30 +232,38 @@ struct TorrentContextMenu: View {
 
     @ViewBuilder
     private var offlineDownloadActions: some View {
-        if model.offlineDownloadFile(in: torrent) != nil {
-            switch offlineDownloadManager.state {
+        if let offlineFile = model.offlineDownloadFile(in: torrent),
+           let offlineState = model.offlineDownloadState(
+            torrent: torrent,
+            file: offlineFile
+           ) {
+            switch offlineState {
+            case .queued:
+                Button(texts.queuedDownload) {}
+                    .disabled(true)
+                cancelOfflineDownloadButton(for: offlineFile)
             case .preparing, .resuming:
                 Button(texts.preparingDownload) {}
                     .disabled(true)
-                cancelOfflineDownloadButton
+                cancelOfflineDownloadButton(for: offlineFile)
             case .downloading:
                 Button {
                     model.pauseOfflineDownload()
                 } label: {
                     Label(texts.pauseDownload, systemImage: "pause.fill")
                 }
-                cancelOfflineDownloadButton
+                cancelOfflineDownloadButton(for: offlineFile)
             case .pausing:
                 Button(texts.pausingDownload) {}
                     .disabled(true)
-                cancelOfflineDownloadButton
+                cancelOfflineDownloadButton(for: offlineFile)
             case .paused:
                 Button {
                     model.resumeOfflineDownload(language: language)
                 } label: {
                     Label(texts.resumeDownload, systemImage: "play.fill")
                 }
-                cancelOfflineDownloadButton
+                cancelOfflineDownloadButton(for: offlineFile)
             case .cancelling:
                 Button(texts.cancellingDownload) {}
                     .disabled(true)
@@ -279,7 +287,7 @@ struct TorrentContextMenu: View {
                     } label: {
                         Label(texts.resumeDownload, systemImage: "play.fill")
                     }
-                    cancelOfflineDownloadButton
+                    cancelOfflineDownloadButton(for: offlineFile)
                 } else {
                     Button {
                         model.retryOfflineDownload(language: language)
@@ -319,9 +327,11 @@ struct TorrentContextMenu: View {
         )
     }
 
-    private var cancelOfflineDownloadButton: some View {
+    private func cancelOfflineDownloadButton(
+        for file: NativeTorrentFile
+    ) -> some View {
         Button(role: .destructive) {
-            model.cancelOfflineDownload()
+            model.cancelOfflineDownload(torrent: torrent, file: file)
         } label: {
             Label(texts.cancelDownload, systemImage: "xmark")
         }
