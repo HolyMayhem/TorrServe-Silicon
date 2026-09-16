@@ -206,6 +206,14 @@ struct Texts {
             ? "Сервер готов к работе на порту 8090."
             : "The server is ready on port 8090."
     }
+    var serverStoppedNotificationTitle: String {
+        language == .russian ? "TorrServer остановлен" : "TorrServer stopped"
+    }
+    var serverStoppedNotificationMessage: String {
+        language == .russian
+            ? "Сервер завершил работу."
+            : "The server has stopped."
+    }
     var updateInstalledNotificationTitle: String {
         language == .russian ? "Обновление установлено" : "Update installed"
     }

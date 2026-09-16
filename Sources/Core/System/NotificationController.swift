@@ -113,16 +113,24 @@ final class NotificationController: NSObject,
         }
     }
 
-    func send(title: String, body: String) {
+    func setPreferences(_ preferences: AppNotificationPreferences) {
+        preferences.save()
+    }
+
+    func send(event: AppNotificationEvent, title: String, body: String) {
         guard UserDefaults.standard.bool(forKey: notificationsEnabledKey) else {
             return
         }
+        let preferences = AppNotificationPreferences.load()
+        guard preferences[event] else { return }
 
         if usesLegacyDelivery {
             let notification = NSUserNotification()
             notification.title = title
             notification.informativeText = body
-            notification.soundName = NSUserNotificationDefaultSoundName
+            if preferences.playsSound {
+                notification.soundName = NSUserNotificationDefaultSoundName
+            }
             NSUserNotificationCenter.default.deliver(notification)
             return
         }
@@ -135,7 +143,7 @@ final class NotificationController: NSObject,
                 let content = UNMutableNotificationContent()
                 content.title = title
                 content.body = body
-                content.sound = .default
+                content.sound = preferences.playsSound ? .default : nil
 
                 try? await center.add(
                     UNNotificationRequest(

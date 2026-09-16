@@ -46,6 +46,7 @@ extension AppDelegate {
                     message: self.texts.downloadDoneMessage
                 )
                 self.notificationController.send(
+                    event: .torrServerUpdated,
                     title: self.texts.updateInstalledNotificationTitle,
                     body: self.texts.downloadDoneMessage
                 )
@@ -57,6 +58,7 @@ extension AppDelegate {
                     message: error.localizedDescription
                 )
                 self.notificationController.send(
+                    event: .criticalError,
                     title: self.texts.errorNotificationTitle,
                     body: error.localizedDescription
                 )
@@ -172,6 +174,7 @@ extension AppDelegate {
                 self.mainWindowModel.torrServerUpdate = update
                 self.updateUI(for: self.processController.state)
                 self.notificationController.send(
+                    event: .criticalError,
                     title: self.texts.errorNotificationTitle,
                     body: error.localizedDescription
                 )
@@ -204,6 +207,7 @@ extension AppDelegate {
 
         scheduleTorrServerUpdateCheck(clearingCurrentResult: true)
         notificationController.send(
+            event: .torrServerUpdated,
             title: texts.updateInstalledNotificationTitle,
             body: texts.downloadDoneMessage
         )
@@ -437,6 +441,11 @@ extension AppDelegate {
                 self.openNotificationSettings()
             }
         }
+    }
+
+    func setNotificationPreferences(_ preferences: AppNotificationPreferences) {
+        notificationController.setPreferences(preferences)
+        mainWindowModel.notificationPreferences = preferences
     }
 
     func openNotificationSettings() {
@@ -712,6 +721,7 @@ extension AppDelegate {
     }
 
     func registerDefaultSettings() {
+        AppNotificationPreferences.registerDefaults()
         UserDefaults.standard.register(defaults: [
             showSpeedInMenuBarKey: true,
             hideDockIconKey: false,

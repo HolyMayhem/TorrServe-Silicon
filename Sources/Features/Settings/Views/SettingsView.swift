@@ -106,6 +106,7 @@ struct SettingsView: View {
         switch category {
         case .general:
             applicationSection
+            notificationsSection
         case .interface:
             interfaceSection
         case .menuBar:
@@ -150,13 +151,57 @@ struct SettingsView: View {
                 callback: model.onHideDockIconChanged
             )
             .disabled(!model.menuBarPreferences.isIconVisible)
-            Divider()
-            toggleRow(
-                texts.notifications,
-                keyPath: \.notificationsEnabled,
-                callback: model.onNotificationsChanged
+        }
+    }
+
+    private var notificationsSection: some View {
+        settingsSection(
+            title: model.language == .russian ? "Уведомления" : "Notifications",
+            footer: model.language == .russian
+                ? "Для показа уведомлений приложению также требуется разрешение macOS."
+                : "The app also needs permission from macOS to display notifications."
+        ) {
+            notificationPreferenceRow(
+                systemImage: "bell.fill",
+                title: model.language == .russian
+                    ? "Включить уведомления"
+                    : "Enable notifications",
+                detail: model.language == .russian
+                    ? "Разрешить TorrServe Silicon сообщать о важных событиях."
+                    : "Allow TorrServe Silicon to report important events.",
+                isOn: setting(
+                    \.notificationsEnabled,
+                    callback: model.onNotificationsChanged
+                )
             )
             .disabled(model.notificationsAuthorizationPending)
+
+            Divider()
+
+            notificationPreferenceRow(
+                systemImage: "speaker.wave.2.fill",
+                title: model.language == .russian
+                    ? "Звук уведомлений"
+                    : "Notification sound",
+                detail: model.language == .russian
+                    ? "Воспроизводить системный звук вместе с уведомлением."
+                    : "Play the system sound when a notification arrives.",
+                isOn: notificationSoundBinding
+            )
+            .disabled(notificationDetailsDisabled)
+            .opacity(notificationDetailsDisabled ? 0.55 : 1)
+
+            ForEach(AppNotificationEvent.allCases) { event in
+                Divider()
+                notificationPreferenceRow(
+                    systemImage: notificationEventIcon(event),
+                    title: notificationEventTitle(event),
+                    detail: notificationEventDetail(event),
+                    isOn: notificationEventBinding(event)
+                )
+                .disabled(notificationDetailsDisabled)
+                .opacity(notificationDetailsDisabled ? 0.55 : 1)
+            }
         }
     }
 
@@ -739,6 +784,141 @@ struct SettingsView: View {
             Toggle("", isOn: setting(keyPath, callback: callback))
                 .labelsHidden()
                 .toggleStyle(.switch)
+        }
+    }
+
+    private var notificationDetailsDisabled: Bool {
+        !model.notificationsEnabled || model.notificationsAuthorizationPending
+    }
+
+    private var notificationSoundBinding: Binding<Bool> {
+        Binding(
+            get: { model.notificationPreferences.playsSound },
+            set: { value in
+                var preferences = model.notificationPreferences
+                preferences.playsSound = value
+                commitNotificationPreferences(preferences)
+            }
+        )
+    }
+
+    private func notificationEventBinding(_ event: AppNotificationEvent) -> Binding<Bool> {
+        Binding(
+            get: { model.notificationPreferences[event] },
+            set: { value in
+                var preferences = model.notificationPreferences
+                preferences[event] = value
+                commitNotificationPreferences(preferences)
+            }
+        )
+    }
+
+    private func commitNotificationPreferences(_ preferences: AppNotificationPreferences) {
+        model.notificationPreferences = preferences
+        model.onNotificationPreferencesChanged?(preferences)
+    }
+
+    private func notificationPreferenceRow(
+        systemImage: String,
+        title: String,
+        detail: String,
+        isOn: Binding<Bool>
+    ) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 24)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 20)
+
+            Toggle("", isOn: isOn)
+                .labelsHidden()
+                .toggleStyle(.switch)
+        }
+        .frame(minHeight: 54)
+    }
+
+    private func notificationEventIcon(_ event: AppNotificationEvent) -> String {
+        switch event {
+        case .offlineDownloadCompleted:
+            return "arrow.down.circle.fill"
+        case .offlineDownloadFailed:
+            return "exclamationmark.arrow.circlepath"
+        case .serverStarted:
+            return "play.circle.fill"
+        case .serverStopped:
+            return "stop.circle.fill"
+        case .criticalError:
+            return "exclamationmark.triangle.fill"
+        case .torrServerUpdated:
+            return "arrow.triangle.2.circlepath.circle.fill"
+        }
+    }
+
+    private func notificationEventTitle(_ event: AppNotificationEvent) -> String {
+        switch event {
+        case .offlineDownloadCompleted:
+            return model.language == .russian
+                ? "Фильм загружен"
+                : "Movie downloaded"
+        case .offlineDownloadFailed:
+            return model.language == .russian
+                ? "Ошибка загрузки фильма"
+                : "Movie download failed"
+        case .serverStarted:
+            return model.language == .russian
+                ? "TorrServer запущен"
+                : "TorrServer started"
+        case .serverStopped:
+            return model.language == .russian
+                ? "TorrServer остановлен"
+                : "TorrServer stopped"
+        case .criticalError:
+            return model.language == .russian
+                ? "Критические ошибки"
+                : "Critical errors"
+        case .torrServerUpdated:
+            return model.language == .russian
+                ? "TorrServer обновлён"
+                : "TorrServer updated"
+        }
+    }
+
+    private func notificationEventDetail(_ event: AppNotificationEvent) -> String {
+        switch event {
+        case .offlineDownloadCompleted:
+            return model.language == .russian
+                ? "Сообщать об окончании офлайн-загрузки."
+                : "Notify when an offline download finishes."
+        case .offlineDownloadFailed:
+            return model.language == .russian
+                ? "Сообщать, если офлайн-загрузку не удалось завершить."
+                : "Notify when an offline download cannot be completed."
+        case .serverStarted:
+            return model.language == .russian
+                ? "Сообщать, когда сервер готов к работе."
+                : "Notify when the server is ready."
+        case .serverStopped:
+            return model.language == .russian
+                ? "Сообщать о штатной остановке сервера."
+                : "Notify when the server stops normally."
+        case .criticalError:
+            return model.language == .russian
+                ? "Ошибки запуска сервера и установки обновлений."
+                : "Server launch and update installation failures."
+        case .torrServerUpdated:
+            return model.language == .russian
+                ? "Сообщать после установки или обновления движка."
+                : "Notify after the engine is installed or updated."
         }
     }
 

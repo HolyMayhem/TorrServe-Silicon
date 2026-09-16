@@ -39,6 +39,7 @@ func migrateLegacyPreferencesIfNeeded() {
             MenuBarPreferencesStore.Key.expandQRCode,
             MenuBarPreferencesStore.Key.sectionOrder,
             hideDockIconKey,
+            notificationsEnabledKey,
             languageKey,
             speedDisplayUnitKey,
             jackettSearchEnabledKey,
@@ -129,9 +130,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         notificationController.synchronizeEnabledState { [weak self] enabled in
             self?.mainWindowModel.notificationsEnabled = enabled
         }
+        mainWindowModel.notificationPreferences = AppNotificationPreferences.load()
         offlineDownloadManager.onCompleted = { [weak self] _, destinationURL in
             guard let self else { return }
             self.notificationController.send(
+                event: .offlineDownloadCompleted,
                 title: self.currentLanguage == .russian
                     ? "Фильм загружен"
                     : "Offline download completed",
@@ -141,6 +144,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         offlineDownloadManager.onFailed = { [weak self] request, failure in
             guard let self else { return }
             self.notificationController.send(
+                event: .offlineDownloadFailed,
                 title: self.currentLanguage == .russian
                     ? "Ошибка офлайн-загрузки"
                     : "Offline download failed",

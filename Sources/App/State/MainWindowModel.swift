@@ -128,6 +128,7 @@ final class MainWindowModel: ObservableObject {
     @Published var hideDockIcon = false
     @Published var notificationsEnabled = false
     @Published var notificationsAuthorizationPending = false
+    @Published var notificationPreferences = AppNotificationPreferences.defaults
     @Published var jackettEnabled = true
     @Published var metadataSource = MetadataSourceMode.tmdb
     @Published var aniListEnabled = true
@@ -187,6 +188,7 @@ final class MainWindowModel: ObservableObject {
     var onMenuBarPreferencesChanged: ((MenuBarPreferences) -> Void)?
     var onHideDockIconChanged: ((Bool) -> Void)?
     var onNotificationsChanged: ((Bool) -> Void)?
+    var onNotificationPreferencesChanged: ((AppNotificationPreferences) -> Void)?
     var onJackettEnabledChanged: ((Bool) -> Void)?
     var onMetadataSourceChanged: ((MetadataSourceMode) -> Void)?
     var onAniListEnabledChanged: ((Bool) -> Void)?

@@ -73,6 +73,9 @@ extension AppDelegate {
         mainWindowModel.onNotificationsChanged = { [weak self] enabled in
             self?.setNotificationsEnabled(enabled)
         }
+        mainWindowModel.onNotificationPreferencesChanged = { [weak self] preferences in
+            self?.setNotificationPreferences(preferences)
+        }
         mainWindowModel.onJackettEnabledChanged = { [weak self] enabled in
             self?.setJackettEnabled(enabled)
         }

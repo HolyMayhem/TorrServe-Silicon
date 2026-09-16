@@ -197,6 +197,7 @@ extension AppDelegate {
             guard !hasAnnouncedRunningState else { return }
             hasAnnouncedRunningState = true
             notificationController.send(
+                event: .serverStarted,
                 title: texts.serverStartedNotificationTitle,
                 body: texts.serverStartedNotificationMessage
             )
@@ -204,11 +205,19 @@ extension AppDelegate {
         case .failed(let message):
             hasAnnouncedRunningState = false
             notificationController.send(
+                event: .criticalError,
                 title: texts.errorNotificationTitle,
                 body: message
             )
 
         case .stopped:
+            if hasAnnouncedRunningState {
+                notificationController.send(
+                    event: .serverStopped,
+                    title: texts.serverStoppedNotificationTitle,
+                    body: texts.serverStoppedNotificationMessage
+                )
+            }
             hasAnnouncedRunningState = false
 
         case .stopping:
@@ -237,6 +246,7 @@ extension AppDelegate {
                 forKey: notificationsEnabledKey
             )
         }
+        mainWindowModel.notificationPreferences = AppNotificationPreferences.load()
         mainWindowModel.jackettEnabled = UserDefaults.standard.bool(
             forKey: jackettSearchEnabledKey
         )
