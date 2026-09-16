@@ -22,6 +22,19 @@ enum AppSection: String, CaseIterable, Identifiable {
         }
     }
 
+    func message(language: AppLanguage) -> String {
+        switch self {
+        case .library:
+            return language == .russian
+                ? "Управляйте библиотекой, воспроизведением и офлайн-загрузками."
+                : "Manage your library, playback, and offline downloads."
+        case .search:
+            return language == .russian
+                ? "Находите фильмы и сериалы через Jackett и добавляйте их в библиотеку."
+                : "Find movies and series through Jackett and add them to your library."
+        }
+    }
+
     var systemImage: String {
         switch self {
         case .library: return "film.stack"

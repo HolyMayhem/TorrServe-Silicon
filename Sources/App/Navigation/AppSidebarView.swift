@@ -5,7 +5,6 @@ struct AppSidebarView: View {
     @ObservedObject var mainModel: MainWindowModel
     @ObservedObject var libraryModel: LibraryViewModel
     @Binding var selection: AppSection?
-    let isCompact: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var primarySections: [AppSection] {
@@ -15,15 +14,7 @@ struct AppSidebarView: View {
     }
 
     var body: some View {
-        Group {
-            if isCompact {
-                compactSidebar
-                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
-            } else {
-                expandedSidebar
-                    .transition(.opacity)
-            }
-        }
+        expandedSidebar
         .backgroundPreferenceValue(SidebarSelectionBounds.self) { bounds in
             GeometryReader { geometry in
                 if let selection, let anchor = bounds[selection] {
@@ -41,7 +32,6 @@ struct AppSidebarView: View {
             .accessibilityHidden(true)
         }
         .background(.thinMaterial)
-        .animation(.easeInOut(duration: 0.16), value: isCompact)
         .onMoveCommand { direction in
             let sections = primarySections
             guard let selection, let index = sections.firstIndex(of: selection) else { return }
@@ -117,60 +107,6 @@ struct AppSidebarView: View {
         .accessibilityAddTraits(selection == section ? .isSelected : [])
     }
 
-    private var compactSidebar: some View {
-        VStack(spacing: 0) {
-            Color.clear
-                .frame(height: 66)
-                .accessibilityHidden(true)
-
-            VStack(spacing: 9) {
-                ForEach(primarySections) { section in
-                    CompactSidebarButton(
-                        section: section,
-                        language: mainModel.language,
-                        isSelected: selection == section
-                    ) {
-                        selection = section
-                    }
-                }
-
-                Divider()
-                    .frame(width: 34)
-                    .padding(.vertical, 7)
-            }
-
-            Spacer(minLength: 12)
-
-            if let update = mainModel.torrServerUpdate {
-                Button {
-                    mainModel.onOpenSettings?(.server)
-                } label: {
-                    Image(systemName: "arrow.down.circle.fill")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(.orange)
-                        .frame(width: 36, height: 36)
-                        .background(Color.orange.opacity(0.12), in: Circle())
-                }
-                .buttonStyle(.plain)
-                .help(mainModel.language == .russian
-                    ? "Доступна новая версия \(update.latestVersion)"
-                    : "New version available: \(update.latestVersion)")
-                .accessibilityLabel(mainModel.language == .russian
-                    ? "Доступна новая версия \(update.latestVersion)"
-                    : "New version available: \(update.latestVersion)")
-                .padding(.bottom, 8)
-            }
-
-            compactSettingsButton
-                .padding(.bottom, 10)
-
-            Divider()
-
-            CompactServerStatusView(mainModel: mainModel)
-                .padding(.vertical, 14)
-        }
-    }
-
     private var expandedSettingsButton: some View {
         Button {
             mainModel.onOpenSettings?(.general)
@@ -191,22 +127,6 @@ struct AppSidebarView: View {
         .help(mainModel.language == .russian ? "Открыть настройки" : "Open Settings")
     }
 
-    private var compactSettingsButton: some View {
-        Button {
-            mainModel.onOpenSettings?(.general)
-        } label: {
-            Image(systemName: "gearshape")
-                .font(.system(size: 18, weight: .medium))
-                .symbolRenderingMode(.hierarchical)
-                .frame(width: 42, height: 42)
-                .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .liquidGlassControl()
-        .buttonBorderShape(.circle)
-        .help(mainModel.language == .russian ? "Открыть настройки" : "Open Settings")
-        .accessibilityLabel(mainModel.language == .russian ? "Настройки" : "Settings")
-    }
 }
 
 private struct SidebarUpdateNotice: View {
@@ -243,82 +163,6 @@ private struct SidebarUpdateNotice: View {
         .help(language == .russian
             ? "Установлена \(update.installedVersion), доступна \(update.latestVersion)"
             : "Installed \(update.installedVersion), available \(update.latestVersion)")
-    }
-}
-
-private struct CompactSidebarButton: View {
-    let section: AppSection
-    let language: AppLanguage
-    let isSelected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: section.systemImage)
-                .font(.system(size: 20, weight: .medium))
-                .symbolRenderingMode(.hierarchical)
-                .frame(width: 48, height: 48)
-                .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
-                .contentShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .anchorPreference(key: SidebarSelectionBounds.self, value: .bounds) {
-            [section: $0]
-        }
-        .help(section.sidebarTitle(language: language))
-        .accessibilityLabel(section.sidebarTitle(language: language))
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
-    }
-}
-
-private struct CompactServerStatusView: View {
-    @ObservedObject var mainModel: MainWindowModel
-
-    private var texts: Texts { Texts(language: mainModel.language) }
-
-    var body: some View {
-        Button {
-            mainModel.canStop ? mainModel.onStop?() : mainModel.onStart?()
-        } label: {
-            ZStack {
-                Circle()
-                    .fill(mainModel.effectiveStatusKind.color.opacity(0.12))
-                Circle()
-                    .stroke(mainModel.effectiveStatusKind.color.opacity(0.42), lineWidth: 1)
-
-                if let activity = mainModel.torrServerUpdateActivity {
-                    if activity.stage == .completed {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(.green)
-                    } else {
-                        ProgressView(value: activity.clampedProgress)
-                            .progressViewStyle(.circular)
-                            .controlSize(.mini)
-                            .tint(.blue)
-                    }
-                } else if mainModel.statusKind == .working {
-                    ProgressView()
-                        .controlSize(.mini)
-                } else {
-                    Image(systemName: mainModel.canStop ? "stop.fill" : "play.fill")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(mainModel.effectiveStatusKind.color)
-                }
-            }
-            .frame(width: 42, height: 42)
-        }
-        .buttonStyle(.plain)
-        .disabled(
-            mainModel.torrServerUpdateActivity != nil
-                || !(mainModel.canStart || mainModel.canStop)
-        )
-        .help(
-            mainModel.torrServerUpdateActivity?.detail(language: mainModel.language)
-                ?? mainModel.serverConnectionIssue
-                ?? (mainModel.canStop ? texts.stop : texts.start)
-        )
-        .accessibilityLabel(mainModel.canStop ? texts.stop : texts.start)
     }
 }
 

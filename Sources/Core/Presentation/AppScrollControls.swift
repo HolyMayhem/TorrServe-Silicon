@@ -104,16 +104,32 @@ struct AppNativeScrollIndicatorHider: NSViewRepresentable {
     static func removeReservedVerticalScrollerSpace(from scrollView: NSScrollView) {
         // With the macOS legacy scroller style, AppKit reserves a full-width
         // trailing gutter before SwiftUI hides the native indicator. Switching
-        // to overlay first guarantees that no content width is consumed even
-        // if SwiftUI briefly recreates the scroller during layout.
-        scrollView.scrollerStyle = .overlay
-        scrollView.autohidesScrollers = true
-        scrollView.hasVerticalScroller = false
-        scrollView.verticalScroller?.removeFromSuperview()
-        scrollView.verticalScroller = nil
+        // to overlay first guarantees that no content width is consumed. Keep
+        // this operation idempotent because SwiftUI may restore the native
+        // scroller after replacing or relaying out its internal NSScrollView.
+        var needsRetile = false
+
+        if scrollView.scrollerStyle != .overlay {
+            scrollView.scrollerStyle = .overlay
+            needsRetile = true
+        }
+        if !scrollView.autohidesScrollers {
+            scrollView.autohidesScrollers = true
+            needsRetile = true
+        }
+        if scrollView.hasVerticalScroller {
+            scrollView.hasVerticalScroller = false
+            needsRetile = true
+        }
+        if let verticalScroller = scrollView.verticalScroller {
+            verticalScroller.removeFromSuperview()
+            scrollView.verticalScroller = nil
+            needsRetile = true
+        }
+
+        guard needsRetile else { return }
         scrollView.tile()
         scrollView.needsLayout = true
-        scrollView.layoutSubtreeIfNeeded()
     }
 
     func makeNSView(context: Context) -> LocatorView {
@@ -127,6 +143,16 @@ struct AppNativeScrollIndicatorHider: NSViewRepresentable {
     }
 
     final class LocatorView: NSView {
+        private weak var configuredScrollView: NSScrollView?
+        private var windowUpdateObserver: NSObjectProtocol?
+        private var updateIsScheduled = false
+
+        deinit {
+            if let windowUpdateObserver {
+                NotificationCenter.default.removeObserver(windowUpdateObserver)
+            }
+        }
+
         override func viewDidMoveToSuperview() {
             super.viewDidMoveToSuperview()
             scheduleUpdates()
@@ -134,7 +160,30 @@ struct AppNativeScrollIndicatorHider: NSViewRepresentable {
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
+
+            if let windowUpdateObserver {
+                NotificationCenter.default.removeObserver(windowUpdateObserver)
+                self.windowUpdateObserver = nil
+            }
+
+            if let window {
+                windowUpdateObserver = NotificationCenter.default.addObserver(
+                    forName: NSWindow.didUpdateNotification,
+                    object: window,
+                    queue: .main
+                ) { [weak self] _ in
+                    self?.maintainNearestScrollView()
+                }
+            } else {
+                configuredScrollView = nil
+            }
+
             scheduleUpdates()
+        }
+
+        override func layout() {
+            super.layout()
+            scheduleImmediateUpdate()
         }
 
         override func hitTest(_ point: NSPoint) -> NSView? {
@@ -142,12 +191,36 @@ struct AppNativeScrollIndicatorHider: NSViewRepresentable {
         }
 
         func scheduleUpdates() {
-            configureNearestScrollView()
+            maintainNearestScrollView()
             for delay in [0.03, 0.12, 0.35] {
                 DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-                    self?.configureNearestScrollView()
+                    self?.maintainNearestScrollView()
                 }
             }
+        }
+
+        private func scheduleImmediateUpdate() {
+            guard !updateIsScheduled else { return }
+            updateIsScheduled = true
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.updateIsScheduled = false
+                self.maintainNearestScrollView()
+            }
+        }
+
+        private func maintainNearestScrollView() {
+            guard let window else { return }
+
+            if let configuredScrollView,
+               configuredScrollView.window === window,
+               containsLocatorCenter(configuredScrollView) {
+                AppNativeScrollIndicatorHider
+                    .removeReservedVerticalScrollerSpace(from: configuredScrollView)
+                return
+            }
+
+            configureNearestScrollView()
         }
 
         private func configureNearestScrollView() {
@@ -168,8 +241,16 @@ struct AppNativeScrollIndicatorHider: NSViewRepresentable {
                 }
 
             guard let candidate else { return }
+            configuredScrollView = candidate
             AppNativeScrollIndicatorHider
                 .removeReservedVerticalScrollerSpace(from: candidate)
+        }
+
+        private func containsLocatorCenter(_ scrollView: NSScrollView) -> Bool {
+            let locatorFrame = convert(bounds, to: nil)
+            let locatorCenter = CGPoint(x: locatorFrame.midX, y: locatorFrame.midY)
+            let scrollViewFrame = scrollView.convert(scrollView.bounds, to: nil)
+            return scrollViewFrame.contains(locatorCenter)
         }
 
         private static func frameDistance(_ left: CGRect, _ right: CGRect) -> CGFloat {

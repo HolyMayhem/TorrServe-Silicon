@@ -6,15 +6,9 @@ struct ApplicationRootView: View {
     @ObservedObject var libraryModel: LibraryViewModel
     @ObservedObject var searchModel: SearchViewModel
 
-    @State private var isSidebarCompact = false
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     private let mainContentInset: CGFloat = 15
-    private let expandedSidebarWidth: CGFloat = 210
-    private let compactSidebarWidth: CGFloat = 121
-
-    private var sidebarWidth: CGFloat {
-        isSidebarCompact ? compactSidebarWidth : expandedSidebarWidth
-    }
 
     private var selection: Binding<AppSection?> {
         Binding(
@@ -27,31 +21,32 @@ struct ApplicationRootView: View {
     }
 
     var body: some View {
-        HStack(spacing: 0) {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
             AppSidebarView(
                 mainModel: mainModel,
                 libraryModel: libraryModel,
-                selection: selection,
-                isCompact: isSidebarCompact
+                selection: selection
             )
-            .frame(width: sidebarWidth)
+            .navigationSplitViewColumnWidth(min: 210, ideal: 210, max: 210)
+        } detail: {
+            VStack(spacing: 0) {
+                SettingsPageHeader(
+                    title: mainModel.selectedSection.title(language: mainModel.language),
+                    message: mainModel.selectedSection.message(language: mainModel.language)
+                )
+                .zIndex(1)
 
-            detailContent
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                detailContent
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .ignoresSafeArea(.container, edges: .top)
+            .environment(
+                \.settingsSidebarIsVisible,
+                columnVisibility != .detailOnly
+            )
         }
-        .overlay(alignment: .leading) {
-            Rectangle()
-                .fill(Color.white.opacity(0.16))
-                .frame(width: 1)
-                .offset(x: sidebarWidth - 0.5)
-                .ignoresSafeArea(.container, edges: .top)
-                .allowsHitTesting(false)
-        }
-        .overlay(alignment: .topLeading) {
-            sidebarModeButton
-                .offset(x: sidebarWidth - 42, y: -30)
-        }
-        .animation(.snappy(duration: 0.24, extraBounce: 0), value: sidebarWidth)
+        .navigationSplitViewStyle(.balanced)
         .frame(minWidth: 900, minHeight: 560)
         .sheet(isPresented: $libraryModel.showsPlayerSetup) {
             PlayerSetupView(
@@ -72,26 +67,6 @@ struct ApplicationRootView: View {
         }
     }
 
-    private var sidebarModeButton: some View {
-        Button {
-            withAnimation(.snappy(duration: 0.24, extraBounce: 0)) {
-                isSidebarCompact.toggle()
-            }
-        } label: {
-            Image(systemName: "sidebar.left")
-                .font(.system(size: 15, weight: .medium))
-                .frame(width: 34, height: 28)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(mainModel.language == .russian
-            ? (isSidebarCompact ? "Развернуть боковую панель" : "Свернуть боковую панель")
-            : (isSidebarCompact ? "Expand Sidebar" : "Collapse Sidebar"))
-        .accessibilityLabel(mainModel.language == .russian
-            ? (isSidebarCompact ? "Развернуть боковую панель" : "Свернуть боковую панель")
-            : (isSidebarCompact ? "Expand Sidebar" : "Collapse Sidebar"))
-    }
-
     @ViewBuilder
     private var detailContent: some View {
         switch mainModel.selectedSection {
@@ -102,14 +77,12 @@ struct ApplicationRootView: View {
                 offlineDownloadManager: libraryModel.offlineDownloadManager
             )
             .padding(mainContentInset)
-            .ignoresSafeArea(.container, edges: .top)
         case .search:
             SearchView(
                 mainModel: mainModel,
                 model: searchModel
             )
             .padding(mainContentInset)
-            .ignoresSafeArea(.container, edges: .top)
         }
     }
 

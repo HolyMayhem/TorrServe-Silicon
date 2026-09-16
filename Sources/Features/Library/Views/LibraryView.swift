@@ -15,6 +15,7 @@ struct LibraryView: View {
     @State private var visualScrollIndicatorIsVisible = false
 
     private let compactScrollEdgeFadeHeight: CGFloat = 17
+    private let libraryContentInset: CGFloat = 14
 
     private var texts: LibraryTexts {
         LibraryTexts(language: mainModel.language)
@@ -138,9 +139,6 @@ struct LibraryView: View {
                     }
                     .padding(.top, compactHeaderOverlayHeight)
                     .padding(.bottom, compactFooterOverlayHeight)
-                    // Keep row backgrounds inside the panel while the custom
-                    // scroll indicator remains aligned with the panel edge.
-                    .padding(.trailing, 14)
                     .padding(.vertical, 2)
                 }
                 .scrollIndicators(.hidden)
@@ -182,7 +180,7 @@ struct LibraryView: View {
                 compactLibraryFooter
             }
         }
-        .padding(.leading, 14)
+        .padding(.horizontal, libraryContentInset)
         .padding(.top, 14)
         .appPanel()
         .overlay {
@@ -241,7 +239,6 @@ struct LibraryView: View {
                     .textFieldStyle(.roundedBorder)
             }
             .padding(.bottom, compactScrollEdgeFadeHeight)
-            .padding(.trailing, 14)
         }
         .background {
             GeometryReader { proxy in
@@ -275,7 +272,6 @@ struct LibraryView: View {
             .font(.caption2)
             .foregroundStyle(model.isDropTargeted ? Color.accentColor : .secondary)
             .padding(.top, compactScrollEdgeFadeHeight)
-            .padding(.trailing, 14)
         }
         .padding(.bottom, 14)
         .background {
@@ -345,7 +341,9 @@ struct LibraryView: View {
                 ScrollView {
                     if model.displayMode == .posters {
                         LazyVGrid(
-                            columns: [GridItem(.adaptive(minimum: 150, maximum: 190), spacing: 14)],
+                            // Let the adaptive columns consume the complete
+                            // width between the identical 14 pt edge insets.
+                            columns: [GridItem(.adaptive(minimum: 150), spacing: 14)],
                             spacing: 16
                         ) {
                             ForEach(model.filteredTorrents) { torrent in
@@ -373,7 +371,7 @@ struct LibraryView: View {
                                 }
                             }
                         }
-                        .padding(14)
+                        .padding(libraryContentInset)
                     } else {
                         LazyVStack(spacing: 12) {
                             ForEach(model.filteredTorrents) { torrent in
@@ -402,7 +400,7 @@ struct LibraryView: View {
                                 }
                             }
                         }
-                        .padding(14)
+                        .padding(libraryContentInset)
                     }
                 }
                 .scrollIndicators(.hidden)
