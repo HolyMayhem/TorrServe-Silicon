@@ -23,11 +23,11 @@ struct SettingsView: View {
             .padding(.horizontal, SettingsScreenLayout.formContentInset)
             .padding(.top, SettingsScreenLayout.scrollContentTopPadding)
             .padding(.bottom, 12)
+            .background {
+                AppNativeScrollIndicatorHider()
+            }
         }
         .scrollIndicators(.hidden)
-        .background {
-            AppNativeScrollIndicatorHider()
-        }
         .onScrollGeometryChange(for: AppScrollMetrics.self) { geometry in
             AppScrollMetrics(geometry)
         } action: { _, metrics in

@@ -152,11 +152,11 @@ struct SearchView: View {
                     // 17 pt trailing gutter even without the native scroller.
                     .padding(.trailing, -3)
                     .padding(.vertical, 2)
+                    .background {
+                        AppNativeScrollIndicatorHider()
+                    }
                 }
                 .scrollIndicators(.hidden)
-                .background {
-                    AppNativeScrollIndicatorHider()
-                }
                 .onScrollGeometryChange(for: AppScrollMetrics.self) { geometry in
                     AppScrollMetrics(geometry)
                 } action: { _, metrics in

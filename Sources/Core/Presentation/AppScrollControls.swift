@@ -143,7 +143,6 @@ struct AppNativeScrollIndicatorHider: NSViewRepresentable {
     }
 
     final class LocatorView: NSView {
-        private weak var configuredScrollView: NSScrollView?
         private var windowUpdateObserver: NSObjectProtocol?
         private var updateIsScheduled = false
 
@@ -172,10 +171,8 @@ struct AppNativeScrollIndicatorHider: NSViewRepresentable {
                     object: window,
                     queue: .main
                 ) { [weak self] _ in
-                    self?.maintainNearestScrollView()
+                    self?.maintainEnclosingScrollView()
                 }
-            } else {
-                configuredScrollView = nil
             }
 
             scheduleUpdates()
@@ -191,10 +188,10 @@ struct AppNativeScrollIndicatorHider: NSViewRepresentable {
         }
 
         func scheduleUpdates() {
-            maintainNearestScrollView()
+            maintainEnclosingScrollView()
             for delay in [0.03, 0.12, 0.35] {
                 DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-                    self?.maintainNearestScrollView()
+                    self?.maintainEnclosingScrollView()
                 }
             }
         }
@@ -205,67 +202,18 @@ struct AppNativeScrollIndicatorHider: NSViewRepresentable {
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
                 self.updateIsScheduled = false
-                self.maintainNearestScrollView()
+                self.maintainEnclosingScrollView()
             }
         }
 
-        private func maintainNearestScrollView() {
-            guard let window else { return }
-
-            if let configuredScrollView,
-               configuredScrollView.window === window,
-               containsLocatorCenter(configuredScrollView) {
-                AppNativeScrollIndicatorHider
-                    .removeReservedVerticalScrollerSpace(from: configuredScrollView)
-                return
-            }
-
-            configureNearestScrollView()
-        }
-
-        private func configureNearestScrollView() {
-            guard let window, let contentView = window.contentView else { return }
-            let locatorFrame = convert(bounds, to: nil)
-            let locatorCenter = CGPoint(x: locatorFrame.midX, y: locatorFrame.midY)
-
-            let candidate = contentView.descendantScrollViews
-                .filter { scrollView in
-                    let frame = scrollView.convert(scrollView.bounds, to: nil)
-                    return frame.contains(locatorCenter)
-                }
-                .min { left, right in
-                    let leftFrame = left.convert(left.bounds, to: nil)
-                    let rightFrame = right.convert(right.bounds, to: nil)
-                    return Self.frameDistance(leftFrame, locatorFrame)
-                        < Self.frameDistance(rightFrame, locatorFrame)
-                }
-
-            guard let candidate else { return }
-            configuredScrollView = candidate
+        private func maintainEnclosingScrollView() {
+            // The locator is mounted in the ScrollView's content, so AppKit can
+            // resolve its exact owner through the view hierarchy. Do not scan
+            // the window by coordinates: animated SwiftUI transitions may keep
+            // the outgoing and incoming scroll views alive at the same frame.
+            guard let enclosingScrollView else { return }
             AppNativeScrollIndicatorHider
-                .removeReservedVerticalScrollerSpace(from: candidate)
-        }
-
-        private func containsLocatorCenter(_ scrollView: NSScrollView) -> Bool {
-            let locatorFrame = convert(bounds, to: nil)
-            let locatorCenter = CGPoint(x: locatorFrame.midX, y: locatorFrame.midY)
-            let scrollViewFrame = scrollView.convert(scrollView.bounds, to: nil)
-            return scrollViewFrame.contains(locatorCenter)
-        }
-
-        private static func frameDistance(_ left: CGRect, _ right: CGRect) -> CGFloat {
-            abs(left.minX - right.minX)
-                + abs(left.minY - right.minY)
-                + abs(left.width - right.width)
-                + abs(left.height - right.height)
-        }
-    }
-}
-
-private extension NSView {
-    var descendantScrollViews: [NSScrollView] {
-        subviews.flatMap { child in
-            (child as? NSScrollView).map { [$0] } ?? child.descendantScrollViews
+                .removeReservedVerticalScrollerSpace(from: enclosingScrollView)
         }
     }
 }

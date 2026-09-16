@@ -209,11 +209,11 @@ struct TorrentDetailView: View {
                     .padding(.top, filesHeaderOverlayHeight)
                     .padding(.trailing, filesTrailingExtension)
                     .padding(.vertical, 2)
+                    .background {
+                        AppNativeScrollIndicatorHider()
+                    }
                 }
                 .scrollIndicators(.hidden)
-                .background {
-                    AppNativeScrollIndicatorHider()
-                }
                 .onScrollGeometryChange(for: AppScrollMetrics.self) { geometry in
                     AppScrollMetrics(geometry)
                 } action: { _, metrics in

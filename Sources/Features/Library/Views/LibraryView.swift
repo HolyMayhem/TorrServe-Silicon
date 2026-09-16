@@ -140,11 +140,11 @@ struct LibraryView: View {
                     .padding(.top, compactHeaderOverlayHeight)
                     .padding(.bottom, compactFooterOverlayHeight)
                     .padding(.vertical, 2)
+                    .background {
+                        AppNativeScrollIndicatorHider()
+                    }
                 }
                 .scrollIndicators(.hidden)
-                .background {
-                    AppNativeScrollIndicatorHider()
-                }
                 .onScrollGeometryChange(for: AppScrollMetrics.self) { geometry in
                     AppScrollMetrics(geometry)
                 } action: { _, metrics in
@@ -372,6 +372,9 @@ struct LibraryView: View {
                             }
                         }
                         .padding(libraryContentInset)
+                        .background {
+                            AppNativeScrollIndicatorHider()
+                        }
                     } else {
                         LazyVStack(spacing: 12) {
                             ForEach(model.filteredTorrents) { torrent in
@@ -401,12 +404,12 @@ struct LibraryView: View {
                             }
                         }
                         .padding(libraryContentInset)
+                        .background {
+                            AppNativeScrollIndicatorHider()
+                        }
                     }
                 }
                 .scrollIndicators(.hidden)
-                .background {
-                    AppNativeScrollIndicatorHider()
-                }
                 .onScrollGeometryChange(for: AppScrollMetrics.self) { geometry in
                     AppScrollMetrics(geometry)
                 } action: { _, metrics in
