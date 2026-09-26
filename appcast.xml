@@ -1,9 +1,67 @@
-<?xml version="1.0" encoding="utf-8"?>
-<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
     <channel>
         <title>TorrServe Silicon Updates</title>
         <link>https://github.com/HolyMayhem/TorrServe-Silicon/releases</link>
         <description>Stable TorrServe Silicon application updates.</description>
         <language>en</language>
+        <item>
+            <title>2.8.0</title>
+            <pubDate>Sat, 26 Sep 2026 15:20:45 +0500</pubDate>
+            <link>https://github.com/HolyMayhem/TorrServe-Silicon/releases</link>
+            <sparkle:version>41</sparkle:version>
+            <sparkle:shortVersionString>2.8.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[# TorrServe Silicon 2.8.0
+
+This release adds reliable offline downloads, expanded notification controls, and a redesigned settings experience.
+
+## Offline Downloads
+
+- Download individual torrent files for offline playback directly from the Library.
+- Pause and resume transfers, including automatic recovery after an interruption or application restart.
+- Queue multiple downloads and process them sequentially for predictable performance.
+- View download progress, transfer speed, and completion status in the torrent details.
+- Choose a download folder and safely handle filename conflicts and insufficient free space.
+- Remove a completed local download with confirmation by moving it to the Trash while keeping the torrent in the Library.
+
+## Notification Controls
+
+- Added a master notification switch in Settings.
+- Added individual notification controls for completed and failed downloads, TorrServer start and stop events, critical errors, and TorrServer updates.
+- Added an option to enable or disable notification sounds.
+- Prevented false server-stopped notifications during normal application startup.
+
+## Interface Improvements
+
+- Redesigned and reorganized the Settings window.
+- Improved the main window, sidebar, and server settings layouts.
+- Refined scrolling behavior across the Library, Search, and Settings screens.
+- Added clearer localized messages and status presentation throughout the application.
+
+## Reliability Improvements
+
+- Added persistent download queue, history, and checkpoint storage.
+- Added safer resume validation to prevent corrupted or incorrectly appended files.
+- Improved recovery of completed and partially downloaded files.
+- Added broader automated coverage for downloads and notification preferences.
+
+## System Requirements
+
+- macOS 15 or later
+- Apple Silicon Mac
+
+## Installation
+
+1. Download `TorrServer-2.8.0-macOS-arm64.dmg`.
+2. Open the disk image.
+3. Drag `TorrServer.app` into the Applications folder.
+4. Launch the application.
+
+The application is distributed outside the Mac App Store and is not notarized. If macOS blocks the first launch, Control-click the application and choose **Open**, or allow it under **System Settings → Privacy & Security**.
+]]></description>
+            <enclosure url="https://github.com/HolyMayhem/TorrServe-Silicon/releases/download/v2.8.0/TorrServer-2.8.0-macOS-arm64.dmg" length="28748427" type="application/octet-stream" sparkle:edSignature="5NTohuc28vLJJfXHHebl3lg2VCHQJ3vLG7Dz+/YCZ8gNOpWot77rDmxJs47oTLtmUnIRRpIOIVsoXo+wJHNZDA=="/>
+        </item>
     </channel>
 </rss>
