@@ -5,6 +5,9 @@ build/
 dist/
 Package.resolved
 
+# Local-only test suite
+/Tests/
+
 # Local editor and Xcode state
 .vscode/
 .swiftpm/
