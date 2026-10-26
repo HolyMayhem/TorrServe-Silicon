@@ -12,6 +12,9 @@ private struct SettingsSearchIndexingKey: EnvironmentKey {
 private struct SettingsSearchRequestKey: EnvironmentKey {
     static let defaultValue: SettingsSearchRequest? = nil
 }
+private struct SettingsSearchHighlightKey: EnvironmentKey {
+    static let defaultValue: SettingsSearchRequest? = nil
+}
 private struct SettingsSearchRevealKey: EnvironmentKey {
     static let defaultValue: String? = nil
 }
@@ -33,6 +36,10 @@ extension EnvironmentValues {
         get { self[SettingsSearchRequestKey.self] }
         set { self[SettingsSearchRequestKey.self] = newValue }
     }
+    var settingsSearchHighlight: SettingsSearchRequest? {
+        get { self[SettingsSearchHighlightKey.self] }
+        set { self[SettingsSearchHighlightKey.self] = newValue }
+    }
     var settingsSearchRevealSection: String? {
         get { self[SettingsSearchRevealKey.self] }
         set { self[SettingsSearchRevealKey.self] = newValue }
@@ -52,7 +59,7 @@ private struct SearchableSetting: ViewModifier {
     @Environment(\.settingsSearchCategory) private var category
     @Environment(\.settingsSearchGroup) private var group
     @Environment(\.isIndexingSettings) private var isIndexing
-    @Environment(\.settingsSearchRequest) private var request
+    @Environment(\.settingsSearchHighlight) private var highlight
     @Environment(\.settingsSearchRevealSection) private var revealSection
 
     func body(content: Content) -> some View {
@@ -69,20 +76,12 @@ private struct SearchableSetting: ViewModifier {
                 content
                     .environment(\.settingsSearchGroup, isGroup ? title : group)
                     .id(entry.id)
-                    .background {
-                        if request?.entry.id == entry.id {
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(Color.accentColor.opacity(0.12))
-                                .accessibilityHidden(true)
-                        }
-                    }
                     .overlay {
-                        if request?.entry.id == entry.id {
-                            RoundedRectangle(cornerRadius: 8)
-                                .strokeBorder(Color.accentColor, lineWidth: 1.5)
-                                .allowsHitTesting(false)
-                                .accessibilityHidden(true)
-                        }
+                        SettingsSearchPulse(
+                            revision: highlight?.entry.id == entry.id ? highlight?.revision : nil
+                        )
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
                     }
                     .background {
                         Color.clear.preference(key: SettingsSearchEntriesKey.self, value: [entry])
@@ -91,6 +90,43 @@ private struct SearchableSetting: ViewModifier {
         } else {
             content
         }
+    }
+}
+
+/// A single soft breath, triggered only once the destination has scrolled into view.
+private struct SettingsSearchPulse: View {
+    let revision: UUID?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var intensity = 0.0
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(Color.accentColor.opacity(0.16))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(Color.accentColor.opacity(0.35), lineWidth: 1)
+            }
+            .opacity(intensity)
+            .task(id: revision) {
+                var reset = Transaction()
+                reset.disablesAnimations = true
+                withTransaction(reset) { intensity = 0 }
+                guard revision != nil else { return }
+
+                if reduceMotion {
+                    intensity = 1
+                    do { try await Task.sleep(for: .seconds(1)) }
+                    catch { return }
+                    guard !Task.isCancelled else { return }
+                    intensity = 0
+                } else {
+                    withAnimation(.easeInOut(duration: 0.35)) { intensity = 1 }
+                    do { try await Task.sleep(for: .milliseconds(350)) }
+                    catch { return }
+                    guard !Task.isCancelled else { return }
+                    withAnimation(.easeInOut(duration: 0.7)) { intensity = 0 }
+                }
+            }
     }
 }
 
@@ -112,6 +148,7 @@ struct SettingsSearchScrollView<Content: View>: View {
     }
     @Environment(\.settingsSearchRequest) private var request
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var highlightedRequest: SettingsSearchRequest?
     @State private var availableIDs = Set<SettingsSearchEntry.ID>()
 
     private struct ScrollTask: Equatable {
@@ -121,7 +158,9 @@ struct SettingsSearchScrollView<Content: View>: View {
 
     var body: some View {
         ScrollViewReader { proxy in
-            ScrollView { content }
+            ScrollView {
+                content.environment(\.settingsSearchHighlight, highlightedRequest)
+            }
                 .onPreferenceChange(SettingsSearchEntriesKey.self) { entries in
                     availableIDs = Set(entries.map(\.id))
                 }
@@ -129,6 +168,7 @@ struct SettingsSearchScrollView<Content: View>: View {
                     revision: request?.revision,
                     isAvailable: request.map { availableIDs.contains($0.entry.id) } ?? false
                 )) {
+                    highlightedRequest = nil
                     guard let request, availableIDs.contains(request.entry.id) else { return }
                     // Preferences confirm the destination has mounted, including disclosures.
                     await Task.yield()
@@ -136,6 +176,12 @@ struct SettingsSearchScrollView<Content: View>: View {
                     withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
                         proxy.scrollTo(request.entry.id, anchor: .center)
                     }
+                    if !reduceMotion {
+                        do { try await Task.sleep(for: .milliseconds(220)) }
+                        catch { return }
+                    }
+                    guard !Task.isCancelled else { return }
+                    highlightedRequest = request
                 }
         }
     }
