@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 
 struct WhatsNewView: View {
+    static let cornerRadius: CGFloat = 20
     let manifest: WhatsNewManifest
     let languageCode: String
     let appVersion: String
@@ -11,25 +12,26 @@ struct WhatsNewView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            VStack(spacing: 0) {
+            HStack(spacing: 17) {
                 Image(systemName: "sparkles")
-                    .font(.system(size: 40, weight: .regular))
+                    .font(.system(size: 32, weight: .regular))
                     .foregroundStyle(Color.accentColor)
-                    .frame(height: 50)
-                    .padding(.bottom, 16)
+                    .frame(width: 34, height: 44)
                     .accessibilityHidden(true)
-                Text(content.title)
-                    .font(.system(size: 27, weight: .semibold))
-                    .padding(.bottom, 9)
-                Text("TorrServe Silicon · \(languageCode == "ru" ? "Версия" : "Version") \(appVersion)")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(content.title)
+                        .font(.system(size: 27, weight: .semibold))
+                    Text("TorrServe Silicon · \(languageCode == "ru" ? "Версия" : "Version") \(appVersion)")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.top, 50)
-            .padding(.bottom, 32)
+            .padding(.top, 56)
+            .padding(.bottom, 36)
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 26) {
+                VStack(alignment: .leading, spacing: 22) {
                     ForEach(Array(content.features.enumerated()), id: \.offset) { _, feature in
                         HStack(alignment: .top, spacing: 17) {
                             Image(systemName: NSImage(systemSymbolName: feature.symbol, accessibilityDescription: nil) == nil ? "sparkles" : feature.symbol)
@@ -70,12 +72,18 @@ struct WhatsNewView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            .padding(.top, 30)
-            .padding(.bottom, 30)
+            .padding(.top, 24)
+            .padding(.bottom, 36)
         }
         .padding(.horizontal, 38)
-        .frame(width: 520, height: 590)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(AppWindowSurface().ignoresSafeArea())
+        .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5)
+                .allowsHitTesting(false)
+        }
         .ignoresSafeArea()
     }
 }

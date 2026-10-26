@@ -8,6 +8,7 @@ fi
 CHECK_DIR="$(mktemp -d)"
 trap 'rm -rf "$CHECK_DIR"' EXIT
 swiftc -swift-version 5 -parse-as-library \
+  "$PROJECT_DIR/Sources/Core/Presentation/AppWindowSurface.swift" \
   "$PROJECT_DIR/Sources/Features/Updates/WhatsNew/WhatsNewManifest.swift" \
   "$PROJECT_DIR/Sources/Features/Updates/WhatsNew/WhatsNewView.swift" \
   "$PROJECT_DIR/Sources/Features/Updates/WhatsNew/WhatsNewWindowController.swift" \

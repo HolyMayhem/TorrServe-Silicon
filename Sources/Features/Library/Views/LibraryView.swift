@@ -7,7 +7,7 @@ struct LibraryView: View {
     @ObservedObject var model: LibraryViewModel
     @ObservedObject var offlineDownloadManager: OfflineDownloadManager
     @FocusState private var magnetFieldIsFocused: Bool
-    @FocusState private var searchFieldIsFocused: Bool
+    @State private var searchFieldIsFocused = false
     @State private var compactHeaderOverlayHeight: CGFloat = 82
     @State private var compactFooterOverlayHeight: CGFloat = 40
     @State private var compactScrollMetrics = AppScrollMetrics.zero
@@ -200,6 +200,31 @@ struct LibraryView: View {
         }
     }
 
+    private var librarySearchField: some View {
+        Group {
+            if #available(macOS 26.0, *) {
+                librarySearchControl.glassEffect(.regular, in: Capsule())
+            } else {
+                librarySearchControl
+                    .background(.regularMaterial, in: Capsule())
+                    .overlay {
+                        Capsule().strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5)
+                            .allowsHitTesting(false)
+                    }
+            }
+        }
+    }
+
+    private var librarySearchControl: some View {
+        LibrarySearchField(
+            placeholder: texts.search,
+            text: $model.searchText,
+            isFocused: $searchFieldIsFocused
+        )
+        .padding(.horizontal, LibrarySearchField.horizontalPadding)
+        .frame(height: LibrarySearchField.height)
+    }
+
     private var compactLibraryHeader: some View {
         VStack(spacing: 0) {
             VStack(spacing: 10) {
@@ -241,10 +266,7 @@ struct LibraryView: View {
                     .disabled(model.isAdding || !mainModel.canStop)
                 }
 
-                TextField(texts.search, text: $model.searchText)
-                    .textFieldStyle(.roundedBorder)
-                    .focused($searchFieldIsFocused)
-                    .onExitCommand { searchFieldIsFocused = false }
+                librarySearchField
             }
             .padding(.bottom, compactScrollEdgeFadeHeight)
         }
@@ -302,10 +324,7 @@ struct LibraryView: View {
                 Label(texts.library, systemImage: "film.stack")
                     .font(.headline)
 
-                TextField(texts.search, text: $model.searchText)
-                    .textFieldStyle(.roundedBorder)
-                    .focused($searchFieldIsFocused)
-                    .onExitCommand { searchFieldIsFocused = false }
+                librarySearchField
                     .frame(maxWidth: 260)
 
                 Spacer()

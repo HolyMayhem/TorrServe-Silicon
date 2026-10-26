@@ -1,6 +1,12 @@
 import AppKit
 import SwiftUI
 
+/// A uniform rounded surface without the titlebar's different lower corners.
+private final class WhatsNewWindow: NSWindow {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
+}
+
 @MainActor
 final class WhatsNewWindowController: NSObject, NSWindowDelegate {
     private let history: WhatsNewHistory
@@ -84,9 +90,10 @@ final class WhatsNewWindowController: NSObject, NSWindowDelegate {
 
     private func present(languageCode: String, relativeTo parent: NSWindow?, acknowledge: Bool) {
         guard let manifest else { return }
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 520, height: 590),
-            styleMask: [.titled, .fullSizeContentView], backing: .buffered, defer: false
+        let size = NSSize(width: 520, height: 480)
+        let window = WhatsNewWindow(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.borderless], backing: .buffered, defer: false
         )
         window.title = manifest.content(languageCode: languageCode).title
         window.titleVisibility = .hidden
@@ -94,13 +101,14 @@ final class WhatsNewWindowController: NSObject, NSWindowDelegate {
         window.titlebarSeparatorStyle = .none
         window.isReleasedWhenClosed = false
         window.isMovableByWindowBackground = true
-        window.backgroundColor = .windowBackgroundColor
+        window.backgroundColor = .clear
+        window.isOpaque = false
+        window.hasShadow = true
         window.tabbingMode = .disallowed
         window.delegate = self
         for type in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
             window.standardWindowButton(type)?.isHidden = true
         }
-        let size = NSSize(width: 520, height: 590)
         window.contentMinSize = size
         window.contentMaxSize = size
         acknowledgesOnContinue = acknowledge
