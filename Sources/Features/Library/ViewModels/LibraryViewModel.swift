@@ -10,6 +10,7 @@ final class LibraryViewModel: ObservableObject {
     @Published var selectedTorrentID: String?
     @Published private(set) var selectedTorrentIDs: Set<String> = []
     @Published var searchText = ""
+    @Published private(set) var selectionNavigationRevision = 0
     @Published var magnetInput = ""
     @Published var isRefreshing = false
     @Published var isAdding = false
@@ -36,8 +37,10 @@ final class LibraryViewModel: ObservableObject {
     private let metadataResolver: MetadataResolver
     private let metadataSettings: MetadataSettingsStore
     private(set) var isPollingActive = false
+    private var selectionWasCleared = false
     private var metadataResolutionTasks: [String: Task<Void, Never>] = [:]
     private var metadataRetryAfter: [String: Date] = [:]
+    private var metadataRefreshHashes: Set<String> = []
     private var metadataLanguage = AppLanguage.systemDefault
     private var metadataConfigurationRevision = 0
 
@@ -117,7 +120,6 @@ final class LibraryViewModel: ObservableObject {
     }
 
     func applyServerSnapshot(_ values: [NativeTorrent]) {
-        reconcileOfflineDownloads(in: values)
         torrents = values
         metadataByHash = metadataStore.allMetadata()
         resolveMetadataIfNeeded(for: values)
@@ -128,7 +130,7 @@ final class LibraryViewModel: ObservableObject {
         }
         let availableIDs = Set(values.map(\.id))
         selectedTorrentIDs.formIntersection(availableIDs)
-        if selectedTorrentID == nil {
+        if selectedTorrentID == nil, !selectionWasCleared {
             selectedTorrentID = selectedTorrents.first?.id ?? values.first?.id
         }
         if let selectedTorrentID {
@@ -142,6 +144,7 @@ final class LibraryViewModel: ObservableObject {
     }
 
     func select(_ torrent: NativeTorrent, extendingSelection: Bool = false) {
+        selectionWasCleared = false
         if extendingSelection {
             if selectedTorrentIDs.remove(torrent.id) != nil {
                 if selectedTorrentID == torrent.id {
@@ -157,6 +160,36 @@ final class LibraryViewModel: ObservableObject {
             selectedTorrentIDs = [torrent.id]
             selectedTorrentID = torrent.id
         }
+        selectionWasCleared = selectedTorrentIDs.isEmpty
+    }
+
+    func selectAllVisibleTorrents() {
+        let visible = filteredTorrents
+        let ids = Set(visible.map(\.id))
+        selectedTorrentIDs = ids
+        if selectedTorrentID.map({ !ids.contains($0) }) ?? true {
+            selectedTorrentID = visible.first?.id
+        }
+        selectionWasCleared = ids.isEmpty
+    }
+
+    func clearSelection() {
+        selectedTorrentID = nil
+        selectedTorrentIDs = []
+        selectionWasCleared = true
+    }
+
+    func moveSelection(by offset: Int) {
+        let visible = filteredTorrents
+        guard !visible.isEmpty else { return }
+        let index: Int
+        if let current = visible.firstIndex(where: { $0.id == selectedTorrentID }) {
+            index = min(max(current + offset, 0), visible.count - 1)
+        } else {
+            index = offset < 0 ? visible.count - 1 : 0
+        }
+        select(visible[index])
+        selectionNavigationRevision &+= 1
     }
 
     func setDisplayMode(_ mode: LibraryDisplayMode) {
@@ -178,24 +211,26 @@ final class LibraryViewModel: ObservableObject {
         restartMetadataResolution()
     }
 
-    func metadataConfigurationChanged() {
-        restartMetadataResolution()
+    func metadataConfigurationChanged(affectedProvider: MetadataProvider? = nil) {
+        restartMetadataResolution(affectedProvider: affectedProvider)
     }
 
-    private func restartMetadataResolution() {
+    private func restartMetadataResolution(affectedProvider: MetadataProvider? = nil) {
         metadataConfigurationRevision += 1
         metadataResolutionTasks.values.forEach { $0.cancel() }
         metadataResolutionTasks.removeAll()
         resolvingMetadataHashes.removeAll()
         metadataRetryAfter.removeAll()
-        metadataStore.removeAll()
-        metadataByHash = [:]
-
-        guard aniListMetadataEnabled
-            || !selectedMetadataProviders.isEmpty else { return }
+        // Keep the last successful cards available while refreshing, including
+        // when the network or a metadata provider is temporarily unavailable.
         for torrent in torrents {
-            resolveMetadata(for: torrent, forceRefresh: true)
+            let hash = torrent.hash.lowercased()
+            if affectedProvider == nil || metadataByHash[hash] == nil
+                || metadataByHash[hash]?.metadataProvider == affectedProvider {
+                metadataRefreshHashes.insert(hash)
+            }
         }
+        resolveMetadataIfNeeded(for: torrents)
     }
 
     func refresh(selectingHash: String) {
@@ -397,7 +432,8 @@ final class LibraryViewModel: ObservableObject {
         for torrent in values {
             let hash = torrent.hash.lowercased()
             guard !hash.isEmpty else { continue }
-            if let metadata = metadataByHash[hash],
+            if !metadataRefreshHashes.contains(hash),
+               let metadata = metadataByHash[hash],
                let provider = metadata.metadataProvider,
                acceptedProviders.contains(provider),
                metadata.metadataProviderID != nil,
@@ -468,6 +504,7 @@ final class LibraryViewModel: ObservableObject {
                     )
                     metadataStore.save(metadata, for: hash)
                     metadataByHash[hash] = metadata
+                    metadataRefreshHashes.remove(hash)
                     metadataRetryAfter[hash] = nil
                     return
 

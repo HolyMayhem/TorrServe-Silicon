@@ -18,8 +18,8 @@ extension AppDelegate {
         window.titleVisibility = .hidden
         window.titlebarSeparatorStyle = .none
         window.isMovableByWindowBackground = true
-        window.backgroundColor = .windowBackgroundColor
-        window.isOpaque = true
+        window.backgroundColor = .clear
+        window.isOpaque = false
         window.hasShadow = true
 
         mainWindowModel.path = initialExecutablePath()
@@ -45,6 +45,7 @@ extension AppDelegate {
         }
         mainWindowModel.onChoose = { [weak self] in self?.chooseExecutable(nil) }
         mainWindowModel.onDownload = { [weak self] in self?.downloadLatestTorrServer(nil) }
+        mainWindowModel.onCheckForTorrServerUpdates = { [weak self] in self?.checkForTorrServerUpdate() }
         mainWindowModel.onInstallTorrServerUpdate = { [weak self] in
             self?.installAvailableTorrServerUpdate()
         }
@@ -75,6 +76,12 @@ extension AppDelegate {
         }
         mainWindowModel.onNotificationPreferencesChanged = { [weak self] preferences in
             self?.setNotificationPreferences(preferences)
+        }
+        mainWindowModel.onConfigureSearch = { [weak self] in
+            guard let self else { return }
+            self.ensureWindowForCommand()
+            self.mainWindowModel.selectedSection = .search
+            self.searchModel.showsSettings = true
         }
         mainWindowModel.onJackettEnabledChanged = { [weak self] enabled in
             self?.setJackettEnabled(enabled)
@@ -234,7 +241,7 @@ extension AppDelegate {
         settingsWindow.toolbarStyle = .unified
         settingsWindow.tabbingMode = .disallowed
         settingsWindow.backgroundColor = SettingsVisualStyle.windowBackgroundNSColor
-        settingsWindow.isOpaque = true
+        settingsWindow.isOpaque = false
         settingsWindow.hasShadow = true
         settingsWindow.contentMinSize = NSSize(width: 780, height: 540)
         settingsWindow.setContentSize(NSSize(width: 850, height: 620))
@@ -298,21 +305,9 @@ extension AppDelegate {
         )
         let fileMenu = NSMenu(title: fileMenuItem.title)
 
-        let addTorrentItem = fileMenu.addItem(
-            withTitle: currentLanguage == .russian ? "Добавить torrent-файл…" : "Add Torrent File…",
-            action: #selector(addTorrentFromMenu(_:)),
-            keyEquivalent: "o"
-        )
-        addTorrentItem.target = self
-        addTorrentItem.keyEquivalentModifierMask = [.command]
+        addShortcut(.addTorrent, action: #selector(addTorrentFromMenu(_:)), to: fileMenu)
 
-        let addMagnetItem = fileMenu.addItem(
-            withTitle: currentLanguage == .russian ? "Добавить magnet-ссылку…" : "Add Magnet Link…",
-            action: #selector(addMagnetFromMenu(_:)),
-            keyEquivalent: "l"
-        )
-        addMagnetItem.target = self
-        addMagnetItem.keyEquivalentModifierMask = [.command]
+        addShortcut(.addMagnet, action: #selector(addMagnetFromMenu(_:)), to: fileMenu)
 
         fileMenuItem.submenu = fileMenu
         mainMenu.addItem(fileMenuItem)
@@ -370,6 +365,7 @@ extension AppDelegate {
         )
         selectAllItem.keyEquivalentModifierMask = [.command]
 
+        addShortcut(.deselectAll, action: #selector(deselectLibraryItems(_:)), to: editMenu)
         editMenuItem.submenu = editMenu
         mainMenu.addItem(editMenuItem)
 
@@ -379,16 +375,34 @@ extension AppDelegate {
             keyEquivalent: ""
         )
         let navigateMenu = NSMenu(title: navigateMenuItem.title)
-        let searchItem = navigateMenu.addItem(
-            withTitle: currentLanguage == .russian ? "Перейти к поиску" : "Go to Search",
-            action: #selector(focusSearchFromMenu(_:)),
-            keyEquivalent: "f"
-        )
-        searchItem.target = self
-        searchItem.keyEquivalentModifierMask = [.command]
+        addShortcut(.library, action: #selector(showLibraryFromMenu(_:)), to: navigateMenu)
+        addShortcut(.search, action: #selector(showSearchFromMenu(_:)), to: navigateMenu)
+        navigateMenu.addItem(.separator())
+        addShortcut(.focusSearch, action: #selector(focusSearchFromMenu(_:)), to: navigateMenu)
+        addShortcut(.refresh, action: #selector(refreshCurrentPage(_:)), to: navigateMenu)
         navigateMenuItem.submenu = navigateMenu
         mainMenu.addItem(navigateMenuItem)
 
+        let viewMenuItem = NSMenuItem(title: currentLanguage == .russian ? "Вид" : "View", action: nil, keyEquivalent: "")
+        let viewMenu = NSMenu(title: viewMenuItem.title)
+        addShortcut(.list, action: #selector(showLibraryList(_:)), to: viewMenu)
+        addShortcut(.posters, action: #selector(showLibraryPosters(_:)), to: viewMenu)
+        addShortcut(.cards, action: #selector(showLibraryCards(_:)), to: viewMenu)
+        viewMenuItem.submenu = viewMenu
+        mainMenu.addItem(viewMenuItem)
+
+        let helpItem = NSMenuItem(title: currentLanguage == .russian ? "Справка" : "Help", action: nil, keyEquivalent: "")
+        let helpMenu = NSMenu(title: helpItem.title)
+        addShortcut(.shortcuts, action: #selector(showKeyboardShortcuts(_:)), to: helpMenu)
+        helpItem.submenu = helpMenu
+        mainMenu.addItem(helpItem)
+
         NSApp.mainMenu = mainMenu
     }
+    private func addShortcut(_ shortcut: AppKeyboardShortcut, action: Selector, to menu: NSMenu) {
+        let item = menu.addItem(withTitle: shortcut.title(language: currentLanguage), action: action, keyEquivalent: shortcut.keyEquivalent)
+        item.keyEquivalentModifierMask = shortcut.modifiers
+        item.target = self
+    }
+
 }

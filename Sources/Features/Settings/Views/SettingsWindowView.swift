@@ -8,6 +8,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
     case updates
     case downloads
     case metadata
+    case keyboard
 
     var id: Self { self }
 
@@ -27,12 +28,17 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
             return language == .russian ? "Загрузки" : "Downloads"
         case .metadata:
             return language == .russian ? "Метаданные" : "Metadata"
+        case .keyboard:
+            return language == .russian ? "Клавиатура" : "Keyboard"
         }
     }
 
     func pageTitle(language: AppLanguage) -> String {
         if self == .server {
             return language == .russian ? "Настройки сервера" : "Server Settings"
+        }
+        if self == .keyboard {
+            return language == .russian ? "Сочетания клавиш" : "Keyboard Shortcuts"
         }
         return title(language: language)
     }
@@ -49,16 +55,16 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                 : "Manage the server, executable, storage, and playback apps."
         case .interface:
             return language == .russian
-                ? "Выберите язык приложения и настройте поиск через Jackett."
-                : "Choose the app language and configure search through Jackett."
+                ? "Выберите язык приложения и настройте источники поиска торрентов."
+                : "Choose the app language and configure torrent search sources."
         case .menuBar:
             return language == .russian
                 ? "Настройте значок, скорость и содержимое меню TorrServe."
                 : "Configure the TorrServe menu icon, speed, and content."
         case .updates:
             return language == .russian
-                ? "Управляйте обновлениями приложения TorrServe Silicon."
-                : "Manage updates for the TorrServe Silicon application."
+                ? "Обновления приложения и движка TorrServer MatriX в одном месте."
+                : "Updates for the application and the TorrServer MatriX engine."
         case .downloads:
             return language == .russian
                 ? "Выберите папку для сохранения офлайн-загрузок."
@@ -67,7 +73,27 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
             return language == .russian
                 ? "Выберите источники постеров и описаний и настройте ключи API."
                 : "Choose poster and description providers and configure API keys."
+        case .keyboard:
+            return language == .russian
+                ? "Быстрые действия для медиатеки, поиска и навигации."
+                : "Quick actions for your library, search, and navigation."
         }
+    }
+
+    func matchesSearch(_ query: String, language: AppLanguage) -> Bool {
+        let words: String
+        switch self {
+        case .general: words = "запуск уведомления звук dock startup notifications sound"
+        case .server: words = "кеш память диск плеер диагностика cache memory disk player diagnostics executable"
+        case .interface: words = "язык поиск jackett torrentsearch language search"
+        case .menuBar: words = "значок скорость qr icon speed"
+        case .updates: words = "matrix матрикс torrserver установить версия install version"
+        case .downloads: words = "файлы папка офлайн movies folder offline files"
+        case .metadata: words = "api ключи постеры описания tmdb omdb кинопоиск anilist keys posters overview"
+        case .keyboard: words = "сочетания клавиш горячие клавиши keyboard shortcuts command control"
+        }
+        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        return query.isEmpty || "\(title(language: language)) \(message(language: language)) \(words)".localizedCaseInsensitiveContains(query)
     }
 
     var systemImage: String {
@@ -79,6 +105,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .updates: return "arrow.triangle.2.circlepath"
         case .downloads: return "arrow.down.circle.fill"
         case .metadata: return "film.stack.fill"
+        case .keyboard: return "keyboard"
         }
     }
 
@@ -91,6 +118,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .updates: return .orange
         case .downloads: return .cyan
         case .metadata: return .indigo
+        case .keyboard: return .gray
         }
     }
 }
@@ -111,7 +139,7 @@ struct SettingsWindowView: View {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return SettingsCategory.allCases }
         return SettingsCategory.allCases.filter {
-            $0.title(language: model.language).localizedCaseInsensitiveContains(query)
+            $0.matchesSearch(query, language: model.language)
         }
     }
 
@@ -142,7 +170,8 @@ struct SettingsWindowView: View {
             VStack(spacing: 0) {
                 SettingsPageHeader(
                     title: selectedCategory.pageTitle(language: model.language),
-                    message: selectedCategory.message(language: model.language)
+                    message: selectedCategory.message(language: model.language),
+                    isSettingsPage: true
                 )
                 .zIndex(1)
 
@@ -161,12 +190,14 @@ struct SettingsWindowView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(SettingsVisualStyle.windowBackground)
             .ignoresSafeArea(.container, edges: .top)
             .environment(
                 \.settingsSidebarIsVisible,
                 columnVisibility != .detailOnly
             )
+        }
+        .onChange(of: navigation.selectedCategory) { _, selected in
+            if let selected, !filteredCategories.contains(selected) { searchText = "" }
         }
         .navigationSplitViewStyle(.balanced)
         .frame(minWidth: 780, minHeight: 540)

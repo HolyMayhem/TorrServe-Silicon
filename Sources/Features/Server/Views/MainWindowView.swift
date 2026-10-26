@@ -4,8 +4,7 @@ import SwiftUI
 struct MainWindowView: View {
     @ObservedObject var model: MainWindowModel
     @State private var showsClearCacheConfirmation = false
-    @State private var scrollMetrics = AppScrollMetrics.zero
-    @State private var scrollIndicatorIsVisible = false
+    @State private var showsDiagnostics = false
 
     private var texts: Texts {
         Texts(language: model.language)
@@ -15,44 +14,28 @@ struct MainWindowView: View {
         ScrollView {
             VStack(spacing: SettingsScreenLayout.sectionSpacing) {
                 serverOverviewSection
-                storageSection
-                ServerCacheSettingsSection(model: model)
                 executableSection
-                ServerDiagnosticsSection(model: model)
+                ServerCacheSettingsSection(model: model)
+                storageSection
                 playerSection
+                DisclosureGroup(isExpanded: $showsDiagnostics) {
+                    ServerDiagnosticsSection(model: model).padding(.top, 10)
+                } label: {
+                    Label(model.language == .russian ? "Диагностика и обслуживание" : "Diagnostics & Maintenance", systemImage: "stethoscope")
+                        .font(.callout.weight(.medium))
+                }
+                .padding(.horizontal, 4)
             }
             .padding(.horizontal, SettingsScreenLayout.formContentInset)
             .padding(.top, SettingsScreenLayout.scrollContentTopPadding)
-            .padding(.bottom, 12)
-            .background {
-                AppNativeScrollIndicatorHider()
-            }
+            .padding(.bottom, 24)
         }
-        .scrollIndicators(.hidden)
-        .onScrollGeometryChange(for: AppScrollMetrics.self) { geometry in
-            AppScrollMetrics(geometry)
-        } action: { _, metrics in
-            scrollMetrics = metrics
-        }
-        .onScrollPhaseChange { _, phase in
-            withAnimation(.easeOut(duration: phase.isScrolling ? 0.08 : 0.24)) {
-                scrollIndicatorIsVisible = phase.isScrolling
-            }
-        }
-        .overlay {
-            AppScrollIndicator(
-                metrics: scrollMetrics,
-                topInset: 0,
-                bottomInset: 0,
-                isVisible: scrollIndicatorIsVisible
-            )
-        }
+        .scrollIndicators(.automatic)
         .frame(maxWidth: SettingsScreenLayout.contentMaxWidth)
         .padding(.horizontal, SettingsScreenLayout.horizontalPadding)
         .padding(.top, SettingsScreenLayout.topPadding)
         .padding(.bottom, SettingsScreenLayout.bottomPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(SettingsVisualStyle.windowBackground)
     }
 
     private var serverOverviewSection: some View {
@@ -428,6 +411,7 @@ struct MainWindowView: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(.blue)
+            .disabled(!model.canInstallTorrServerUpdate)
         } else {
             Button {
                 model.onDownload?()
@@ -568,19 +552,21 @@ struct ServerSettingsGroup<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
-                .font(.headline)
+                .font(.system(size: 13, weight: .semibold))
                 .padding(.horizontal, 14)
 
             VStack(spacing: 0) {
                 content
             }
             .padding(.horizontal, 14)
+            .font(.callout)
             .serverSettingsPanel()
 
             if let footer {
                 Text(footer)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 14)
             }
         }
@@ -595,7 +581,7 @@ extension View {
         )
             .overlay {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(Color.primary.opacity(0.07), lineWidth: 1)
+                    .stroke(Color(nsColor: .separatorColor).opacity(0.45), lineWidth: 0.5)
             }
     }
 }

@@ -48,6 +48,7 @@ struct ApplicationRootView: View {
         }
         .navigationSplitViewStyle(.balanced)
         .frame(minWidth: 900, minHeight: 560)
+        .background(SettingsVisualStyle.windowBackground)
         .sheet(isPresented: $libraryModel.showsPlayerSetup) {
             PlayerSetupView(
                 model: libraryModel,

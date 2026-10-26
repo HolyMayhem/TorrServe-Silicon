@@ -128,6 +128,9 @@ test "$(plutil -extract CFBundleIconName raw "$PARTIAL_INFO_PLIST")" = "AppIcon"
 cp "$BIN_DIR/TorrServerManager" "$MACOS_DIR/TorrServerManager"
 cp "$PROJECT_DIR/Resources/Info.plist" "$CONTENTS_DIR/Info.plist"
 cp "$PROJECT_DIR/Resources/PkgInfo" "$CONTENTS_DIR/PkgInfo"
+if [[ -d "$PROJECT_DIR/Resources/ThirdPartyLicenses" ]]; then
+  ditto --norsrc "$PROJECT_DIR/Resources/ThirdPartyLicenses" "$RESOURCES_DIR/ThirdPartyLicenses"
+fi
 cp "$COMPILED_ICON_DIR/AppIcon.icns" "$RESOURCES_DIR/AppIcon.icns"
 cp "$COMPILED_ICON_DIR/Assets.car" "$RESOURCES_DIR/Assets.car"
 cp "$TORRSERVER_CACHE_PATH" "$RESOURCES_DIR/$TORRSERVER_ASSET_NAME"

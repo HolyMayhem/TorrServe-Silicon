@@ -1,6 +1,11 @@
 import Foundation
 
-final class JackettCredentialStore {
+protocol JackettCredentialStoring {
+    func read() -> String?
+    @discardableResult func save(_ value: String) -> Bool
+}
+
+final class JackettCredentialStore: JackettCredentialStoring {
     private struct Payload: Codable {
         let apiKey: String
     }

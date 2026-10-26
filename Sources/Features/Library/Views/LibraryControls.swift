@@ -17,18 +17,30 @@ struct CompactLibraryFooterHeightKey: PreferenceKey {
     }
 }
 
-struct LibraryKeyboardShortcutMonitor: NSViewRepresentable {
-    let onDelete: () -> Bool
-    let onReturn: () -> Bool
-    let onPaste: () -> Bool
+enum LibraryKeyboardCommand: Equatable {
+    case delete, play, paste, selectAll, deselectAll, copyStream, previous, next, escape
 
-    func makeCoordinator() -> Coordinator {
-        Coordinator(
-            onDelete: onDelete,
-            onReturn: onReturn,
-            onPaste: onPaste
-        )
+    static func resolve(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) -> Self? {
+        let modifiers = modifiers.intersection([.command, .control, .option, .shift])
+        switch (keyCode, modifiers) {
+        case (0, .command), (0, .control): return .selectAll
+        case (0, [.command, .shift]): return .deselectAll
+        case (8, .command): return .copyStream
+        case (9, .command): return .paste
+        case (51, []), (117, []): return .delete
+        case (36, []), (76, []): return .play
+        case (126, []): return .previous
+        case (125, []): return .next
+        case (53, []): return .escape
+        default: return nil
+        }
     }
+}
+
+struct LibraryKeyboardShortcutMonitor: NSViewRepresentable {
+    let perform: (LibraryKeyboardCommand) -> Bool
+
+    func makeCoordinator() -> Coordinator { Coordinator(perform: perform) }
 
     func makeNSView(context: Context) -> WindowTrackingView {
         let view = WindowTrackingView()
@@ -39,93 +51,39 @@ struct LibraryKeyboardShortcutMonitor: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: WindowTrackingView, context: Context) {
-        context.coordinator.onDelete = onDelete
-        context.coordinator.onReturn = onReturn
-        context.coordinator.onPaste = onPaste
+        context.coordinator.perform = perform
         context.coordinator.window = nsView.window
     }
 
     final class Coordinator {
         weak var window: NSWindow?
-        var onDelete: () -> Bool
-        var onReturn: () -> Bool
-        var onPaste: () -> Bool
-        private var eventMonitor: Any? = nil
+        var perform: (LibraryKeyboardCommand) -> Bool
+        private var eventMonitor: Any?
 
-        init(
-            onDelete: @escaping () -> Bool,
-            onReturn: @escaping () -> Bool,
-            onPaste: @escaping () -> Bool
-        ) {
-            self.onDelete = onDelete
-            self.onReturn = onReturn
-            self.onPaste = onPaste
-            eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) {
-                [weak self] event in
+        init(perform: @escaping (LibraryKeyboardCommand) -> Bool) {
+            self.perform = perform
+            eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
                 self?.handle(event) ?? event
             }
         }
 
         deinit {
-            if let eventMonitor {
-                NSEvent.removeMonitor(eventMonitor)
-            }
+            if let eventMonitor { NSEvent.removeMonitor(eventMonitor) }
         }
 
         private func handle(_ event: NSEvent) -> NSEvent? {
-            guard event.window === window,
-                  !isEditingText(in: event.window)
-            else {
-                return event
-            }
-
-            if Self.isPasteShortcut(
-                keyCode: event.keyCode,
-                modifierFlags: event.modifierFlags
-            ) {
-                return onPaste() ? nil : event
-            }
-
-            guard event.modifierFlags.intersection([
-                .command,
-                .control,
-                .option
-            ]).isEmpty else {
-                return event
-            }
-
-            switch event.keyCode {
-            case 51, 117:
-                return onDelete() ? nil : event
-            case 36, 76:
-                return onReturn() ? nil : event
-            default:
-                return event
-            }
-        }
-
-        static func isPasteShortcut(
-            keyCode: UInt16,
-            modifierFlags: NSEvent.ModifierFlags
-        ) -> Bool {
-            let relevantModifiers = modifierFlags.intersection([
-                .command,
-                .control,
-                .option,
-                .shift
-            ])
-            return keyCode == 9 && relevantModifiers == .command
-        }
-
-        private func isEditingText(in window: NSWindow?) -> Bool {
-            window?.firstResponder is NSTextView
-                || window?.firstResponder is NSTextField
+            guard let window, event.window === window, window.isKeyWindow,
+                  window.attachedSheet == nil,
+                  !(window.firstResponder is NSTextView),
+                  !(window.firstResponder is NSTextField),
+                  let command = LibraryKeyboardCommand.resolve(keyCode: event.keyCode, modifiers: event.modifierFlags)
+            else { return event }
+            return perform(command) ? nil : event
         }
     }
 
     final class WindowTrackingView: NSView {
         var windowDidChange: ((NSWindow?) -> Void)?
-
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
             windowDidChange?(window)

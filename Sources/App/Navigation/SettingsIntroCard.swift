@@ -2,13 +2,13 @@ import AppKit
 import SwiftUI
 
 enum SettingsScreenLayout {
-    static let contentMaxWidth: CGFloat = .infinity
-    static let formContentInset: CGFloat = 14
+    static let contentMaxWidth: CGFloat = 740
+    static let formContentInset: CGFloat = 20
     static let horizontalPadding: CGFloat = 0
     static let topPadding: CGFloat = 0
     static let bottomPadding: CGFloat = 0
-    static let sectionSpacing: CGFloat = 14
-    static let scrollContentTopPadding: CGFloat = 14
+    static let sectionSpacing: CGFloat = 20
+    static let scrollContentTopPadding: CGFloat = 20
     static let collapsedHeaderLeadingPadding: CGFloat = 180
 }
 
@@ -24,77 +24,42 @@ extension EnvironmentValues {
 }
 
 enum SettingsVisualStyle {
-    static var windowBackgroundNSColor: NSColor {
-        adaptiveColor(
-            dark: NSColor(
-                srgbRed: 31.0 / 255.0,
-                green: 33.0 / 255.0,
-                blue: 47.0 / 255.0,
-                alpha: 1
-            ),
-            light: .windowBackgroundColor
-        )
+    static var windowBackgroundNSColor: NSColor { .clear }
+    static var windowBackground: some View { AppWindowSurface().ignoresSafeArea() }
+    static var sidebarBackground: some View { AppWindowSurface(material: .sidebar).ignoresSafeArea() }
+    private static let panelFill = NSColor(name: "TorrServeSettingsGroup") { appearance in
+        let dark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        return NSColor.white.withAlphaComponent(dark ? 0.035 : 0.65)
     }
-
-    static var windowBackground: Color {
-        Color(nsColor: windowBackgroundNSColor)
-    }
-
-    static var sidebarBackground: Color {
-        Color(nsColor: adaptiveColor(
-            dark: NSColor(
-                srgbRed: 28.0 / 255.0,
-                green: 30.0 / 255.0,
-                blue: 43.0 / 255.0,
-                alpha: 1
-            ),
-            light: .windowBackgroundColor
-        ))
-    }
-
-    static var panelBackground: Color {
-        Color(nsColor: adaptiveColor(
-            dark: NSColor(
-                srgbRed: 38.0 / 255.0,
-                green: 40.0 / 255.0,
-                blue: 54.0 / 255.0,
-                alpha: 1
-            ),
-            light: .controlBackgroundColor
-        ))
-    }
-
-    private static func adaptiveColor(dark: NSColor, light: NSColor) -> NSColor {
-        NSColor(name: nil) { appearance in
-            appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
-        }
-    }
+    static var panelBackground: Color { Color(nsColor: panelFill) }
 }
 
 struct SettingsPageHeader: View {
     let title: String
     let message: String
+    var isSettingsPage = false
+    static let height: CGFloat = 48
     @Environment(\.settingsSidebarIsVisible) private var isSidebarVisible
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
-                .font(.title2.weight(.bold))
+                .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(.primary)
                 .lineLimit(1)
 
             Text(message)
-                .font(.subheadline)
+                .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.tail)
         }
-        .frame(maxWidth: .infinity, minHeight: 50, maxHeight: 50, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: Self.height, alignment: .center)
         .padding(.leading, isSidebarVisible
             ? 18
             : SettingsScreenLayout.collapsedHeaderLeadingPadding)
         .padding(.trailing, 18)
-        .background(SettingsVisualStyle.windowBackground)
         .overlay(alignment: .bottom) {
             Divider()
         }

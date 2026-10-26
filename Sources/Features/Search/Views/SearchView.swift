@@ -11,6 +11,8 @@ private struct SearchResultsHeaderHeightKey: PreferenceKey {
 struct SearchView: View {
     @ObservedObject var mainModel: MainWindowModel
     @ObservedObject var model: SearchViewModel
+    @FocusState private var searchFieldIsFocused: Bool
+    @State private var showsSourceErrors = false
     @State private var resultsHeaderOverlayHeight: CGFloat = 40
     @State private var resultsScrollMetrics = AppScrollMetrics.zero
     @State private var resultsScrollIndicatorIsVisible = false
@@ -23,16 +25,11 @@ struct SearchView: View {
     }
 
     var body: some View {
-        Group {
-            if model.isConfigured {
-                searchContent
-            } else {
-                setupContent
-            }
-        }
+        searchContent
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onChange(of: mainModel.searchFocusRevision) { _, _ in searchFieldIsFocused = true }
         .sheet(isPresented: $model.showsSettings) {
-            settingsSheet
+            SearchSourcesSettingsView(model: model, language: mainModel.language)
         }
         .alert(item: $model.alert) { alert in
             Alert(
@@ -46,6 +43,7 @@ struct SearchView: View {
     private var searchContent: some View {
         VStack(spacing: 12) {
             searchBar
+            if model.hasSearched { sourceStatus }
 
             HStack(spacing: 12) {
                 resultsPanel
@@ -57,72 +55,86 @@ struct SearchView: View {
     }
 
     private var searchBar: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(.secondary)
                 TextField(texts.searchPlaceholder, text: $model.query)
                     .textFieldStyle(.plain)
-                    .onSubmit {
-                        model.search(language: mainModel.language)
-                    }
-
+                    .focused($searchFieldIsFocused)
+                    .onExitCommand { searchFieldIsFocused = false }
+                    .onSubmit { model.search(language: mainModel.language) }
                 if !model.query.isEmpty {
-                    Button {
-                        model.query = ""
-                    } label: {
+                    Button { model.query = "" } label: {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
+                    .help(mainModel.language == .russian ? "Очистить поиск" : "Clear search")
                 }
             }
-            .padding(.horizontal, 12)
-            .frame(height: 38)
-            .background(
-                Color.secondary.opacity(0.10),
-                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-            )
+            .font(.system(size: 13))
+            .padding(.horizontal, 10)
+            .appToolbarControlSurface()
+            .layoutPriority(1)
 
-            Button {
-                model.search(language: mainModel.language)
-            } label: {
-                HStack(spacing: 7) {
+            Button { model.search(language: mainModel.language) } label: {
+                HStack(spacing: 6) {
                     if model.isSearching {
-                        ProgressView()
-                            .controlSize(.small)
-                    } else {
-                        Image(systemName: "magnifyingglass")
+                        ProgressView().controlSize(.mini).frame(width: 14, height: 14)
                     }
                     Text(texts.find)
                 }
-                .frame(minWidth: 78)
+                .frame(width: 84)
+                .appToolbarControlSurface()
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .disabled(
-                model.isSearching
-                    || model.query.trimmingCharacters(
-                        in: .whitespacesAndNewlines
-                    ).isEmpty
-            )
+            .buttonStyle(.plain)
+            .disabled(!model.isConfigured || model.isSearching || model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
-            Button {
-                model.showsSettings = true
+            Menu {
+                ForEach(TorrentSearchMode.allCases) { mode in
+                    Button { model.setMode(mode) } label: {
+                        if mode == model.mode {
+                            Label(mode.title(language: mainModel.language), systemImage: "checkmark")
+                        } else {
+                            Text(mode.title(language: mainModel.language))
+                        }
+                    }
+                }
             } label: {
-                Label("Jackett", systemImage: "gearshape")
-                    .font(.system(size: 12.5, weight: .medium))
+                Text(model.mode.title(language: mainModel.language))
+                    .font(.system(size: 13, weight: .medium))
             }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.visible)
+            .padding(.horizontal, 10)
+            .frame(width: 148)
+            .appToolbarControlSurface()
+            .fixedSize()
+            .help(model.mode.detail(language: mainModel.language))
+            .accessibilityLabel(mainModel.language == .russian ? "Источник поиска" : "Search source")
+
+            Button { model.showsSettings = true } label: {
+                Image(systemName: "slider.horizontal.3")
+                    .frame(width: AppToolbarMetrics.controlHeight)
+                    .appToolbarControlSurface()
+            }
+            .buttonStyle(.plain)
+            .help(mainModel.language == .russian ? "Настроить источники поиска" : "Configure search sources")
+            .accessibilityLabel(mainModel.language == .russian ? "Настройки поиска" : "Search settings")
         }
-        .padding(10)
+        .padding(8)
         .appPanel()
     }
 
     private var resultsPanel: some View {
         ZStack {
-            if model.isSearching && model.results.isEmpty {
+            if !model.isConfigured {
+                setupContent
+                    .padding(.top, resultsHeaderOverlayHeight)
+                    .padding(.trailing, 14)
+                    .padding(.bottom, 14)
+            } else if model.isSearching && model.results.isEmpty {
                 searchLoading
                     .padding(.top, resultsHeaderOverlayHeight)
                     .padding(.trailing, 14)
@@ -148,9 +160,7 @@ struct SearchView: View {
                     }
                     .padding(.top, resultsHeaderOverlayHeight)
                     .padding(.bottom, 14)
-                    // Match the compact Library list: SwiftUI reserves a hidden
-                    // 17 pt trailing gutter even without the native scroller.
-                    .padding(.trailing, -3)
+                    .padding(.trailing, 14)
                     .padding(.vertical, 2)
                     .background {
                         AppNativeScrollIndicatorHider()
@@ -200,9 +210,8 @@ struct SearchView: View {
                 .font(.headline)
             Spacer()
 
+            sortMenu
             if !model.results.isEmpty {
-                sortMenu
-
                 Text("\(model.results.count)")
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
@@ -243,17 +252,14 @@ struct SearchView: View {
 
             Divider()
 
-            Button {
-                model.toggleSortDirection()
-            } label: {
-                Label(
-                    model.sortAscending
-                        ? texts.ascending
-                        : texts.descending,
-                    systemImage: model.sortAscending
-                        ? "arrow.up"
-                        : "arrow.down"
-                )
+            ForEach([false, true], id: \.self) { ascending in
+                Button { model.sortAscending = ascending } label: {
+                    if model.sortAscending == ascending {
+                        Label(ascending ? texts.ascending : texts.descending, systemImage: "checkmark")
+                    } else {
+                        Text(ascending ? texts.ascending : texts.descending)
+                    }
+                }
             }
         } label: {
             Label(
@@ -300,164 +306,90 @@ struct SearchView: View {
     private var searchLoading: some View {
         VStack(spacing: 12) {
             ProgressView()
-            Text(texts.searching)
+            Text(mainModel.language == .russian ? "Поиск по источникам…" : "Searching sources…")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var sourceStatus: some View {
+        HStack(spacing: 8) {
+            if model.isSearching { ProgressView().controlSize(.mini) }
+            Text(mainModel.language == .russian
+                ? "Ответили источники: \(model.completedSourceCount) из \(model.totalSourceCount)"
+                : "Sources responded: \(model.completedSourceCount) of \(model.totalSourceCount)")
+                .foregroundStyle(.secondary)
+            Spacer()
+            if !model.sourceErrors.isEmpty {
+                Button {
+                    showsSourceErrors.toggle()
+                } label: {
+                    Label(mainModel.language == .russian ? "Недоступны: \(model.sourceErrors.count)" : "Unavailable: \(model.sourceErrors.count)", systemImage: "exclamationmark.triangle")
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.orange)
+                .popover(isPresented: $showsSourceErrors) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(model.sourceErrors.keys.sorted(), id: \.self) { name in
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(name).font(.headline)
+                                Text(model.sourceErrors[name] ?? "").font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                            }
+                        }
+                    }
+                    .padding(16).frame(width: 330)
+                }
+            }
+        }
+        .font(.caption)
+        .padding(.horizontal, 4)
     }
 
     private var searchEmpty: some View {
         VStack(spacing: 11) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 34, weight: .light))
-            Text(texts.startSearching)
+            Text(model.hasSearched
+                ? (model.successfulSourceCount == 0
+                    ? (mainModel.language == .russian ? "Источники недоступны" : "Sources Unavailable")
+                    : (mainModel.language == .russian ? "Раздачи не найдены" : "No releases found"))
+                : texts.startSearching)
                 .font(.headline)
-            Text(texts.startSearchingHint)
+            Text(model.hasSearched
+                ? (mainModel.language == .russian ? "Измените запрос или выберите другие источники. Сведения о недоступных источниках показаны над списком." : "Try another query or different sources. Unavailable sources are listed above.")
+                : model.mode.detail(language: mainModel.language))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .foregroundStyle(.secondary)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(16)
     }
 
     private var setupContent: some View {
-        VStack(spacing: 18) {
-            ZStack {
-                Circle()
-                    .fill(Color.accentColor.opacity(0.15))
-                    .frame(width: 76, height: 76)
-                Image(systemName: "sparkle.magnifyingglass")
-                    .font(.system(size: 32, weight: .medium))
-                    .foregroundStyle(Color.accentColor)
-            }
-
-            VStack(spacing: 6) {
-                Text(texts.connectJackett)
-                    .font(.system(size: 22, weight: .semibold, design: .rounded))
-                Text(texts.connectJackettHint)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 540)
-            }
-
-            configurationFields
-                .frame(width: 540)
-
-            HStack {
-                Button(texts.openProject) {
-                    model.openJackettProject()
-                }
-                .buttonStyle(.bordered)
-
-                Button {
-                    model.testConnection(
-                        language: mainModel.language,
-                        closeOnSuccess: false
-                    )
-                } label: {
-                    if model.isTesting {
-                        ProgressView()
-                            .controlSize(.small)
-                    } else {
-                        Label(texts.connect, systemImage: "bolt.horizontal")
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(model.isTesting || !model.configuration.isComplete)
-            }
-
-            connectionStatus
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(28)
-        .appPanel()
-    }
-
-    private var settingsSheet: some View {
-        VStack(alignment: .leading, spacing: 17) {
-            HStack {
-                Label(texts.jackettSettings, systemImage: "gearshape.2")
-                    .font(.title3.weight(.semibold))
-                Spacer()
-                Button {
-                    model.showsSettings = false
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-            }
-
-            Text(texts.settingsHint)
+        VStack(spacing: 14) {
+            Image(systemName: "slider.horizontal.3")
+                .font(.system(size: 32, weight: .light))
+                .foregroundStyle(.secondary)
+            Text(mainModel.language == .russian ? "Настройте источники" : "Choose Your Sources")
+                .font(.headline)
+            Text(model.mode == .jackett ? texts.connectJackettHint
+                : (mainModel.language == .russian ? "Включите хотя бы один источник TorrentSearch или подключите Jackett." : "Enable a TorrentSearch source or connect Jackett."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
-
-            configurationFields
-            connectionStatus
-
-            HStack {
-                Button(texts.openJackett) {
-                    model.openJackett()
-                }
-                .disabled(model.configuration.normalizedServerURL == nil)
-
-                Button(texts.installJackett) {
-                    model.installJackett()
-                }
-
-                Spacer()
-
-                Button(texts.saveAndCheck) {
-                    model.testConnection(
-                        language: mainModel.language,
-                        closeOnSuccess: true
-                    )
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(model.isTesting || !model.configuration.isComplete)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            Button(mainModel.language == .russian ? "Настроить поиск…" : "Configure Search…") { model.showsSettings = true }
+                .buttonStyle(.borderedProminent)
+            if model.mode == .jackett {
+                Button(mainModel.language == .russian ? "Использовать TorrentSearch" : "Use TorrentSearch") { model.setMode(.torrentSearch) }
+                    .buttonStyle(.borderless)
             }
         }
-        .padding(22)
-        .frame(width: 520)
-    }
-
-    private var configurationFields: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text(texts.jackettAddress)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-                TextField("http://127.0.0.1:9117", text: $model.serverURL)
-                    .textFieldStyle(.roundedBorder)
-            }
-
-            VStack(alignment: .leading, spacing: 5) {
-                Text(texts.apiKey)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-                SecureField(texts.apiKeyPlaceholder, text: $model.apiKey)
-                    .textFieldStyle(.roundedBorder)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var connectionStatus: some View {
-        if !model.connectionMessage.isEmpty {
-            Label(
-                model.connectionMessage,
-                systemImage: model.connectionIsHealthy
-                    ? "checkmark.circle.fill"
-                    : "exclamationmark.triangle.fill"
-            )
-            .font(.caption)
-            .foregroundStyle(
-                model.connectionIsHealthy ? Color.green : Color.orange
-            )
-            .lineLimit(2)
-        }
+        .padding(18)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

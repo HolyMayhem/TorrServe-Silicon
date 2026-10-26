@@ -31,7 +31,7 @@ struct AppSidebarView: View {
             .allowsHitTesting(false)
             .accessibilityHidden(true)
         }
-        .background(.thinMaterial)
+        .background(SettingsVisualStyle.sidebarBackground)
         .onMoveCommand { direction in
             let sections = primarySections
             guard let selection, let index = sections.firstIndex(of: selection) else { return }
@@ -68,10 +68,11 @@ struct AppSidebarView: View {
             if let update = mainModel.torrServerUpdate {
                 SidebarUpdateNotice(
                     update: update,
-                    language: mainModel.language
-                ) {
-                    mainModel.onOpenSettings?(.server)
-                }
+                    language: mainModel.language,
+                    canInstall: mainModel.canInstallTorrServerUpdate,
+                    showDetails: { mainModel.onOpenSettings?(.updates) },
+                    install: { mainModel.onInstallTorrServerUpdate?() }
+                )
                 .padding(.horizontal, 14)
                 .padding(.bottom, 10)
             }
@@ -129,40 +130,50 @@ struct AppSidebarView: View {
 
 }
 
-private struct SidebarUpdateNotice: View {
+struct SidebarUpdateNotice: View {
     let update: TorrServerAvailableUpdate
     let language: AppLanguage
-    let action: () -> Void
+    let canInstall: Bool
+    let showDetails: () -> Void
+    let install: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
-                Image(systemName: "arrow.down.circle.fill")
-                    .foregroundStyle(.orange)
-
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(language == .russian ? "Доступно обновление" : "Update available")
-                        .font(.caption.weight(.semibold))
+        HStack(spacing: 8) {
+            Button(action: showDetails) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(language == .russian ? "Обновление MatriX" : "MatriX update")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(colorScheme == .dark ? Color.white.opacity(0.7) : Color.secondary)
                     Text(update.latestVersion)
-                        .font(.caption2.monospacedDigit())
-                        .foregroundStyle(.secondary)
+                        .font(.caption.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(colorScheme == .dark ? Color.white : Color.primary)
                 }
-
-                Spacer(minLength: 4)
-
-                Image(systemName: "chevron.right")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.tertiary)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
-            .padding(9)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .liquidGlassPanel(cornerRadius: 14, interactive: true)
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .help(language == .russian ? "Сведения об обновлении" : "Update details")
+
+            Button(action: install) {
+                Image(systemName: "arrow.down.to.line")
+                    .font(.system(size: 12, weight: .semibold))
+                    .frame(width: 30, height: 30)
+                    .foregroundStyle(.primary)
+                    .background(Color.primary.opacity(0.07), in: Circle())
+                    .overlay { Circle().strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5) }
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!canInstall)
+            .opacity(canInstall ? 1 : 0.45)
+            .help(language == .russian ? "Установить \(update.latestVersion)" : "Install \(update.latestVersion)")
+            .accessibilityLabel(language == .russian ? "Установить обновление TorrServer" : "Install TorrServer update")
         }
-        .buttonStyle(.plain)
-        .help(language == .russian
-            ? "Установлена \(update.installedVersion), доступна \(update.latestVersion)"
-            : "Installed \(update.installedVersion), available \(update.latestVersion)")
+        .padding(10)
+        .liquidGlassPanel(cornerRadius: 14)
+        .accessibilityElement(children: .contain)
     }
 }
 

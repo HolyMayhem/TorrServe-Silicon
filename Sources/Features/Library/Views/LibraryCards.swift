@@ -14,60 +14,31 @@ struct TorrentPosterCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            ZStack(alignment: .bottom) {
-                LibraryPoster(torrent: torrent, metadata: metadata)
-
-                LinearGradient(
-                    colors: [.clear, .black.opacity(0.78)],
-                    startPoint: .center,
-                    endPoint: .bottom
-                )
-
-                VStack(spacing: 7) {
-                    HStack {
-                        Text(texts.status(for: torrent))
-                            .font(.caption2.weight(.semibold))
-                        Spacer()
-                        if let resolution = torrent.resolutionLabel {
-                            Text(resolution).font(.caption2.weight(.bold))
-                        }
+            Color.clear
+                .aspectRatio(2.0 / 3.0, contentMode: .fit)
+                .overlay {
+                    GeometryReader { bounds in
+                        posterContent
+                            .frame(width: bounds.size.width, height: bounds.size.height)
                     }
-                    .foregroundStyle(.white)
-
-                    if torrent.stat == 2, let progress = torrent.bufferingProgress {
-                        ProgressView(value: progress)
-                            .tint(.orange)
-                    }
-
-                    Button(action: play) {
-                        Label(texts.watch, systemImage: "play.fill")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .tint(.green)
-                    .disabled(torrent.playableFiles.isEmpty)
                 }
-                .padding(10)
-            }
-            .frame(minWidth: 0, maxWidth: .infinity)
-            .aspectRatio(2.0 / 3.0, contentMode: .fit)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(alignment: .topTrailing) {
-                if isDownloaded {
-                    LibraryDownloadedIndicator(language: language)
-                        .padding(8)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(alignment: .topTrailing) {
+                    if isDownloaded {
+                        LibraryDownloadedIndicator(language: language)
+                            .padding(8)
+                    }
                 }
-            }
 
             Text(metadata?.displayTitle ?? torrent.displayTitle)
                 .font(.system(size: 12.5, weight: .semibold))
                 .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .frame(height: 32, alignment: .topLeading)
 
-            HStack {
+            HStack(spacing: 5) {
                 Text(LibraryFormat.fileSize(torrent.torrentSize))
-                Spacer()
+                Spacer(minLength: 0)
                 if let year = metadata?.releaseDate?.prefix(4), !year.isEmpty {
                     Text(String(year))
                 }
@@ -76,20 +47,68 @@ struct TorrentPosterCard: View {
                 }
             }
             .font(.caption2)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
             .foregroundStyle(.secondary)
         }
-        .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
         .padding(9)
+        .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
         .background(
             isSelected ? Color.accentColor.opacity(0.18) : Color.secondary.opacity(0.07),
             in: RoundedRectangle(cornerRadius: 16)
         )
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(isSelected ? Color.accentColor : .clear, lineWidth: 1.5)
+                .strokeBorder(isSelected ? Color.accentColor : .clear, lineWidth: 1.5)
         }
         .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .onTapGesture(perform: select)
+    }
+
+    private var posterContent: some View {
+        ZStack(alignment: .bottom) {
+            LibraryPoster(torrent: torrent, metadata: metadata)
+
+            LinearGradient(
+                colors: [.clear, .black.opacity(0.78)],
+                startPoint: .center,
+                endPoint: .bottom
+            )
+
+            VStack(spacing: 7) {
+                HStack {
+                    Text(texts.status(for: torrent))
+                        .font(.caption2.weight(.semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                    Spacer(minLength: 6)
+                    if let resolution = torrent.resolutionLabel {
+                        Text(resolution).font(.caption2.weight(.bold)).lineLimit(1).fixedSize()
+                    }
+                }
+                .foregroundStyle(.white)
+
+                if torrent.stat == 2, let progress = torrent.bufferingProgress {
+                    ProgressView(value: progress)
+                        .tint(.orange)
+                }
+
+                Button(action: play) {
+                    Label(texts.watch, systemImage: "play.fill")
+                        .font(.system(size: 11, weight: .medium))
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, minHeight: 24)
+                        .foregroundStyle(.black)
+                        .background(.green, in: RoundedRectangle(cornerRadius: 6))
+                        .contentShape(RoundedRectangle(cornerRadius: 6))
+                }
+                .buttonStyle(.plain)
+                .disabled(torrent.playableFiles.isEmpty)
+                .opacity(torrent.playableFiles.isEmpty ? 0.45 : 1)
+            }
+            .padding(10)
+        }
     }
 }
 

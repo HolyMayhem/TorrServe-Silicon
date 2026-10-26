@@ -148,20 +148,16 @@ struct CachedRemoteImage: View {
     @StateObject private var loader = CachedImageLoader()
 
     var body: some View {
-        ZStack {
-            LinearGradient(
-                colors: [
-                    Color.secondary.opacity(0.16),
-                    Color.secondary.opacity(0.07)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-
+        LinearGradient(
+            colors: [Color.secondary.opacity(0.16), Color.secondary.opacity(0.07)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        .overlay {
+            // Only the parent defines layout. Image aspect ratio must never
+            // enlarge the poster, its overlays, or the surrounding grid cell.
             if let image = loader.image {
-                Image(nsImage: image)
-                    .resizable()
-                    .aspectRatio(contentMode: contentMode)
+                ConstrainedImage(image: image, contentMode: contentMode)
             } else if loader.isLoading {
                 ProgressView().controlSize(.small)
             } else {
@@ -173,6 +169,22 @@ struct CachedRemoteImage: View {
         .clipped()
         .task(id: url) {
             await loader.load(url)
+        }
+    }
+}
+
+/// An image can fill its proposed rectangle without changing its layout size.
+struct ConstrainedImage: View {
+    let image: NSImage
+    var contentMode: ContentMode = .fill
+
+    var body: some View {
+        GeometryReader { bounds in
+            Image(nsImage: image)
+                .resizable()
+                .aspectRatio(contentMode: contentMode)
+                .frame(width: bounds.size.width, height: bounds.size.height)
+                .clipped()
         }
     }
 }

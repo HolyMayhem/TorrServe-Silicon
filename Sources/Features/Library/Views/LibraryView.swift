@@ -7,6 +7,7 @@ struct LibraryView: View {
     @ObservedObject var model: LibraryViewModel
     @ObservedObject var offlineDownloadManager: OfflineDownloadManager
     @FocusState private var magnetFieldIsFocused: Bool
+    @FocusState private var searchFieldIsFocused: Bool
     @State private var compactHeaderOverlayHeight: CGFloat = 82
     @State private var compactFooterOverlayHeight: CGFloat = 40
     @State private var compactScrollMetrics = AppScrollMetrics.zero
@@ -22,7 +23,12 @@ struct LibraryView: View {
     }
 
     var body: some View {
-        libraryContent
+        ScrollViewReader { proxy in
+            libraryContent
+                .onChange(of: model.selectionNavigationRevision) { _, _ in
+                    if let id = model.selectedTorrentID { proxy.scrollTo(id) }
+                }
+        }
         .alert(
             texts.removeMaterialQuestion(count: model.pendingDeletionTorrents.count),
             isPresented: deletionAlertIsPresented
@@ -50,6 +56,9 @@ struct LibraryView: View {
         .onAppear {
             model.startPolling()
         }
+        .onChange(of: mainModel.searchFocusRevision) { _, _ in
+            searchFieldIsFocused = true
+        }
         .onDisappear {
             model.stopPolling()
         }
@@ -59,11 +68,7 @@ struct LibraryView: View {
             perform: handleDrop
         )
         .background {
-            LibraryKeyboardShortcutMonitor(
-                onDelete: handleDeleteKey,
-                onReturn: handleReturnKey,
-                onPaste: handlePaste
-            )
+            LibraryKeyboardShortcutMonitor(perform: handleKeyboardCommand)
             .frame(width: 0, height: 0)
         }
     }
@@ -237,6 +242,8 @@ struct LibraryView: View {
 
                 TextField(texts.search, text: $model.searchText)
                     .textFieldStyle(.roundedBorder)
+                    .focused($searchFieldIsFocused)
+                    .onExitCommand { searchFieldIsFocused = false }
             }
             .padding(.bottom, compactScrollEdgeFadeHeight)
         }
@@ -296,6 +303,8 @@ struct LibraryView: View {
 
                 TextField(texts.search, text: $model.searchText)
                     .textFieldStyle(.roundedBorder)
+                    .focused($searchFieldIsFocused)
+                    .onExitCommand { searchFieldIsFocused = false }
                     .frame(maxWidth: 260)
 
                 Spacer()
@@ -579,10 +588,32 @@ struct LibraryView: View {
     }
 
     private func select(_ torrent: NativeTorrent) {
+        searchFieldIsFocused = false
         model.select(
             torrent,
             extendingSelection: NSEvent.modifierFlags.contains(.command)
         )
+    }
+
+    private func handleKeyboardCommand(_ command: LibraryKeyboardCommand) -> Bool {
+        guard !model.showsMagnetSheet, !model.showsPlayerSetup,
+              model.pendingDeletionTorrents.isEmpty, model.alert == nil else { return false }
+        switch command {
+        case .delete: return mainModel.canStop && handleDeleteKey()
+        case .play: return handleReturnKey()
+        case .paste: return handlePaste()
+        case .selectAll:
+            guard mainModel.canStop else { return false }
+            model.selectAllVisibleTorrents()
+        case .deselectAll, .escape:
+            model.clearSelection()
+        case .copyStream:
+            guard let torrent = model.selectedTorrent, !torrent.playableFiles.isEmpty else { return false }
+            model.copyStreamURL(for: torrent)
+        case .previous: model.moveSelection(by: -1)
+        case .next: model.moveSelection(by: 1)
+        }
+        return true
     }
 
     private func handleDeleteKey() -> Bool {

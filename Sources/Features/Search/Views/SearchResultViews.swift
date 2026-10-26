@@ -25,13 +25,15 @@ struct SearchResultRow: View {
                         Label("\(result.peers)", systemImage: "person.2")
                             .foregroundStyle(result.peers > 0 ? Color.blue : .secondary)
                         Text(SearchFormat.fileSize(result.size))
-                        if !result.tracker.isEmpty {
-                            Text(result.tracker)
-                                .lineLimit(1)
-                        }
                     }
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+                    if !result.tracker.isEmpty {
+                        Text(result.tracker)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
 
                 Spacer(minLength: 3)

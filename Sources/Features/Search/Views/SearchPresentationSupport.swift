@@ -28,12 +28,12 @@ struct SearchTexts {
             return language == .russian ? "Размер" : "Size"
         }
     }
-    var searching: String { language == .russian ? "Поиск в Jackett…" : "Searching Jackett…" }
+    var searching: String { language == .russian ? "Поиск по источникам…" : "Searching sources…" }
     var startSearching: String { language == .russian ? "Найдите фильм" : "Find something to watch" }
     var startSearchingHint: String {
         language == .russian
-            ? "Jackett выполнит поиск по подключённым торрент-трекерам."
-            : "Jackett will search your configured torrent indexers."
+            ? "Выберите TorrentSearch, Jackett или оба варианта."
+            : "Choose TorrentSearch, Jackett, or both."
     }
     var selectResult: String { language == .russian ? "Выберите раздачу" : "Select a release" }
     var selectResultHint: String {

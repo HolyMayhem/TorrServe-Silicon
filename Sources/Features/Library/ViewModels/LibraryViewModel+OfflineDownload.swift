@@ -2,18 +2,17 @@ import AppKit
 import Foundation
 
 extension LibraryViewModel {
-    func reconcileOfflineDownloads(in torrents: [NativeTorrent]) {
-        for torrent in torrents {
-            for file in torrent.playableFiles {
-                guard let sourceURL = api.streamURL(torrent: torrent, file: file) else {
-                    continue
-                }
-                offlineDownloadManager.reconcileCompletedDownload(
-                    sourceURL: sourceURL,
-                    filename: file.displayName,
-                    expectedLength: file.length
-                )
-            }
+    func offlineDownloadProgress(in torrent: NativeTorrent) -> OfflineDownloadProgress? {
+        guard let request = offlineDownloadManager.currentRequest,
+              torrent.allFiles.contains(where: {
+                  api.streamURL(torrent: torrent, file: $0) == request.sourceURL
+                      && $0.length == request.expectedLength
+              }) else { return nil }
+        switch offlineDownloadManager.state {
+        case .downloading(let progress), .pausing(let progress): return progress
+        case .resuming(let checkpoint), .paused(let checkpoint): return checkpoint.progress
+        case .cancelling(let progress): return progress
+        default: return nil
         }
     }
 

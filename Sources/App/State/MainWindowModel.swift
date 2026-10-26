@@ -171,9 +171,17 @@ final class MainWindowModel: ObservableObject {
             && serverSettingsDraft.normalized != savedServerSettingsDraft.normalized
     }
 
+    var canInstallTorrServerUpdate: Bool {
+        torrServerUpdate != nil && torrServerUpdateActivity == nil && statusKind != .working
+    }
+
+    @Published var isCheckingForTorrServerUpdates = false
+    @Published var searchFocusRevision = 0
+
     var onPathChanged: ((String) -> Void)?
     var onChoose: (() -> Void)?
     var onDownload: (() -> Void)?
+    var onCheckForTorrServerUpdates: (() -> Void)?
     var onInstallTorrServerUpdate: (() -> Void)?
     var onStart: (() -> Void)?
     var onStop: (() -> Void)?
@@ -189,6 +197,7 @@ final class MainWindowModel: ObservableObject {
     var onHideDockIconChanged: ((Bool) -> Void)?
     var onNotificationsChanged: ((Bool) -> Void)?
     var onNotificationPreferencesChanged: ((AppNotificationPreferences) -> Void)?
+    var onConfigureSearch: (() -> Void)?
     var onJackettEnabledChanged: ((Bool) -> Void)?
     var onMetadataSourceChanged: ((MetadataSourceMode) -> Void)?
     var onAniListEnabledChanged: ((Bool) -> Void)?

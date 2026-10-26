@@ -5,13 +5,11 @@ struct SettingsView: View {
     @ObservedObject var model: MainWindowModel
     @ObservedObject var offlineDownloadManager: OfflineDownloadManager
     let category: SettingsCategory
-    @State private var scrollMetrics = AppScrollMetrics.zero
-    @State private var scrollIndicatorIsVisible = false
     @State private var offlineDownloadError: String?
     @State private var offlineDownloadErrorTitle: String?
     @State private var pendingOfflineDownloadDeletion: OfflineDownloadRecord?
 
-    private let pickerColumnWidth: CGFloat = 220
+    private let pickerColumnWidth: CGFloat = 190
 
     private var texts: Texts { Texts(language: model.language) }
 
@@ -22,36 +20,14 @@ struct SettingsView: View {
             }
             .padding(.horizontal, SettingsScreenLayout.formContentInset)
             .padding(.top, SettingsScreenLayout.scrollContentTopPadding)
-            .padding(.bottom, 12)
-            .background {
-                AppNativeScrollIndicatorHider()
-            }
+            .padding(.bottom, 24)
         }
-        .scrollIndicators(.hidden)
-        .onScrollGeometryChange(for: AppScrollMetrics.self) { geometry in
-            AppScrollMetrics(geometry)
-        } action: { _, metrics in
-            scrollMetrics = metrics
-        }
-        .onScrollPhaseChange { _, phase in
-            withAnimation(.easeOut(duration: phase.isScrolling ? 0.08 : 0.24)) {
-                scrollIndicatorIsVisible = phase.isScrolling
-            }
-        }
-        .overlay {
-            AppScrollIndicator(
-                metrics: scrollMetrics,
-                topInset: 0,
-                bottomInset: 0,
-                isVisible: scrollIndicatorIsVisible
-            )
-        }
+        .scrollIndicators(.automatic)
         .frame(maxWidth: SettingsScreenLayout.contentMaxWidth)
         .padding(.horizontal, SettingsScreenLayout.horizontalPadding)
         .padding(.top, SettingsScreenLayout.topPadding)
         .padding(.bottom, SettingsScreenLayout.bottomPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(SettingsVisualStyle.windowBackground)
         .onAppear {
             if category == .downloads {
                 offlineDownloadManager.refreshCompletedDownloads()
@@ -112,6 +88,7 @@ struct SettingsView: View {
         case .menuBar:
             menuBarSection
         case .updates:
+            torrServerUpdatesSection
             appUpdatesSection
         case .downloads:
             offlineDownloadsSection
@@ -120,13 +97,15 @@ struct SettingsView: View {
             if model.metadataSource != .disabled {
                 animeMetadataSection
             }
+        case .keyboard:
+            KeyboardShortcutsSettingsView(language: model.language)
         case .server:
             EmptyView()
         }
     }
 
     private var applicationSection: some View {
-        settingsSection(title: model.language == .russian ? "Приложение" : "Application") {
+        settingsSection(title: model.language == .russian ? "Запуск и поведение" : "Startup & Behavior") {
             toggleRow(
                 texts.launchAtLogin,
                 keyPath: \.launchAtLogin,
@@ -140,12 +119,6 @@ struct SettingsView: View {
             )
             Divider()
             toggleRow(
-                texts.autoUpdateTorrServer,
-                keyPath: \.autoUpdateTorrServer,
-                callback: model.onAutoUpdateTorrServerChanged
-            )
-            Divider()
-            toggleRow(
                 texts.hideDockIcon,
                 keyPath: \.hideDockIcon,
                 callback: model.onHideDockIconChanged
@@ -155,89 +128,114 @@ struct SettingsView: View {
     }
 
     private var notificationsSection: some View {
-        settingsSection(
-            title: model.language == .russian ? "Уведомления" : "Notifications",
-            footer: model.language == .russian
-                ? "Для показа уведомлений приложению также требуется разрешение macOS."
-                : "The app also needs permission from macOS to display notifications."
-        ) {
-            notificationPreferenceRow(
-                systemImage: "bell.fill",
-                title: model.language == .russian
-                    ? "Включить уведомления"
-                    : "Enable notifications",
-                detail: model.language == .russian
-                    ? "Разрешить TorrServe Silicon сообщать о важных событиях."
-                    : "Allow TorrServe Silicon to report important events.",
-                isOn: setting(
-                    \.notificationsEnabled,
-                    callback: model.onNotificationsChanged
+        VStack(spacing: SettingsScreenLayout.sectionSpacing) {
+            settingsSection(
+                title: model.language == .russian ? "Уведомления" : "Notifications",
+                footer: model.language == .russian
+                    ? "Показ уведомлений также должен быть разрешён в настройках macOS."
+                    : "Notifications must also be allowed in macOS Settings."
+            ) {
+                notificationPreferenceRow(
+                    systemImage: "bell.fill",
+                    title: model.language == .russian ? "Разрешить уведомления" : "Allow notifications",
+                    detail: model.language == .russian ? "Загрузки, состояние сервера и обновления." : "Downloads, server status, and updates.",
+                    isOn: setting(\.notificationsEnabled, callback: model.onNotificationsChanged)
                 )
-            )
-            .disabled(model.notificationsAuthorizationPending)
-
-            Divider()
-
-            notificationPreferenceRow(
-                systemImage: "speaker.wave.2.fill",
-                title: model.language == .russian
-                    ? "Звук уведомлений"
-                    : "Notification sound",
-                detail: model.language == .russian
-                    ? "Воспроизводить системный звук вместе с уведомлением."
-                    : "Play the system sound when a notification arrives.",
-                isOn: notificationSoundBinding
-            )
-            .disabled(notificationDetailsDisabled)
-            .opacity(notificationDetailsDisabled ? 0.55 : 1)
-
-            ForEach(AppNotificationEvent.allCases) { event in
+                .disabled(model.notificationsAuthorizationPending)
                 Divider()
                 notificationPreferenceRow(
-                    systemImage: notificationEventIcon(event),
-                    title: notificationEventTitle(event),
-                    detail: notificationEventDetail(event),
-                    isOn: notificationEventBinding(event)
+                    systemImage: "speaker.wave.2.fill",
+                    title: model.language == .russian ? "Звук уведомлений" : "Notification sound",
+                    detail: model.language == .russian ? "Воспроизводить системный звук." : "Play the system notification sound.",
+                    isOn: notificationSoundBinding
                 )
                 .disabled(notificationDetailsDisabled)
-                .opacity(notificationDetailsDisabled ? 0.55 : 1)
+            }
+
+            settingsSection(title: model.language == .russian ? "События" : "Events") {
+                ForEach(AppNotificationEvent.allCases) { event in
+                    if event != AppNotificationEvent.allCases.first { Divider() }
+                    notificationPreferenceRow(
+                        systemImage: notificationEventIcon(event),
+                        title: notificationEventTitle(event),
+                        detail: notificationEventDetail(event),
+                        isOn: notificationEventBinding(event)
+                    )
+                    .disabled(notificationDetailsDisabled)
+                }
             }
         }
     }
 
     private var menuBarSection: some View {
-        settingsSection(
-            title: texts.menuBarSettings,
-            footer: texts.menuBarSettingsFooter
-        ) {
-            menuBarToggleRow(texts.showMenuBarIcon, keyPath: \.isIconVisible)
-            Divider()
-            menuBarToggleRow(texts.showSpeed, keyPath: \.showsSpeed)
-            Divider()
-            menuBarToggleRow(texts.showRecentMaterial, keyPath: \.showsRecentMaterial)
-            Divider()
-            menuBarToggleRow(texts.showQuickActions, keyPath: \.showsQuickActions)
-            Divider()
-            menuBarToggleRow(texts.showQRCodeInMenu, keyPath: \.showsQRCode)
-            Divider()
-            menuBarToggleRow(texts.expandQRCodeOnOpen, keyPath: \.expandsQRCodeOnOpen)
-                .disabled(!model.menuBarPreferences.showsQRCode)
-            Divider()
-            settingRow(texts.speedFormat) {
-                Picker("", selection: $model.speedUnit) {
-                    Text(texts.automaticSpeed).tag(SpeedDisplayUnit.automatic)
-                    Text(texts.megabytesSpeed).tag(SpeedDisplayUnit.megabytes)
-                    Text(texts.megabitsSpeed).tag(SpeedDisplayUnit.megabits)
+        VStack(spacing: SettingsScreenLayout.sectionSpacing) {
+            settingsSection(title: model.language == .russian ? "Значок и скорость" : "Icon & Speed", footer: texts.menuBarSettingsFooter) {
+                menuBarToggleRow(texts.showMenuBarIcon, keyPath: \.isIconVisible)
+                Divider()
+                menuBarToggleRow(texts.showSpeed, keyPath: \.showsSpeed)
+                Divider()
+                settingRow(texts.speedFormat) {
+                    Picker(texts.speedFormat, selection: $model.speedUnit) {
+                        Text(texts.automaticSpeed).tag(SpeedDisplayUnit.automatic)
+                        Text(texts.megabytesSpeed).tag(SpeedDisplayUnit.megabytes)
+                        Text(texts.megabitsSpeed).tag(SpeedDisplayUnit.megabits)
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                    .frame(width: pickerColumnWidth, alignment: .trailing)
+                    .onChange(of: model.speedUnit) { _, unit in model.onSpeedUnitChanged?(unit) }
                 }
-                .labelsHidden()
-                .fixedSize()
-                .frame(width: pickerColumnWidth, alignment: .trailing)
-                .onChange(of: model.speedUnit) { _, unit in
-                    model.onSpeedUnitChanged?(unit)
+            }
+            settingsSection(title: model.language == .russian ? "Содержимое меню" : "Menu Content") {
+                menuBarToggleRow(texts.showRecentMaterial, keyPath: \.showsRecentMaterial)
+                Divider()
+                menuBarToggleRow(texts.showQuickActions, keyPath: \.showsQuickActions)
+                Divider()
+                menuBarToggleRow(texts.showQRCodeInMenu, keyPath: \.showsQRCode)
+                Divider()
+                menuBarToggleRow(texts.expandQRCodeOnOpen, keyPath: \.expandsQRCodeOnOpen)
+                    .disabled(!model.menuBarPreferences.showsQRCode)
+            }
+            settingsSection(title: texts.menuBarElementOrder) { menuBarOrderRow }
+        }
+    }
+
+    private var torrServerUpdatesSection: some View {
+        settingsSection(
+            title: "TorrServer MatriX",
+            footer: model.language == .russian
+                ? "Рабочая версия сохраняется. При неудачном запуске обновления приложение вернётся к предыдущей."
+                : "The working version is kept. If the update cannot start, the app restores the previous version."
+        ) {
+            settingRow(model.language == .russian ? "Установленная версия" : "Installed version") {
+                Text(model.torrServerVersion ?? "—")
+                    .font(.callout.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            Divider()
+            if let activity = model.torrServerUpdateActivity {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(activity.detail(language: model.language)).font(.callout)
+                    TorrServerUpdateProgressBar(progress: activity.clampedProgress)
+                }
+                .padding(.vertical, 14)
+            } else if let update = model.torrServerUpdate {
+                settingRow(model.language == .russian ? "Доступна \(update.latestVersion)" : "Available: \(update.latestVersion)") {
+                    Button(model.language == .russian ? "Установить" : "Install") { model.onInstallTorrServerUpdate?() }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(!model.canInstallTorrServerUpdate)
+                }
+            } else {
+                settingRow(model.language == .russian ? "Проверка обновлений" : "Check for updates") {
+                    HStack(spacing: 8) {
+                        if model.isCheckingForTorrServerUpdates { ProgressView().controlSize(.small) }
+                        Button(model.language == .russian ? "Проверить сейчас" : "Check Now") { model.onCheckForTorrServerUpdates?() }
+                            .disabled(model.isCheckingForTorrServerUpdates || model.statusKind == .working)
+                    }
                 }
             }
             Divider()
-            menuBarOrderRow
+            toggleRow(texts.autoUpdateTorrServer, keyPath: \.autoUpdateTorrServer, callback: model.onAutoUpdateTorrServerChanged)
         }
     }
 
@@ -247,8 +245,8 @@ struct SettingsView: View {
                 ? "Обновления TorrServe Silicon"
                 : "TorrServe Silicon Updates",
             footer: model.language == .russian
-                ? "Эти настройки обновляют приложение целиком. Обновление движка TorrServer настраивается отдельно."
-                : "These settings update the whole app. TorrServer engine updates are configured separately."
+                ? "Обновления интерфейса и встроенных компонентов приложения."
+                : "Updates to the interface and the app’s bundled components."
         ) {
             toggleRow(
                 model.language == .russian
@@ -288,22 +286,21 @@ struct SettingsView: View {
                 ? "Файлы хранятся отдельно от приложения и не удаляются при обновлении TorrServe Silicon."
                 : "Files are stored outside the app and remain in place when TorrServe Silicon is updated."
         ) {
-            settingRow(model.language == .russian ? "Папка загрузок" : "Download folder") {
-                HStack(spacing: 8) {
-                    Text(offlineDownloadFolderPath)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .frame(width: 285, alignment: .trailing)
-                        .help(offlineDownloadFolderPath)
-
-                    Button(model.language == .russian ? "Выбрать…" : "Choose…") {
-                        chooseOfflineDownloadFolder()
-                    }
-                    .fixedSize()
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Label(model.language == .russian ? "Папка загрузок" : "Download folder", systemImage: "folder")
+                    Spacer()
+                    Button(model.language == .russian ? "Выбрать…" : "Choose…") { chooseOfflineDownloadFolder() }
                 }
+                Text(offlineDownloadFolderPath)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .truncationMode(.middle)
+                    .textSelection(.enabled)
+                    .help(offlineDownloadFolderPath)
             }
+            .padding(.vertical, 12)
         }
 
         settingsSection(
@@ -480,8 +477,9 @@ struct SettingsView: View {
     private var menuBarOrderRow: some View {
         VStack(alignment: .leading, spacing: 9) {
             HStack {
-                Text(texts.menuBarElementOrder)
-                    .font(.subheadline.weight(.medium))
+                Text(texts.menuBarOrderHint)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Spacer()
                 if model.menuBarPreferences.sectionOrder
                     != MenuBarPopoverSection.allCases {
@@ -505,39 +503,39 @@ struct SettingsView: View {
                 commitMenuBarPreferences(preferences)
             }
 
-            Text(texts.menuBarOrderHint)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.vertical, 10)
     }
 
     private var interfaceSection: some View {
-        settingsSection(title: model.language == .russian ? "Интерфейс" : "Interface") {
-            settingRow(texts.languageLabel) {
-                Picker("", selection: $model.language) {
-                    Text(texts.russian).tag(AppLanguage.russian)
-                    Text(texts.english).tag(AppLanguage.english)
-                }
-                .labelsHidden()
-                .fixedSize()
-                .frame(width: pickerColumnWidth, alignment: .trailing)
-                .onChange(of: model.language) { _, language in
-                    model.onLanguageChanged?(language)
+        VStack(spacing: SettingsScreenLayout.sectionSpacing) {
+            settingsSection(title: model.language == .russian ? "Интерфейс" : "Interface") {
+                settingRow(texts.languageLabel) {
+                    Picker(texts.languageLabel, selection: $model.language) {
+                        Text("Русский").tag(AppLanguage.russian)
+                        Text("English").tag(AppLanguage.english)
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                    .frame(width: pickerColumnWidth, alignment: .trailing)
+                    .onChange(of: model.language) { _, language in model.onLanguageChanged?(language) }
                 }
             }
-            Divider()
-            settingRow(texts.jackettSearch) {
-                Picker("", selection: $model.jackettEnabled) {
-                    Text("Jackett").tag(true)
-                    Text("Off").tag(false)
-                }
-                .labelsHidden()
-                .fixedSize()
-                .frame(width: pickerColumnWidth, alignment: .trailing)
-                .onChange(of: model.jackettEnabled) { _, isEnabled in
-                    model.onJackettEnabledChanged?(isEnabled)
+            settingsSection(
+                title: model.language == .russian ? "Поиск торрентов" : "Torrent Search",
+                footer: model.language == .russian
+                    ? "TorrentSearch работает без отдельного сервера. Jackett можно подключить отдельно или использовать вместе с ним."
+                    : "TorrentSearch needs no separate server. Connect Jackett as an alternative or search both together."
+            ) {
+                toggleRow(
+                    model.language == .russian ? "Показывать раздел поиска" : "Show Search",
+                    keyPath: \.jackettEnabled,
+                    callback: model.onJackettEnabledChanged
+                )
+                Divider()
+                settingRow(model.language == .russian ? "TorrentSearch и Jackett" : "TorrentSearch & Jackett") {
+                    Button(model.language == .russian ? "Настроить источники…" : "Configure Sources…") { model.onConfigureSearch?() }
+                        .disabled(!model.jackettEnabled)
                 }
             }
         }
@@ -660,36 +658,22 @@ struct SettingsView: View {
         provider: MetadataProvider,
         value: Binding<String>
     ) -> some View {
-        settingRow(title) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(title).font(.callout)
+                Spacer()
                 apiKeyTestStatus(provider)
-
-                Button(model.language == .russian ? "Тест" : "Test") {
-                    model.onTestMetadataAPIKey?(provider, value.wrappedValue)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.regular)
-                .fixedSize()
-                .disabled(
-                    value.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                        || model.metadataAPIKeyTestStates[provider] == .testing
-                )
-
-                SecureField(
-                    "",
-                    text: Binding(
-                        get: { value.wrappedValue },
-                        set: { newValue in
-                            value.wrappedValue = newValue
-                            model.onMetadataAPIKeyChanged?(provider, newValue)
-                        }
-                    )
-                )
-                .textFieldStyle(.roundedBorder)
-                .controlSize(.regular)
-                .frame(width: 300)
             }
+            MetadataAPIKeyEditor(
+                value: value,
+                fieldLabel: title,
+                testTitle: model.language == .russian ? "Тест" : "Test",
+                isTesting: model.metadataAPIKeyTestStates[provider] == .testing,
+                commit: { model.onMetadataAPIKeyChanged?(provider, $0) },
+                test: { model.onTestMetadataAPIKey?(provider, $0) }
+            )
         }
+        .padding(.vertical, 12)
     }
 
     @ViewBuilder
@@ -762,8 +746,8 @@ struct SettingsView: View {
     private var metadataFooter: String {
         if model.metadataSource == .disabled {
             return model.language == .russian
-                ? "Приложение не будет загружать, хранить или показывать метаданные материалов."
-                : "The app will not fetch, store, or display media metadata."
+                ? "Новые метаданные не загружаются. Уже полученные карточки сохраняются."
+                : "New metadata is not fetched. Previously loaded cards are kept."
         }
         if model.metadataAPIKeyMode == .builtIn {
             return model.language == .russian
@@ -784,6 +768,7 @@ struct SettingsView: View {
             Toggle("", isOn: setting(keyPath, callback: callback))
                 .labelsHidden()
                 .toggleStyle(.switch)
+                .accessibilityLabel(title)
         }
     }
 
@@ -843,6 +828,7 @@ struct SettingsView: View {
             Toggle("", isOn: isOn)
                 .labelsHidden()
                 .toggleStyle(.switch)
+                .accessibilityLabel(title)
         }
         .frame(minHeight: 54)
     }
@@ -937,6 +923,7 @@ struct SettingsView: View {
             ))
             .labelsHidden()
             .toggleStyle(.switch)
+            .accessibilityLabel(title)
         }
     }
 
@@ -951,10 +938,13 @@ struct SettingsView: View {
     ) -> some View {
         HStack(spacing: 16) {
             Text(title)
-            Spacer(minLength: 20)
+                .font(.callout)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 12)
             control()
         }
-        .frame(minHeight: 42)
+        .frame(minHeight: 46)
+        .padding(.vertical, 2)
     }
 
     private func settingsSection<Content: View>(
@@ -962,24 +952,7 @@ struct SettingsView: View {
         footer: String? = nil,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.headline)
-                .padding(.horizontal, 14)
-
-            VStack(spacing: 0) {
-                content()
-            }
-            .padding(.horizontal, 14)
-            .generalSettingsPanel()
-
-            if let footer {
-                Text(footer)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 14)
-            }
-        }
+        ServerSettingsGroup(title: title, footer: footer, content: content)
     }
 
     private func setting(
@@ -996,15 +969,52 @@ struct SettingsView: View {
     }
 }
 
-private extension View {
-    func generalSettingsPanel() -> some View {
-        background(
-            SettingsVisualStyle.panelBackground,
-            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color.primary.opacity(0.07), lineWidth: 1)
+// Editing stays local until Return, focus loss, or the Test action. Saving each
+// keystroke used to invalidate the entire library and persist incomplete keys.
+private struct MetadataAPIKeyEditor: View {
+    @Binding var value: String
+    let fieldLabel: String
+    let testTitle: String
+    let isTesting: Bool
+    let commit: (String) -> Void
+    let test: (String) -> Void
+
+    @State private var draft = ""
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            SecureField(fieldLabel, text: $draft)
+                .labelsHidden()
+                .textFieldStyle(.roundedBorder)
+                .controlSize(.regular)
+                .frame(minWidth: 160, maxWidth: .infinity)
+                .focused($isFocused)
+                .onSubmit(commitDraft)
+                .accessibilityLabel(fieldLabel)
+
+            Button(testTitle) {
+                commitDraft()
+                test(draft)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.regular)
+            .fixedSize()
+            .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isTesting)
         }
+        .onAppear { draft = value }
+        .onChange(of: value) { _, newValue in
+            if !isFocused { draft = newValue }
+        }
+        .onChange(of: isFocused) { _, focused in
+            if !focused { commitDraft() }
+        }
+        .onDisappear(perform: commitDraft)
+    }
+
+    private func commitDraft() {
+        let normalized = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard normalized != value else { return }
+        commit(normalized)
     }
 }

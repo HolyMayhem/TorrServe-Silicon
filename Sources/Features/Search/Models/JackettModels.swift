@@ -1,6 +1,6 @@
 import Foundation
 
-struct JackettConfiguration: Equatable {
+struct JackettConfiguration: Equatable, Sendable {
     var serverURL: String
     var apiKey: String
 
@@ -25,8 +25,8 @@ struct JackettConfiguration: Equatable {
     }
 }
 
-struct JackettSearchResult: Identifiable, Equatable {
-    let id: String
+struct JackettSearchResult: Identifiable, Equatable, Sendable {
+    var id: String
     let title: String
     let summary: String
     let tracker: String

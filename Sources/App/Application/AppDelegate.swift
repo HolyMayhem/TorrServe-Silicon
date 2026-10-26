@@ -70,7 +70,7 @@ func migrateLegacyPreferencesIfNeeded() {
 
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSMenuItemValidation {
     let processController = TorrServerProcessController()
     let downloader = TorrServerDownloader()
     let launchAtLoginController = LaunchAtLoginController()
@@ -107,6 +107,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     var globalPopoverEventMonitor: Any?
 
     var isDownloading = false
+    var isActivatingTorrServerUpdate = false
+    var failedAutomaticTorrServerVersion: String?
     var hasRepliedToTermination = false
     var isPreparingForTermination = false
     var currentSpeedBytesPerSecond: Double?

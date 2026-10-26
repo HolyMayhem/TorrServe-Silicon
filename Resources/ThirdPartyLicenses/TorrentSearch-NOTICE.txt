@@ -1,0 +1,8 @@
+TorrentSearch - https://github.com/prajwalch/TorrentSearch
+Copyright (c) 2026 Prajwal Chapagain
+License: MIT (see TorrentSearch-MIT.txt)
+Reference revision: 790055d545276b3bc137dc27ebaa40ed24bc5107
+
+TorrServe Silicon includes native Swift adaptations of the provider request and
+response mappings for Knaben, TorrentsCSV, Rutor, Nyaa and YTS, and the magnet
+construction approach. The Android application itself is not bundled.

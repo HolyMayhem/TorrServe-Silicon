@@ -194,7 +194,7 @@ extension AppDelegate {
         guard processController.isRunning else { return false }
 
         await withCheckedContinuation { continuation in
-            processController.stop {
+            stopServerPreservingDownloads {
                 continuation.resume()
             }
         }

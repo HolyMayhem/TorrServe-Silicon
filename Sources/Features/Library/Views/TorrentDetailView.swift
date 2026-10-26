@@ -326,19 +326,7 @@ struct TorrentDetailView: View {
     }
 
     private var offlineDownloadProgress: OfflineDownloadProgress? {
-        guard model.offlineDownloadFile(in: torrent) != nil else { return nil }
-        switch offlineDownloadManager.state {
-        case .downloading(let progress),
-             .pausing(let progress):
-            return progress
-        case .resuming(let checkpoint),
-             .paused(let checkpoint):
-            return checkpoint.progress
-        case .cancelling(let progress):
-            return progress
-        case .idle, .queued, .preparing, .completed, .cancelled, .failed:
-            return nil
-        }
+        model.offlineDownloadProgress(in: torrent)
     }
 
     private func metadataFacts(_ metadata: LibraryMetadata) -> [String] {

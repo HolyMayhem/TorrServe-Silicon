@@ -192,6 +192,7 @@ extension AppDelegate {
     }
 
     func handleNotification(for state: TorrServerProcessController.State) {
+        guard !isActivatingTorrServerUpdate else { return }
         switch state {
         case .running:
             guard !hasAnnouncedRunningState else { return }

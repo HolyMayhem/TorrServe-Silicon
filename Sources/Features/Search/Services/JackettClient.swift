@@ -1,6 +1,6 @@
 import Foundation
 
-final class JackettClient {
+final class JackettClient: @unchecked Sendable {
     private let session: URLSession
 
     init(session: URLSession = .shared) {
@@ -53,7 +53,7 @@ final class JackettClient {
 
     func download(_ result: JackettSearchResult) async throws -> JackettDownloadPayload {
         guard let url = result.bestDownloadURL else {
-            throw AppError("Jackett did not provide a torrent or magnet link.")
+            throw AppError("The search source did not provide a torrent or magnet link.")
         }
         if url.scheme?.lowercased() == "magnet" {
             return .magnet(url.absoluteString)
@@ -71,7 +71,7 @@ final class JackettClient {
         }
 
         guard data.count > 16 else {
-            throw AppError("Jackett returned an empty torrent file.")
+            throw AppError("The search source returned an empty torrent file.")
         }
         return .torrent(
             data: data,
@@ -99,6 +99,8 @@ final class JackettClient {
                 )
             )
         ] + queryItems
+        let encodedQuery = components?.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
+        components?.percentEncodedQuery = encodedQuery
         guard let url = components?.url else {
             throw AppError("Could not create the Jackett API URL.")
         }

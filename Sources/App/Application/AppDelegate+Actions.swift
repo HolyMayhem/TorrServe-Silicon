@@ -72,9 +72,15 @@ extension AppDelegate {
         let path = executablePath
         torrServerUpdateCheckRevision += 1
         let revision = torrServerUpdateCheckRevision
+        mainWindowModel.isCheckingForTorrServerUpdates = true
 
         Task { [weak self] in
             guard let self else { return }
+            defer {
+                if revision == self.torrServerUpdateCheckRevision {
+                    self.mainWindowModel.isCheckingForTorrServerUpdates = false
+                }
+            }
             let installedVersion = await self.releaseChecker.installedVersion(
                 executablePath: path
             )
@@ -94,6 +100,7 @@ extension AppDelegate {
                 guard path == self.executablePath,
                       revision == self.torrServerUpdateCheckRevision else { return }
                 if let update,
+                   update.latestVersion != self.failedAutomaticTorrServerVersion,
                    UserDefaults.standard.bool(forKey: autoUpdateTorrServerKey) {
                     self.mainWindowModel.torrServerUpdate = nil
                     self.automaticallyInstallTorrServerUpdate(update)
@@ -137,7 +144,7 @@ extension AppDelegate {
     ) {
         guard !isDownloading else { return }
 
-        let shouldRestartServer = processController.isRunning
+        let previousPath = executablePath
         mainWindowModel.torrServerUpdate = nil
         beginTorrServerTransfer(
             kind: .update,
@@ -151,22 +158,12 @@ extension AppDelegate {
 
             switch result {
             case .success(let url):
-                let finishInstallation: () -> Void = { [weak self] in
-                    guard let self else { return }
-                    self.finishAutomaticTorrServerUpdate(
-                        at: url,
-                        restartingServer: shouldRestartServer
-                    )
-                }
-
-                if shouldRestartServer {
-                    self.advanceTorrServerTransfer(to: .restarting, progress: 0.97)
-                    self.offlineDownloadManager.prepareForInterruption {
-                        self.processController.stop(completion: finishInstallation)
-                    }
-                } else {
-                    finishInstallation()
-                }
+                self.finishAutomaticTorrServerUpdate(
+                    at: url,
+                    previousPath: previousPath,
+                    update: update,
+                    restartingServer: self.processController.isRunning
+                )
 
             case .failure(let error):
                 self.isDownloading = false
@@ -189,28 +186,72 @@ extension AppDelegate {
 
     private func finishAutomaticTorrServerUpdate(
         at url: URL,
+        previousPath: String,
+        update: TorrServerAvailableUpdate,
         restartingServer: Bool
     ) {
-        mainWindowModel.path = url.path
-        mainWindowModel.torrServerUpdate = nil
-        if let targetVersion = mainWindowModel.torrServerUpdateActivity?.targetVersion {
-            mainWindowModel.torrServerVersion = targetVersion
-        }
-        saveCurrentPath()
-        isDownloading = false
-        completeTorrServerTransfer()
-        updateUI(for: processController.state)
-
         if restartingServer {
-            startServer(nil)
+            advanceTorrServerTransfer(to: .restarting, progress: 0.97)
         }
-
-        scheduleTorrServerUpdateCheck(clearingCurrentResult: true)
-        notificationController.send(
-            event: .torrServerUpdated,
-            title: texts.updateInstalledNotificationTitle,
-            body: texts.downloadDoneMessage
-        )
+        isActivatingTorrServerUpdate = true
+        Task {
+            defer {
+                isActivatingTorrServerUpdate = false
+                isDownloading = false
+                hasAnnouncedRunningState = processController.isRunning
+                saveCurrentPath()
+                updateUI(for: processController.state)
+                scheduleTorrServerUpdateCheck(clearingCurrentResult: true)
+            }
+            let installer = TorrServerUpdateInstaller(
+                stop: {
+                    await withCheckedContinuation { continuation in
+                        self.stopServerPreservingDownloads { continuation.resume() }
+                    }
+                },
+                start: { path in
+                    try self.processController.start(executablePath: path)
+                    guard let pid = self.processController.runningPID else {
+                        throw AppError("Не удалось запустить TorrServer.")
+                    }
+                    return pid
+                },
+                isRunning: { self.processController.runningPID == $0 },
+                checkHealth: { try await self.nativeTorrServerAPI.checkHealth() }
+            )
+            do {
+                try await installer.install(
+                    executablePath: url.path,
+                    previousPath: previousPath,
+                    restartingServer: restartingServer,
+                    selectPath: {
+                        self.mainWindowModel.path = $0
+                        self.loadedTorrServerSettings = nil
+                        self.mainWindowModel.hasLoadedServerSettings = false
+                    }
+                )
+                failedAutomaticTorrServerVersion = nil
+                mainWindowModel.torrServerUpdate = nil
+                mainWindowModel.torrServerVersion = update.latestVersion
+                completeTorrServerTransfer()
+                notificationController.send(
+                    event: .torrServerUpdated,
+                    title: texts.updateInstalledNotificationTitle,
+                    body: texts.downloadDoneMessage
+                )
+            } catch {
+                failedAutomaticTorrServerVersion = update.latestVersion
+                mainWindowModel.torrServerUpdateActivity = nil
+                mainWindowModel.torrServerUpdate = update
+                notificationController.send(
+                    event: .criticalError,
+                    title: texts.errorNotificationTitle,
+                    body: error.localizedDescription
+                )
+                // Also surface rollback failures when system notifications are disabled.
+                showAlert(title: texts.downloadFailedTitle, message: error.localizedDescription)
+            }
+        }
     }
 
     private func beginTorrServerTransfer(
@@ -291,8 +332,13 @@ extension AppDelegate {
     }
 
     @objc func stopServer(_ sender: Any?) {
+        stopServerPreservingDownloads()
+    }
+
+    func stopServerPreservingDownloads(completion: @escaping () -> Void = {}) {
         offlineDownloadManager.prepareForInterruption { [weak self] in
-            self?.processController.stop()
+            guard let self else { completion(); return }
+            self.processController.stop(completion: completion)
         }
     }
 
@@ -313,12 +359,9 @@ extension AppDelegate {
     }
 
     @objc func focusSearchFromMenu(_ sender: Any?) {
+        guard window?.attachedSheet == nil else { return }
         ensureWindowForCommand()
-        if mainWindowModel.jackettEnabled {
-            mainWindowModel.selectedSection = .search
-        } else {
-            mainWindowModel.selectedSection = .library
-        }
+        mainWindowModel.searchFocusRevision &+= 1
     }
 
     func ensureWindowForCommand() {
@@ -532,7 +575,7 @@ extension AppDelegate {
             mainWindowModel.tmdbAPIKey = settings.tmdbAPIKey
             mainWindowModel.omdbAPIKey = settings.omdbAPIKey
             mainWindowModel.kinopoiskAPIKey = settings.kinopoiskAPIKey
-            libraryModel.metadataConfigurationChanged()
+            libraryModel.metadataConfigurationChanged(affectedProvider: provider)
         } catch {
             showAlert(title: provider.displayName, message: error.localizedDescription)
             let settings = metadataSettings.settings
@@ -652,7 +695,6 @@ extension AppDelegate {
         do {
             try metadataSettings.save(overviewTranslationMode: mode)
             mainWindowModel.overviewTranslationMode = mode
-            libraryModel.metadataConfigurationChanged()
         } catch {
             showAlert(title: "Metadata", message: error.localizedDescription)
             mainWindowModel.overviewTranslationMode = metadataSettings.settings.overviewTranslationMode

@@ -30,8 +30,8 @@ enum AppSection: String, CaseIterable, Identifiable {
                 : "Manage your library, playback, and offline downloads."
         case .search:
             return language == .russian
-                ? "Находите фильмы и сериалы через Jackett и добавляйте их в библиотеку."
-                : "Find movies and series through Jackett and add them to your library."
+                ? "Находите раздачи через TorrentSearch и Jackett и добавляйте их в библиотеку."
+                : "Search TorrentSearch and Jackett and add releases to your library."
         }
     }
 
