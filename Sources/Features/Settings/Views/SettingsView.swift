@@ -109,6 +109,8 @@ struct SettingsView: View {
             }
         case .keyboard:
             KeyboardShortcutsSettingsView(language: model.language)
+        case .developer:
+            if model.developerMenuEnabled { DeveloperSettingsView(model: model) }
         case .server:
             EmptyView()
         }
@@ -147,7 +149,7 @@ struct SettingsView: View {
             ) {
                 notificationPreferenceRow(
                     systemImage: "bell.fill",
-                    title: model.language == .russian ? "Разрешить уведомления" : "Allow notifications",
+                    title: model.language == .russian ? "Уведомления приложения" : "App notifications",
                     detail: model.language == .russian ? "Загрузки, состояние сервера и обновления." : "Downloads, server status, and updates.",
                     isOn: setting(\.notificationsEnabled, callback: model.onNotificationsChanged)
                 )
@@ -160,6 +162,8 @@ struct SettingsView: View {
                     isOn: notificationSoundBinding
                 )
                 .disabled(notificationDetailsDisabled)
+                Divider()
+                NotificationSettingsStatusView(model: model)
             }
 
             settingsSection(title: model.language == .russian ? "События" : "Events") {
@@ -868,32 +872,7 @@ struct SettingsView: View {
     }
 
     private func notificationEventTitle(_ event: AppNotificationEvent) -> String {
-        switch event {
-        case .offlineDownloadCompleted:
-            return model.language == .russian
-                ? "Фильм загружен"
-                : "Movie downloaded"
-        case .offlineDownloadFailed:
-            return model.language == .russian
-                ? "Ошибка загрузки фильма"
-                : "Movie download failed"
-        case .serverStarted:
-            return model.language == .russian
-                ? "TorrServer запущен"
-                : "TorrServer started"
-        case .serverStopped:
-            return model.language == .russian
-                ? "TorrServer остановлен"
-                : "TorrServer stopped"
-        case .criticalError:
-            return model.language == .russian
-                ? "Критические ошибки"
-                : "Critical errors"
-        case .torrServerUpdated:
-            return model.language == .russian
-                ? "TorrServer обновлён"
-                : "TorrServer updated"
-        }
+        event.displayTitle(isRussian: model.language == .russian)
     }
 
     private func notificationEventDetail(_ event: AppNotificationEvent) -> String {

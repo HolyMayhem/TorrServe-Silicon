@@ -129,6 +129,11 @@ final class MainWindowModel: ObservableObject {
     @Published var notificationsEnabled = false
     @Published var notificationsAuthorizationPending = false
     @Published var notificationPreferences = AppNotificationPreferences.defaults
+    @Published var notificationSystemState = NotificationSystemState()
+    @Published var lastNotificationResult: NotificationDeliveryResult?
+    @Published var developerMenuEnabled = false
+    @Published var notificationTestsInFlight: Set<AppNotificationEvent> = []
+    @Published var notificationTestResults: [AppNotificationEvent: NotificationDeliveryResult] = [:]
     @Published var jackettEnabled = true
     @Published var metadataSource = MetadataSourceMode.tmdb
     @Published var aniListEnabled = true
@@ -196,6 +201,9 @@ final class MainWindowModel: ObservableObject {
     var onMenuBarPreferencesChanged: ((MenuBarPreferences) -> Void)?
     var onHideDockIconChanged: ((Bool) -> Void)?
     var onNotificationsChanged: ((Bool) -> Void)?
+    var onRefreshNotificationStatus: (() -> Void)?
+    var onOpenNotificationSettings: (() -> Void)?
+    var onSendTestNotification: ((AppNotificationEvent) -> Void)?
     var onNotificationPreferencesChanged: ((AppNotificationPreferences) -> Void)?
     var onConfigureSearch: (() -> Void)?
     var onJackettEnabledChanged: ((Bool) -> Void)?

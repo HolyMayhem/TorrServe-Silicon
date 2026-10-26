@@ -74,6 +74,9 @@ extension AppDelegate {
         mainWindowModel.onNotificationsChanged = { [weak self] enabled in
             self?.setNotificationsEnabled(enabled)
         }
+        mainWindowModel.onRefreshNotificationStatus = { [weak self] in self?.refreshNotificationStatus() }
+        mainWindowModel.onOpenNotificationSettings = { [weak self] in self?.openNotificationSettings() }
+        mainWindowModel.onSendTestNotification = { [weak self] event in self?.sendTestNotification(event) }
         mainWindowModel.onNotificationPreferencesChanged = { [weak self] preferences in
             self?.setNotificationPreferences(preferences)
         }
@@ -281,6 +284,14 @@ extension AppDelegate {
         )
         settingsItem.target = self
         settingsItem.keyEquivalentModifierMask = [.command]
+        let developerItem = NSMenuItem(
+            title: mainWindowModel.developerMenuEnabled ? "Hide Developer Menu" : "Show Developer Menu",
+            action: #selector(toggleDeveloperMenu(_:)),
+            keyEquivalent: ""
+        )
+        developerItem.target = self
+        developerItem.state = mainWindowModel.developerMenuEnabled ? .on : .off
+        appMenu.addItem(developerItem)
         appMenu.addItem(.separator())
         let checkForUpdatesItem = appMenu.addItem(
             withTitle: currentLanguage == .russian

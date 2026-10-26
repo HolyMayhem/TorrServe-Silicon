@@ -129,9 +129,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSM
         buildWindow()
         applyLanguage()
         appUpdateController.start()
-        notificationController.synchronizeEnabledState { [weak self] enabled in
-            self?.mainWindowModel.notificationsEnabled = enabled
+        notificationController.onSystemStateChange = { [weak self] state in
+            self?.mainWindowModel.notificationSystemState = state
         }
+        notificationController.onDeliveryResult = { [weak self] result in
+            self?.mainWindowModel.lastNotificationResult = result
+        }
+        refreshNotificationStatus()
         mainWindowModel.notificationPreferences = AppNotificationPreferences.load()
         offlineDownloadManager.onCompleted = { [weak self] _, destinationURL in
             guard let self else { return }
@@ -183,6 +187,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSM
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
+        refreshNotificationStatus()
         scheduleTorrServerUpdateCheck()
     }
 

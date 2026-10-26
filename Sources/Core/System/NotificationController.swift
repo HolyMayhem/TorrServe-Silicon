@@ -1,4 +1,5 @@
 import AppKit
+import OSLog
 import Security
 import UserNotifications
 
@@ -10,106 +11,76 @@ final class NotificationController: NSObject,
     private let center = UNUserNotificationCenter.current()
     private let usesLegacyDelivery: Bool
     private var authorizationRequestInFlight = false
+    private var authorizationRevision = 0
+    private var pendingLegacyDeliveries: [String: (NotificationDeliveryResult) -> Void] = [:]
+    private let logger = Logger(subsystem: "com.holymayhem.torrserver", category: "Notifications")
+    private(set) var systemState = NotificationSystemState()
+    var onSystemStateChange: ((NotificationSystemState) -> Void)?
+    var onDeliveryResult: ((NotificationDeliveryResult) -> Void)?
 
     override init() {
         usesLegacyDelivery = !Self.hasStableSigningIdentity()
         super.init()
         center.delegate = self
         if usesLegacyDelivery {
+            systemState.authorization = .legacyUnknown
             NSUserNotificationCenter.default.delegate = self
         }
     }
 
+    /// Store user intent separately from system authorization. A refresh must not
+    /// silently erase this preference when the user temporarily blocks the app.
     func setEnabled(
         _ enabled: Bool,
         completion: @escaping (_ enabled: Bool, _ shouldOpenSettings: Bool) -> Void
     ) {
+        guard !authorizationRequestInFlight else { return }
+        authorizationRevision += 1
+        UserDefaults.standard.set(enabled, forKey: notificationsEnabledKey)
         guard enabled else {
-            UserDefaults.standard.set(false, forKey: notificationsEnabledKey)
             completion(false, false)
             return
         }
-
-        // Ad-hoc signatures have a different designated requirement after every
-        // build. On macOS this can make UNUserNotificationCenter report the app
-        // as unavailable instead of presenting its authorization sheet. Keep the
-        // modern API for stable Apple-signed builds and use the built-in macOS
-        // compatibility center for freely distributed ad-hoc builds.
         if usesLegacyDelivery {
-            UserDefaults.standard.set(true, forKey: notificationsEnabledKey)
+            publishLegacyState()
             completion(true, false)
             return
         }
-
-        guard !authorizationRequestInFlight else { return }
         authorizationRequestInFlight = true
-
         Task { [weak self] in
             guard let self else { return }
-            let settings = await center.notificationSettings()
-            switch settings.authorizationStatus {
-            case .authorized, .provisional, .ephemeral:
-                finishAuthorization(
-                    granted: true,
-                    shouldOpenSettings: false,
-                    completion: completion
-                )
-
-            case .notDetermined:
+            var settings = await center.notificationSettings()
+            var requestError: String?
+            if settings.authorizationStatus == .notDetermined {
                 do {
-                    let granted = try await center.requestAuthorization(
-                        options: [.alert, .sound]
-                    )
-                    finishAuthorization(
-                        granted: granted,
-                        shouldOpenSettings: false,
-                        completion: completion
-                    )
+                    _ = try await center.requestAuthorization(options: [.alert, .sound])
                 } catch {
-                    finishAuthorization(
-                        granted: false,
-                        shouldOpenSettings: false,
-                        completion: completion
-                    )
+                    requestError = error.localizedDescription
+                    logger.error("Notification authorization failed: \(error.localizedDescription, privacy: .private)")
                 }
-
-            case .denied:
-                finishAuthorization(
-                    granted: false,
-                    shouldOpenSettings: true,
-                    completion: completion
-                )
-
-            @unknown default:
-                finishAuthorization(
-                    granted: false,
-                    shouldOpenSettings: false,
-                    completion: completion
-                )
+                settings = await center.notificationSettings()
             }
+            updateSystemState(settings, error: requestError)
+            authorizationRequestInFlight = false
+            completion(true, settings.authorizationStatus == .denied)
         }
     }
 
     func synchronizeEnabledState(completion: @escaping (Bool) -> Void) {
         if usesLegacyDelivery {
+            publishLegacyState()
             completion(UserDefaults.standard.bool(forKey: notificationsEnabledKey))
             return
         }
-
+        guard !authorizationRequestInFlight else { return }
+        let revision = authorizationRevision
         Task { [weak self] in
             guard let self else { return }
             let settings = await center.notificationSettings()
-            let enabled: Bool
-            switch settings.authorizationStatus {
-            case .authorized, .provisional, .ephemeral:
-                enabled = UserDefaults.standard.bool(forKey: notificationsEnabledKey)
-            case .notDetermined, .denied:
-                enabled = false
-            @unknown default:
-                enabled = false
-            }
-            UserDefaults.standard.set(enabled, forKey: notificationsEnabledKey)
-            completion(enabled)
+            // Ignore refreshes that predate a newer toggle/authorization request.
+            guard !authorizationRequestInFlight, revision == authorizationRevision else { return }
+            updateSystemState(settings)
+            completion(UserDefaults.standard.bool(forKey: notificationsEnabledKey))
         }
     }
 
@@ -117,58 +88,112 @@ final class NotificationController: NSObject,
         preferences.save()
     }
 
-    func send(event: AppNotificationEvent, title: String, body: String) {
+    func send(
+        event: AppNotificationEvent,
+        title: String,
+        body: String,
+        completion: ((NotificationDeliveryResult) -> Void)? = nil
+    ) {
+        // Report local suppression immediately; do not prompt for authorization
+        // from a background event. The settings toggle owns that interaction.
         guard UserDefaults.standard.bool(forKey: notificationsEnabledKey) else {
+            finish(.appDisabled, completion: completion)
             return
         }
-        let preferences = AppNotificationPreferences.load()
-        guard preferences[event] else { return }
-
+        guard AppNotificationPreferences.load()[event] else {
+            finish(.eventDisabled, completion: completion)
+            return
+        }
         if usesLegacyDelivery {
-            let notification = NSUserNotification()
-            notification.title = title
-            notification.informativeText = body
-            if preferences.playsSound {
-                notification.soundName = NSUserNotificationDefaultSoundName
-            }
-            NSUserNotificationCenter.default.deliver(notification)
+            sendLegacy(title: title, body: body, completion: completion)
             return
         }
-
         Task { [weak self] in
             guard let self else { return }
+            let revision = authorizationRevision
             let settings = await center.notificationSettings()
-            switch settings.authorizationStatus {
-            case .authorized, .provisional, .ephemeral:
-                let content = UNMutableNotificationContent()
-                content.title = title
-                content.body = body
-                content.sound = preferences.playsSound ? .default : nil
-
-                try? await center.add(
-                    UNNotificationRequest(
-                        identifier: UUID().uuidString,
-                        content: content,
-                        trigger: nil
-                    )
-                )
-
-            case .notDetermined, .denied:
-                break
-            @unknown default:
-                break
+            guard !authorizationRequestInFlight, revision == authorizationRevision else {
+                finish(UserDefaults.standard.bool(forKey: notificationsEnabledKey)
+                    ? .authorizationRequired : .appDisabled, completion: completion)
+                return
+            }
+            updateSystemState(settings)
+            let preferences = AppNotificationPreferences.load()
+            if let blocked = NotificationDeliveryPolicy.blockedResult(
+                enabled: UserDefaults.standard.bool(forKey: notificationsEnabledKey),
+                eventEnabled: preferences[event], authorization: systemState.authorization
+            ) {
+                finish(blocked, completion: completion)
+                return
+            }
+            let content = UNMutableNotificationContent()
+            content.title = title
+            content.body = body
+            content.sound = preferences.playsSound ? .default : nil
+            do {
+                try await center.add(UNNotificationRequest(
+                    identifier: UUID().uuidString, content: content, trigger: nil
+                ))
+                finish(.accepted, completion: completion)
+            } catch {
+                logger.error("Notification submission failed: \(error.localizedDescription, privacy: .private)")
+                finish(.failed(error.localizedDescription), completion: completion)
             }
         }
     }
 
-    private func finishAuthorization(
-        granted: Bool,
-        shouldOpenSettings: Bool,
-        completion: @escaping (_ enabled: Bool, _ shouldOpenSettings: Bool) -> Void
+    private func sendLegacy(
+        title: String, body: String,
+        completion: ((NotificationDeliveryResult) -> Void)?
     ) {
-        authorizationRequestInFlight = false
-        UserDefaults.standard.set(granted, forKey: notificationsEnabledKey)
-        completion(granted, shouldOpenSettings)
+        let identifier = UUID().uuidString
+        let notification = NSUserNotification()
+        notification.identifier = identifier
+        notification.title = title
+        notification.informativeText = body
+        if AppNotificationPreferences.load().playsSound {
+            notification.soundName = NSUserNotificationDefaultSoundName
+        }
+        // deliver() returning is NOT confirmation of delivery or authorization.
+        pendingLegacyDeliveries[identifier] = { [weak self] result in
+            self?.finish(result, completion: completion)
+        }
+        NSUserNotificationCenter.default.deliver(notification)
+        Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(3)) }
+            catch { return }
+            guard let self, let pending = pendingLegacyDeliveries.removeValue(forKey: identifier) else { return }
+            logger.warning("Legacy notification delivery was not acknowledged")
+            pending(.legacyUnconfirmed)
+        }
+    }
+
+    private func publishLegacyState() {
+        systemState = NotificationSystemState(authorization: .legacyUnknown)
+        onSystemStateChange?(systemState)
+    }
+
+    private func updateSystemState(_ settings: UNNotificationSettings, error: String? = nil) {
+        let authorization: NotificationAuthorizationState
+        switch settings.authorizationStatus {
+        case .authorized, .ephemeral: authorization = .authorized
+        case .provisional: authorization = .provisional
+        case .denied: authorization = .denied
+        case .notDetermined: authorization = .notDetermined
+        @unknown default: authorization = .unknown
+        }
+        systemState = NotificationSystemState(
+            authorization: authorization,
+            bannersEnabled: settings.alertSetting == .enabled && settings.alertStyle != .none,
+            soundsEnabled: settings.soundSetting == .enabled,
+            authorizationError: error
+        )
+        onSystemStateChange?(systemState)
+    }
+
+    private func finish(_ result: NotificationDeliveryResult, completion: ((NotificationDeliveryResult) -> Void)?) {
+        onDeliveryResult?(result)
+        completion?(result)
     }
 
     private static func hasStableSigningIdentity() -> Bool {
@@ -204,7 +229,17 @@ final class NotificationController: NSObject,
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        completionHandler([.banner, .sound])
+        completionHandler([.banner, .list, .sound])
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: NSUserNotificationCenter,
+        didDeliver notification: NSUserNotification
+    ) {
+        guard let identifier = notification.identifier else { return }
+        Task { @MainActor [weak self] in
+            self?.pendingLegacyDeliveries.removeValue(forKey: identifier)?(.legacyDelivered)
+        }
     }
 
     nonisolated func userNotificationCenter(

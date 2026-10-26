@@ -9,6 +9,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
     case downloads
     case metadata
     case keyboard
+    case developer
 
     var id: Self { self }
 
@@ -30,6 +31,8 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
             return language == .russian ? "Метаданные" : "Metadata"
         case .keyboard:
             return language == .russian ? "Клавиатура" : "Keyboard"
+        case .developer:
+            return language == .russian ? "Разработчик" : "Developer"
         }
     }
 
@@ -77,6 +80,10 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
             return language == .russian
                 ? "Быстрые действия для медиатеки, поиска и навигации."
                 : "Quick actions for your library, search, and navigation."
+        case .developer:
+            return language == .russian
+                ? "Проверка системных уведомлений без изменения состояния сервера."
+                : "Test system notifications without changing the server state."
         }
     }
 
@@ -90,6 +97,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .downloads: return "arrow.down.circle.fill"
         case .metadata: return "film.stack.fill"
         case .keyboard: return "keyboard"
+        case .developer: return "hammer.fill"
         }
     }
 
@@ -103,6 +111,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .downloads: return .cyan
         case .metadata: return .indigo
         case .keyboard: return .gray
+        case .developer: return .orange
         }
     }
 }
@@ -126,11 +135,21 @@ struct SettingsWindowView: View {
     }
 
     private var searchResults: [SettingsSearchEntry] {
-        SettingsSearchIndex.results(for: searchText, in: searchEntries)
+        SettingsSearchIndex.results(
+            for: searchText,
+            in: searchEntries.filter { entry in
+                visibleCategories.contains { $0.rawValue == entry.category }
+            }
+        )
+    }
+
+    private var visibleCategories: [SettingsCategory] {
+        SettingsCategory.allCases.filter { $0 != .developer || model.developerMenuEnabled }
     }
 
     private var selectedCategory: SettingsCategory {
-        navigation.selectedCategory ?? .general
+        let category = navigation.selectedCategory ?? .general
+        return visibleCategories.contains(category) ? category : .general
     }
 
     var body: some View {
@@ -192,6 +211,13 @@ struct SettingsWindowView: View {
         .onChange(of: model.language) { _, _ in
             searchRequest = nil
         }
+        .onChange(of: model.developerMenuEnabled) { _, enabled in
+            searchRequest = nil
+            searchEntries = []
+            if !enabled, navigation.selectedCategory == .developer {
+                navigation.selectedCategory = .general
+            }
+        }
         .navigationSplitViewStyle(.balanced)
         .frame(minWidth: 780, minHeight: 540)
         .background(SettingsVisualStyle.windowBackground)
@@ -236,7 +262,7 @@ struct SettingsWindowView: View {
             .scrollContentBackground(.hidden)
             .listStyle(.sidebar)
         } else {
-            List(SettingsCategory.allCases, selection: $navigation.selectedCategory) { category in
+            List(visibleCategories, selection: $navigation.selectedCategory) { category in
                 SettingsCategoryRow(category: category, language: model.language)
                     .tag(category)
             }
@@ -249,7 +275,7 @@ struct SettingsWindowView: View {
     /// titles in this mode: editors/actions and page lifecycle hooks never mount.
     private var searchIndexContent: some View {
         VStack {
-            ForEach(SettingsCategory.allCases) { category in
+            ForEach(visibleCategories) { category in
                 Group {
                     if category == .server {
                         MainWindowView(model: model, isSearchIndex: true)
@@ -284,7 +310,7 @@ struct SettingsWindowView: View {
     }
 
     private func openSearchResult(_ entry: SettingsSearchEntry) {
-        guard let category = SettingsCategory(rawValue: entry.category) else { return }
+        guard let category = SettingsCategory(rawValue: entry.category), visibleCategories.contains(category) else { return }
         navigation.selectedCategory = category
         searchRequest = SettingsSearchRequest(entry: entry)
     }

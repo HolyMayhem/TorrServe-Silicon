@@ -474,13 +474,13 @@ extension AppDelegate {
         mainWindowModel.notificationsEnabled = enabled
         mainWindowModel.notificationsAuthorizationPending = enabled
         isNotificationAuthorizationPending = enabled
-        notificationController.setEnabled(enabled) { [weak self] granted, shouldOpenSettings in
+        notificationController.setEnabled(enabled) { [weak self] enabledInApp, shouldOpenSettings in
             guard let self else { return }
             self.isNotificationAuthorizationPending = false
             self.mainWindowModel.notificationsAuthorizationPending = false
-            self.mainWindowModel.notificationsEnabled = granted
+            self.mainWindowModel.notificationsEnabled = enabledInApp
 
-            if enabled && !granted && shouldOpenSettings {
+            if enabled && shouldOpenSettings {
                 self.openNotificationSettings()
             }
         }
