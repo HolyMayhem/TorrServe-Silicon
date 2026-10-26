@@ -74,7 +74,6 @@ private struct SearchFixture: View {
             } else {
                 SettingsSearchScrollView { form }
                     .environment(\.settingsSearchRequest, state.request)
-                    .environment(\.accessibilityReduceMotion, true)
             }
         }
         .coordinateSpace(name: "viewport")
