@@ -90,6 +90,7 @@ struct ServerDiagnosticsSection: View {
             }
             .buttonStyle(.plain)
             .disabled(isBusy || !model.canDownload)
+            .searchableSetting(language == .russian ? "Скачать свежий TorrServer" : "Download latest TorrServer")
         }
     }
 
@@ -131,6 +132,7 @@ struct ServerDiagnosticsSection: View {
         .buttonStyle(.plain)
         .disabled(isBusy)
         .opacity(isBusy ? 0.55 : 1)
+        .searchableSetting(fullCheckTitle)
     }
 
     private func diagnosticAction(
@@ -169,6 +171,7 @@ struct ServerDiagnosticsSection: View {
         .opacity(isBusy ? 0.55 : 1)
         .help(result.message.isEmpty ? title : result.message)
         .accessibilityLabel(title)
+        .searchableSetting(title)
     }
 
     private func diagnosticResultBanner(_ result: DiagnosticResult) -> some View {

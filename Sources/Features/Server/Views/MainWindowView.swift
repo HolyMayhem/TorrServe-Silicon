@@ -3,32 +3,30 @@ import SwiftUI
 
 struct MainWindowView: View {
     @ObservedObject var model: MainWindowModel
+    var isSearchIndex = false
     @State private var showsClearCacheConfirmation = false
     @State private var showsDiagnostics = false
+    @Environment(\.isIndexingSettings) private var isIndexing
+    @Environment(\.settingsSearchRequest) private var searchRequest
 
     private var texts: Texts {
         Texts(language: model.language)
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: SettingsScreenLayout.sectionSpacing) {
-                serverOverviewSection
-                executableSection
-                ServerCacheSettingsSection(model: model)
-                storageSection
-                playerSection
-                DisclosureGroup(isExpanded: $showsDiagnostics) {
-                    ServerDiagnosticsSection(model: model).padding(.top, 10)
-                } label: {
-                    Label(model.language == .russian ? "Диагностика и обслуживание" : "Diagnostics & Maintenance", systemImage: "stethoscope")
-                        .font(.callout.weight(.medium))
-                }
-                .padding(.horizontal, 4)
-            }
-            .padding(.horizontal, SettingsScreenLayout.formContentInset)
-            .padding(.top, SettingsScreenLayout.scrollContentTopPadding)
-            .padding(.bottom, 24)
+        if isSearchIndex {
+            settingsSearchContent
+        } else {
+            pageContent
+        }
+    }
+
+    private var pageContent: some View {
+        SettingsSearchScrollView {
+            settingsSearchContent
+                .padding(.horizontal, SettingsScreenLayout.formContentInset)
+                .padding(.top, SettingsScreenLayout.scrollContentTopPadding)
+                .padding(.bottom, 24)
         }
         .scrollIndicators(.automatic)
         .frame(maxWidth: SettingsScreenLayout.contentMaxWidth)
@@ -36,6 +34,33 @@ struct MainWindowView: View {
         .padding(.top, SettingsScreenLayout.topPadding)
         .padding(.bottom, SettingsScreenLayout.bottomPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    private var settingsSearchContent: some View {
+        VStack(spacing: SettingsScreenLayout.sectionSpacing) {
+            serverOverviewSection
+            executableSection
+            ServerCacheSettingsSection(model: model)
+            storageSection
+            playerSection
+            if isIndexing {
+                ServerDiagnosticsSection(model: model)
+                    .environment(\.settingsSearchRevealSection, "diagnostics")
+            } else {
+                DisclosureGroup(isExpanded: $showsDiagnostics) {
+                    ServerDiagnosticsSection(model: model)
+                        .environment(\.settingsSearchRevealSection, "diagnostics")
+                        .padding(.top, 10)
+                } label: {
+                    Label(model.language == .russian ? "Диагностика и обслуживание" : "Diagnostics & Maintenance", systemImage: "stethoscope")
+                        .font(.callout.weight(.medium))
+                }
+                .padding(.horizontal, 4)
+                .onChange(of: searchRequest, initial: true) { _, request in
+                    if request?.entry.revealSection == "diagnostics" { showsDiagnostics = true }
+                }
+            }
+        }
     }
 
     private var serverOverviewSection: some View {
@@ -65,6 +90,7 @@ struct MainWindowView: View {
                 serverPowerControl
             }
             .frame(minHeight: 54)
+            .searchableSetting(model.language == .russian ? "Состояние" : "Status")
 
             if let activity = model.torrServerUpdateActivity {
                 Divider()
@@ -98,6 +124,7 @@ struct MainWindowView: View {
                 .help(texts.openWebUI)
             }
             .frame(minHeight: 42)
+            .searchableSetting(model.language == .russian ? "Адрес" : "Address")
 
             Divider()
 
@@ -179,6 +206,7 @@ struct MainWindowView: View {
             .textFieldStyle(.roundedBorder)
             .disabled(!model.canEditPath)
             .padding(.vertical, 11)
+            .searchableSetting(model.language == .russian ? "Путь к TorrServer" : "Path to TorrServer")
 
             Divider()
 
@@ -211,6 +239,7 @@ struct MainWindowView: View {
                 executableDownloadButton
             }
             .frame(minHeight: 50)
+            .searchableSetting(texts.choose)
         }
     }
 
@@ -276,6 +305,7 @@ struct MainWindowView: View {
                 }
             }
             .frame(minHeight: 44)
+            .searchableSetting(model.language == .russian ? "Очистить кеш" : "Clear Cache")
         }
     }
 
@@ -323,6 +353,7 @@ struct MainWindowView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .searchableSetting(player.choice.title(language: model.language))
     }
 
     private var clearCacheConfirmation: some View {
@@ -365,6 +396,7 @@ struct MainWindowView: View {
                 .lineLimit(1)
         }
         .frame(minHeight: 42)
+        .searchableSetting(title)
     }
 
     private func serverUpdateProgress(_ activity: TorrServerUpdateActivity) -> some View {
@@ -442,6 +474,7 @@ struct MainWindowView: View {
                 .lineLimit(1)
         }
         .frame(minHeight: 42)
+        .searchableSetting(title)
     }
 
     private var serverStatusDetail: String {
@@ -570,6 +603,7 @@ struct ServerSettingsGroup<Content: View>: View {
                     .padding(.horizontal, 14)
             }
         }
+        .searchableSettingsGroup(title)
     }
 }
 

@@ -80,22 +80,6 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         }
     }
 
-    func matchesSearch(_ query: String, language: AppLanguage) -> Bool {
-        let words: String
-        switch self {
-        case .general: words = "запуск уведомления звук dock startup notifications sound"
-        case .server: words = "кеш память диск плеер диагностика cache memory disk player diagnostics executable"
-        case .interface: words = "язык поиск jackett torrentsearch language search"
-        case .menuBar: words = "значок скорость qr icon speed"
-        case .updates: words = "matrix матрикс torrserver установить версия install version"
-        case .downloads: words = "файлы папка офлайн movies folder offline files"
-        case .metadata: words = "api ключи постеры описания tmdb omdb кинопоиск anilist keys posters overview"
-        case .keyboard: words = "сочетания клавиш горячие клавиши keyboard shortcuts command control"
-        }
-        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        return query.isEmpty || "\(title(language: language)) \(message(language: language)) \(words)".localizedCaseInsensitiveContains(query)
-    }
-
     var systemImage: String {
         switch self {
         case .general: return "gearshape.fill"
@@ -133,14 +117,16 @@ struct SettingsWindowView: View {
     @ObservedObject var offlineDownloadManager: OfflineDownloadManager
     @ObservedObject var navigation: SettingsWindowNavigationModel
     @State private var searchText = ""
+    @State private var searchEntries: [SettingsSearchEntry] = []
+    @State private var searchRequest: SettingsSearchRequest?
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
-    private var filteredCategories: [SettingsCategory] {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return SettingsCategory.allCases }
-        return SettingsCategory.allCases.filter {
-            $0.matchesSearch(query, language: model.language)
-        }
+    private var isSearching: Bool {
+        !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var searchResults: [SettingsSearchEntry] {
+        SettingsSearchIndex.results(for: searchText, in: searchEntries)
     }
 
     private var selectedCategory: SettingsCategory {
@@ -153,17 +139,15 @@ struct SettingsWindowView: View {
                 SettingsVisualStyle.sidebarBackground
                     .ignoresSafeArea()
 
-                List(filteredCategories, selection: $navigation.selectedCategory) { category in
-                    SettingsCategoryRow(category: category, language: model.language)
-                        .tag(category)
-                }
-                .scrollContentBackground(.hidden)
-                .listStyle(.sidebar)
-                .searchable(
-                    text: $searchText,
-                    placement: .sidebar,
-                    prompt: model.language == .russian ? "Поиск" : "Search"
-                )
+                sidebarContent
+                    .searchable(
+                        text: $searchText,
+                        placement: .sidebar,
+                        prompt: model.language == .russian ? "Поиск настроек" : "Search settings"
+                    )
+                    .onSubmit(of: .search) {
+                        if let first = searchResults.first { openSearchResult(first) }
+                    }
             }
             .navigationSplitViewColumnWidth(min: 185, ideal: 195, max: 210)
         } detail: {
@@ -187,6 +171,8 @@ struct SettingsWindowView: View {
                     }
                 }
                 .id(selectedCategory)
+                .environment(\.settingsSearchCategory, selectedCategory)
+                .environment(\.settingsSearchRequest, searchRequest)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -196,13 +182,113 @@ struct SettingsWindowView: View {
                 columnVisibility != .detailOnly
             )
         }
-        .onChange(of: navigation.selectedCategory) { _, selected in
-            if let selected, !filteredCategories.contains(selected) { searchText = "" }
+        .overlay(alignment: .topLeading) {
+            if isSearching { searchIndexContent }
+        }
+        .onChange(of: searchText) { _, _ in
+            searchRequest = nil
+            if !isSearching { searchEntries = [] }
+        }
+        .onChange(of: model.language) { _, _ in
+            searchRequest = nil
         }
         .navigationSplitViewStyle(.balanced)
         .frame(minWidth: 780, minHeight: 540)
         .background(SettingsVisualStyle.windowBackground)
     }
+
+    @ViewBuilder
+    private var sidebarContent: some View {
+        if isSearching {
+            List {
+                if searchResults.isEmpty {
+                    Text(model.language == .russian ? "Ничего не найдено" : "No results")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(searchResults) { entry in
+                    Button {
+                        openSearchResult(entry)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(entry.title)
+                                .font(.callout)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Text(searchResultLocation(entry))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 4)
+                        .contentShape(Rectangle())
+                        .background {
+                            if searchRequest?.entry.id == entry.id {
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(Color.accentColor.opacity(0.12))
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(searchRequest?.entry.id == entry.id ? .isSelected : [])
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .listStyle(.sidebar)
+        } else {
+            List(SettingsCategory.allCases, selection: $navigation.selectedCategory) { category in
+                SettingsCategoryRow(category: category, language: model.language)
+                    .tag(category)
+            }
+            .scrollContentBackground(.hidden)
+            .listStyle(.sidebar)
+        }
+    }
+
+    /// Evaluate the actual page builders while searching. Searchable rows emit only
+    /// titles in this mode: editors/actions and page lifecycle hooks never mount.
+    private var searchIndexContent: some View {
+        VStack {
+            ForEach(SettingsCategory.allCases) { category in
+                Group {
+                    if category == .server {
+                        MainWindowView(model: model, isSearchIndex: true)
+                    } else {
+                        SettingsView(
+                            model: model,
+                            offlineDownloadManager: offlineDownloadManager,
+                            category: category,
+                            isSearchIndex: true
+                        )
+                    }
+                }
+                .environment(\.settingsSearchCategory, category)
+            }
+        }
+        .environment(\.isIndexingSettings, true)
+        .disabled(true)
+        .onPreferenceChange(SettingsSearchEntriesKey.self) { searchEntries = $0 }
+        .frame(width: SettingsScreenLayout.contentMaxWidth)
+        .fixedSize(horizontal: false, vertical: true)
+        .hidden()
+        .frame(width: 0, height: 0)
+        .clipped()
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    private func searchResultLocation(_ entry: SettingsSearchEntry) -> String {
+        guard let category = SettingsCategory(rawValue: entry.category) else { return entry.group }
+        let title = category.title(language: model.language)
+        return entry.group.isEmpty ? title : "\(title) › \(entry.group)"
+    }
+
+    private func openSearchResult(_ entry: SettingsSearchEntry) {
+        guard let category = SettingsCategory(rawValue: entry.category) else { return }
+        navigation.selectedCategory = category
+        searchRequest = SettingsSearchRequest(entry: entry)
+    }
+
 }
 
 private struct SettingsCategoryRow: View {

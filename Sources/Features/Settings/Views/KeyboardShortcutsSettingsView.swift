@@ -36,6 +36,7 @@ struct KeyboardShortcutsSettingsView: View {
                             .fixedSize()
                         }
                         .frame(minHeight: 42)
+                        .searchableSetting(shortcut.title(language: language))
                         .accessibilityElement(children: .combine)
                     }
                 }

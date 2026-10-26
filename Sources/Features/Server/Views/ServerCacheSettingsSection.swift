@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ServerCacheSettingsSection: View {
     @ObservedObject var model: MainWindowModel
+    @Environment(\.isIndexingSettings) private var isIndexing
 
     private var isRussian: Bool { model.language == .russian }
     private var isBusy: Bool {
@@ -16,7 +17,7 @@ struct ServerCacheSettingsSection: View {
             storageControls
                 .disabled(!model.hasLoadedServerSettings || isBusy)
             Divider()
-            footer
+            if !isIndexing { footer }
         }
     }
 
@@ -107,6 +108,7 @@ struct ServerCacheSettingsSection: View {
                     .toggleStyle(.switch)
             }
             .frame(minHeight: 56)
+            .searchableSetting(isRussian ? "Место хранения" : "Cache storage")
             .animation(.easeInOut(duration: 0.18), value: model.serverSettingsDraft.useDisk)
 
             if model.serverSettingsDraft.useDisk {
@@ -140,6 +142,7 @@ struct ServerCacheSettingsSection: View {
                     .help(isRussian ? "Выбрать папку кеша" : "Choose cache folder")
                 }
                 .frame(minHeight: 46)
+                .searchableSetting(isRussian ? "Папка кеша" : "Cache folder")
 
                 Divider()
 
@@ -157,6 +160,7 @@ struct ServerCacheSettingsSection: View {
                 )
                 .toggleStyle(.switch)
                 .frame(minHeight: 42)
+                .searchableSetting(isRussian ? "Удалять кеш при удалении материала" : "Remove cache when an item is dropped")
             } else {
                 Divider()
 
@@ -288,6 +292,7 @@ struct ServerCacheSettingsSection: View {
             Slider(value: value, in: range, step: step)
         }
         .padding(.vertical, 10)
+        .searchableSetting(title)
     }
 
     private var cacheSizeBinding: Binding<Double> {

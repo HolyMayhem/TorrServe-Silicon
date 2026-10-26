@@ -5,6 +5,8 @@ struct SettingsView: View {
     @ObservedObject var model: MainWindowModel
     @ObservedObject var offlineDownloadManager: OfflineDownloadManager
     let category: SettingsCategory
+    var isSearchIndex = false
+    @Environment(\.isIndexingSettings) private var isIndexing
     @State private var offlineDownloadError: String?
     @State private var offlineDownloadErrorTitle: String?
     @State private var pendingOfflineDownloadDeletion: OfflineDownloadRecord?
@@ -14,7 +16,15 @@ struct SettingsView: View {
     private var texts: Texts { Texts(language: model.language) }
 
     var body: some View {
-        ScrollView {
+        if isSearchIndex {
+            categorySections
+        } else {
+            pageContent
+        }
+    }
+
+    private var pageContent: some View {
+        SettingsSearchScrollView {
             VStack(spacing: SettingsScreenLayout.sectionSpacing) {
                 categorySections
             }
@@ -301,6 +311,7 @@ struct SettingsView: View {
                     .help(offlineDownloadFolderPath)
             }
             .padding(.vertical, 12)
+            .searchableSetting(model.language == .russian ? "Папка загрузок" : "Download folder")
         }
 
         settingsSection(
@@ -309,7 +320,9 @@ struct SettingsView: View {
                 : "Downloaded Movies",
             footer: completedOfflineDownloadsFooter
         ) {
-            if completedOfflineDownloads.isEmpty {
+            if isIndexing {
+                EmptyView()
+            } else if completedOfflineDownloads.isEmpty {
                 HStack(spacing: 10) {
                     Image(systemName: "film")
                         .font(.system(size: 16, weight: .medium))
@@ -505,6 +518,7 @@ struct SettingsView: View {
 
         }
         .padding(.vertical, 10)
+        .searchableSetting(texts.menuBarElementOrder)
     }
 
     private var interfaceSection: some View {
@@ -636,6 +650,7 @@ struct SettingsView: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.vertical, 10)
+        .searchableSetting(model.language == .russian ? "Порядок поиска" : "Lookup order")
     }
 
     private var animeMetadataSection: some View {
@@ -674,6 +689,7 @@ struct SettingsView: View {
             )
         }
         .padding(.vertical, 12)
+        .searchableSetting(title)
     }
 
     @ViewBuilder
@@ -831,6 +847,7 @@ struct SettingsView: View {
                 .accessibilityLabel(title)
         }
         .frame(minHeight: 54)
+        .searchableSetting(title)
     }
 
     private func notificationEventIcon(_ event: AppNotificationEvent) -> String {
@@ -945,6 +962,7 @@ struct SettingsView: View {
         }
         .frame(minHeight: 46)
         .padding(.vertical, 2)
+        .searchableSetting(title)
     }
 
     private func settingsSection<Content: View>(
