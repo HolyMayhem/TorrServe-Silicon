@@ -76,6 +76,10 @@ extension AppDelegate {
         }
         mainWindowModel.onRefreshNotificationStatus = { [weak self] in self?.refreshNotificationStatus() }
         mainWindowModel.onOpenNotificationSettings = { [weak self] in self?.openNotificationSettings() }
+        mainWindowModel.onPreviewWhatsNew = { [weak self] in
+            guard let self, self.mainWindowModel.developerMenuEnabled else { return }
+            self.whatsNewController.preview(languageCode: self.currentLanguage.rawValue, relativeTo: self.settingsWindow ?? self.window)
+        }
         mainWindowModel.onLoadOlderMatrixReleases = { [weak self] in self?.loadOlderMatrixReleases() }
         mainWindowModel.onDowngradeMatrix = { [weak self] release in self?.downgradeMatrix(to: release) }
         mainWindowModel.onResumeMatrixUpdates = { [weak self] in self?.resumeMatrixAutomaticUpdates() }

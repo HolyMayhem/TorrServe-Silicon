@@ -51,6 +51,26 @@ struct DeveloperSettingsView: View {
 
     var body: some View {
         VStack(spacing: SettingsScreenLayout.sectionSpacing) {
+            ServerSettingsGroup(title: isRussian ? "Окно «Что нового»" : "What’s New window") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Button(isRussian ? "Показать предпросмотр" : "Show preview") {
+                        model.onPreviewWhatsNew?()
+                    }
+                    .disabled(!model.canPreviewWhatsNew)
+                    Text(isRussian
+                        ? "Предпросмотр работает и при выключенном автопоказе и не отмечает объявление просмотренным."
+                        : "Preview works with automatic presentation disabled and does not mark the announcement as seen.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let error = model.whatsNewPreviewError {
+                        Text(error).font(.caption).foregroundStyle(.orange)
+                            .textSelection(.enabled)
+                    }
+                }
+                .padding(.vertical, 12)
+                .searchableSetting(isRussian ? "Предпросмотр «Что нового»" : "What’s New preview")
+            }
+
             MatrixDowngradeSettingsView(model: model)
 
             ServerSettingsGroup(title: isRussian ? "Системные уведомления" : "System notifications") {

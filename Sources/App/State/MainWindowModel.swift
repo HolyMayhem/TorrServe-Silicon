@@ -135,6 +135,8 @@ final class MainWindowModel: ObservableObject {
     @Published var notificationSystemState = NotificationSystemState()
     @Published var lastNotificationResult: NotificationDeliveryResult?
     @Published var developerMenuEnabled = false
+    @Published var canPreviewWhatsNew = false
+    @Published var whatsNewPreviewError: String?
     @Published var olderMatrixReleases: [TorrServerDowngradeRelease] = []
     @Published var isLoadingOlderMatrixReleases = false
     @Published var matrixDowngradeMessage: String?
@@ -210,6 +212,7 @@ final class MainWindowModel: ObservableObject {
     var onNotificationsChanged: ((Bool) -> Void)?
     var onRefreshNotificationStatus: (() -> Void)?
     var onOpenNotificationSettings: (() -> Void)?
+    var onPreviewWhatsNew: (() -> Void)?
     var onLoadOlderMatrixReleases: (() -> Void)?
     var onDowngradeMatrix: ((TorrServerDowngradeRelease) -> Void)?
     var onResumeMatrixUpdates: (() -> Void)?

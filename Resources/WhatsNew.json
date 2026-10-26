@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "id": "interface-refresh-2026",
+  "enabled": false,
+  "build": 41,
+  "detailsURL": "https://github.com/HolyMayhem/TorrServe-Silicon/releases",
+  "localizations": {
+    "ru": {
+      "title": "Что нового",
+      "continueTitle": "Продолжить",
+      "detailsTitle": "Полный список изменений",
+      "features": [
+        {
+          "symbol": "sidebar.left",
+          "title": "Обновлённый интерфейс",
+          "body": "Боковая панель в стиле macOS и больше места для поиска и медиатеки."
+        },
+        {
+          "symbol": "magnifyingglass",
+          "title": "Настройки легко найти",
+          "body": "Поиск находит нужный параметр и плавно прокручивает к нему."
+        },
+        {
+          "symbol": "bell.badge",
+          "title": "Уведомления под контролем",
+          "body": "Разрешение macOS и результат отправки теперь видны в настройках."
+        }
+      ]
+    },
+    "en": {
+      "title": "What’s New",
+      "continueTitle": "Continue",
+      "detailsTitle": "Full release notes",
+      "features": [
+        {
+          "symbol": "sidebar.left",
+          "title": "A refreshed interface",
+          "body": "A macOS-style sidebar and more room for search and your library."
+        },
+        {
+          "symbol": "magnifyingglass",
+          "title": "Find settings faster",
+          "body": "Search finds individual settings and smoothly scrolls to them."
+        },
+        {
+          "symbol": "bell.badge",
+          "title": "Notifications under control",
+          "body": "Check macOS authorization and notification delivery results in Settings."
+        }
+      ]
+    }
+  }
+}

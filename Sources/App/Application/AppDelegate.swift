@@ -71,6 +71,8 @@ func migrateLegacyPreferencesIfNeeded() {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSMenuItemValidation {
+    // Capture prior-install markers before Sparkle or the UI can persist new ones.
+    let whatsNewController = WhatsNewWindowController()
     let processController = TorrServerProcessController()
     let downloader = TorrServerDownloader()
     let launchAtLoginController = LaunchAtLoginController()
@@ -122,6 +124,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSM
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         registerDefaultSettings()
+        whatsNewController.prepareLaunch(
+            currentBuild: Int(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "") ?? 0,
+            appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
+        )
+        mainWindowModel.canPreviewWhatsNew = whatsNewController.manifest != nil
+        mainWindowModel.whatsNewPreviewError = whatsNewController.loadError
         launchAtLoginController.migrateLegacyAgentIfNeeded()
         applyActivationPolicy()
         buildMainMenu()
@@ -174,6 +182,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSM
         window.center()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        whatsNewController.observePresentationOpportunities(parent: window) { [weak self] in
+            self?.currentLanguage.rawValue ?? "en"
+        }
 
         if UserDefaults.standard.bool(forKey: autoStartServerKey), hasExecutablePath {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {

@@ -55,3 +55,18 @@ jobs:
       - name: Native settings search UI checks
         if: ${{ !cancelled() }}
         run: ./scripts/verify-settings-search-ui.sh
+      - name: What’s New content and history checks
+        if: ${{ !cancelled() }}
+        run: ./scripts/verify-whats-new.sh
+      - name: Native What’s New window checks
+        if: ${{ !cancelled() }}
+        env:
+          WHATS_NEW_SNAPSHOT_DIR: .build/whats-new-snapshots
+        run: ./scripts/verify-whats-new-ui.sh
+      - name: Upload native window previews
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: whats-new-native-previews
+          path: .build/whats-new-snapshots/*.png
+          if-no-files-found: ignore

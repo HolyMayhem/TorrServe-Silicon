@@ -40,6 +40,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
+python3 "$PROJECT_DIR/scripts/validate-whats-new.py"   "$PROJECT_DIR/Resources/WhatsNew.json" "$PROJECT_DIR/Resources/Info.plist"
+
 find "$PROJECT_DIR/Resources" -name ".DS_Store" -type f -delete
 
 if [[ ! -d "$SOURCE_ICON" ]]; then
@@ -129,6 +131,7 @@ test "$(plutil -extract CFBundleIconName raw "$PARTIAL_INFO_PLIST")" = "AppIcon"
 cp "$BIN_DIR/TorrServerManager" "$MACOS_DIR/TorrServerManager"
 cp "$PROJECT_DIR/Resources/Info.plist" "$CONTENTS_DIR/Info.plist"
 cp "$PROJECT_DIR/Resources/PkgInfo" "$CONTENTS_DIR/PkgInfo"
+cp "$PROJECT_DIR/Resources/WhatsNew.json" "$RESOURCES_DIR/WhatsNew.json"
 if [[ -d "$PROJECT_DIR/Resources/ThirdPartyLicenses" ]]; then
   ditto --norsrc "$PROJECT_DIR/Resources/ThirdPartyLicenses" "$RESOURCES_DIR/ThirdPartyLicenses"
 fi
