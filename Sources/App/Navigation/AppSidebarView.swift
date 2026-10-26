@@ -1,11 +1,10 @@
-import Foundation
+import AppKit
 import SwiftUI
 
 struct AppSidebarView: View {
     @ObservedObject var mainModel: MainWindowModel
     @ObservedObject var libraryModel: LibraryViewModel
     @Binding var selection: AppSection?
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var primarySections: [AppSection] {
         mainModel.jackettEnabled
@@ -15,22 +14,6 @@ struct AppSidebarView: View {
 
     var body: some View {
         expandedSidebar
-        .backgroundPreferenceValue(SidebarSelectionBounds.self) { bounds in
-            GeometryReader { geometry in
-                if let selection, let anchor = bounds[selection] {
-                    let frame = geometry[anchor]
-                    SidebarSelectionGlass()
-                        .frame(width: frame.width, height: frame.height)
-                        .position(x: frame.midX, y: frame.midY)
-                        .animation(
-                            reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.82),
-                            value: frame
-                        )
-                }
-            }
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
-        }
         .background(SettingsVisualStyle.sidebarBackground)
         .onMoveCommand { direction in
             let sections = primarySections
@@ -46,16 +29,16 @@ struct AppSidebarView: View {
     private var expandedSidebar: some View {
         VStack(spacing: 0) {
             Text("TorrServe")
-                .font(.system(size: 42, weight: .bold, design: .rounded))
+                .font(.system(size: 20, weight: .semibold))
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 18)
                 .padding(.top, 18)
-                .padding(.bottom, 12)
+                .padding(.bottom, 16)
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 4) {
                     ForEach(primarySections) { section in
                         navigationButton(section)
                     }
@@ -97,14 +80,8 @@ struct AppSidebarView: View {
         } label: {
             SidebarNavigationItem(section: section, language: mainModel.language)
                 .padding(.horizontal, 12)
-                .padding(.vertical, 3)
-                .foregroundStyle(selection == section ? Color.accentColor : Color.primary)
-                .contentShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
         }
-        .buttonStyle(.plain)
-        .anchorPreference(key: SidebarSelectionBounds.self, value: .bounds) {
-            [section: $0]
-        }
+        .buttonStyle(SidebarRowButtonStyle(isSelected: selection == section))
         .accessibilityAddTraits(selection == section ? .isSelected : [])
     }
 
@@ -121,10 +98,9 @@ struct AppSidebarView: View {
             .imageScale(.large)
             .frame(maxWidth: .infinity, minHeight: 38, alignment: .leading)
             .padding(.horizontal, 12)
-            .contentShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .liquidGlassPanel(cornerRadius: 13, interactive: true)
+        .buttonStyle(SidebarRowButtonStyle())
         .help(mainModel.language == .russian ? "Открыть настройки" : "Open Settings")
     }
 
@@ -172,7 +148,8 @@ struct SidebarUpdateNotice: View {
             .accessibilityLabel(language == .russian ? "Установить обновление TorrServer" : "Install TorrServer update")
         }
         .padding(10)
-        .liquidGlassPanel(cornerRadius: 14)
+        .background(Color(nsColor: .quaternaryLabelColor).opacity(0.35),
+                    in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .accessibilityElement(children: .contain)
     }
 }
@@ -181,89 +158,61 @@ struct SidebarNavigationItem: View {
     let section: AppSection
     let language: AppLanguage
 
-    private var displayTitle: String {
-        guard language == .russian else {
-            return section.sidebarTitle(language: language)
-        }
-
-        switch section {
-        case .library, .search:
-            return section.sidebarTitle(language: language)
-        }
-    }
-
-    private var rowHeight: CGFloat {
-        40
-    }
-
     var body: some View {
-        Label {
-            Text(displayTitle)
+        HStack(spacing: 12) {
+            Image(systemName: section.systemImage)
+                .font(.system(size: 19, weight: .regular))
+                .frame(width: 24)
+            Text(section.sidebarTitle(language: language))
                 .lineLimit(2)
                 .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
-        } icon: {
-            Image(systemName: section.systemImage)
         }
-            .font(.system(size: 15, weight: .medium))
+            .font(.system(size: 16, weight: .medium))
             .symbolRenderingMode(.hierarchical)
-            .imageScale(.large)
-            .frame(maxWidth: .infinity, minHeight: rowHeight, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
             .contentShape(Rectangle())
             .accessibilityLabel(section.sidebarTitle(language: language))
     }
 }
 
-private struct SidebarSelectionBounds: PreferenceKey {
-    static let defaultValue: [AppSection: Anchor<CGRect>] = [:]
+/// Flat sidebar rows deliberately avoid Liquid Glass, including on macOS 26.
+private struct SidebarRowButtonStyle: ButtonStyle {
+    var isSelected = false
 
-    static func reduce(
-        value: inout [AppSection: Anchor<CGRect>],
-        nextValue: () -> [AppSection: Anchor<CGRect>]
-    ) {
-        value.merge(nextValue(), uniquingKeysWith: { _, latest in latest })
+    func makeBody(configuration: Configuration) -> some View {
+        SidebarRowButton(
+            label: configuration.label,
+            isSelected: isSelected,
+            isPressed: configuration.isPressed
+        )
     }
 }
 
-private struct SidebarSelectionGlass: View {
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+private struct SidebarRowButton<Label: View>: View {
+    let label: Label
+    let isSelected: Bool
+    let isPressed: Bool
+    @State private var isHovered = false
+    @Environment(\.controlActiveState) private var controlActiveState
 
-    private let shape = RoundedRectangle(cornerRadius: 13, style: .continuous)
+    private var isActive: Bool { controlActiveState != .inactive }
 
-    var body: some View {
-        surface
-            .overlay {
-                shape.strokeBorder(
-                    LinearGradient(
-                        colors: [.white.opacity(0.55), .white.opacity(0.08), .white.opacity(0.24)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 0.75
-                )
-            }
-            .shadow(color: .black.opacity(0.10), radius: 6, y: 3)
+    private var backgroundColor: Color {
+        if isSelected {
+            return Color(nsColor: isActive ? .selectedContentBackgroundColor : .unemphasizedSelectedContentBackgroundColor)
+        }
+        return Color.primary.opacity(isPressed ? 0.12 : (isHovered ? 0.06 : 0))
     }
 
-    @ViewBuilder
-    private var surface: some View {
-        if reduceTransparency {
-            shape.fill(Color(nsColor: .controlBackgroundColor))
-        } else if #available(macOS 26.0, *) {
-            Color.clear
-                .background(
-                    LinearGradient(
-                        colors: [.white.opacity(0.10), .white.opacity(0.025)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    in: shape
-                )
-                .glassEffect(.regular.tint(Color.accentColor.opacity(0.08)), in: shape)
-        } else {
-            shape.fill(.regularMaterial)
-                .overlay(shape.fill(Color.accentColor.opacity(0.06)))
-        }
+    var body: some View {
+        label
+            .foregroundStyle(isSelected && isActive
+                ? Color(nsColor: .alternateSelectedControlTextColor)
+                : Color.primary)
+            .background(backgroundColor, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .contentShape(Rectangle())
+            .onHover { isHovered = $0 }
     }
 }
 
@@ -357,8 +306,8 @@ struct ServerStatusSidebarView: View {
                             .frame(width: 30, height: 30)
                     }
                 }
-                .liquidGlassControl()
-                .buttonBorderShape(.circle)
+                .buttonStyle(.borderless)
+                .background(Color.primary.opacity(0.06), in: Circle())
                 .tint(mainModel.effectiveStatusKind.color)
                 .foregroundStyle(mainModel.effectiveStatusKind.color)
                 .contentShape(Circle())
@@ -403,8 +352,8 @@ struct ServerStatusSidebarView: View {
                 .padding(.horizontal, 2)
             }
         }
-        .padding(12)
-        .liquidGlassPanel(cornerRadius: 14)
+        .padding(.horizontal, 4)
+        .padding(.vertical, 6)
         .help(mainModel.serverConnectionIssue ?? statusTitle)
     }
 
