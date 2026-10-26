@@ -1,0 +1,54 @@
+name: macOS validation
+
+on:
+  push:
+    branches: [interface-rework]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-check:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select latest installed stable Xcode
+        shell: bash
+        run: |
+          XCODE_PATH=$(python3 - <<'PY'
+          import glob, plistlib, re
+          choices = []
+          for path in glob.glob('/Applications/Xcode*.app'):
+              if 'beta' in path.lower():
+                  continue
+              with open(path + '/Contents/Info.plist', 'rb') as f:
+                  version = plistlib.load(f)['CFBundleShortVersionString']
+              choices.append((tuple(map(int, re.findall(r'\d+', version))), path))
+          if not choices:
+              raise SystemExit('No stable Xcode found')
+          print(max(choices)[1])
+          PY
+          )
+          sudo xcode-select --switch "$XCODE_PATH/Contents/Developer"
+          xcodebuild -version
+          swift --version
+          xcrun --sdk macosx --show-sdk-version
+      - name: Build application
+        run: swift build -c debug
+      - name: Settings search checks
+        if: ${{ !cancelled() }}
+        run: ./scripts/verify-settings-search.sh
+      - name: Notification checks
+        if: ${{ !cancelled() }}
+        run: ./scripts/verify-notifications.sh
+      - name: MatriX downgrade checks
+        if: ${{ !cancelled() }}
+        run: ./scripts/verify-matrix-downgrade.sh
