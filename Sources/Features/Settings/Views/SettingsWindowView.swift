@@ -208,6 +208,13 @@ struct SettingsWindowView: View {
             searchRequest = nil
             if !isSearching { searchEntries = [] }
         }
+        .onChange(of: navigation.selectedCategory) { _, selected in
+            // Explicit navigation from menus/buttons must clear an unrelated search.
+            if selected?.rawValue != searchRequest?.entry.category {
+                searchText = ""
+                searchRequest = nil
+            }
+        }
         .onChange(of: model.language) { _, _ in
             searchRequest = nil
         }

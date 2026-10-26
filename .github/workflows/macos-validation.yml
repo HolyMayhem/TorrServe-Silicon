@@ -19,7 +19,7 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Select latest installed stable Xcode
         shell: bash
         run: |
@@ -52,3 +52,6 @@ jobs:
       - name: MatriX downgrade checks
         if: ${{ !cancelled() }}
         run: ./scripts/verify-matrix-downgrade.sh
+      - name: Native settings search UI checks
+        if: ${{ !cancelled() }}
+        run: ./scripts/verify-settings-search-ui.sh

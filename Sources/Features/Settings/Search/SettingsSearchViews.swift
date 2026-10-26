@@ -66,7 +66,7 @@ private struct SearchableSetting: ViewModifier {
         if let category {
             let entry = SettingsSearchEntry(
                 category: category.rawValue, group: isGroup ? "" : group,
-                title: title, revealSection: revealSection
+                title: title, revealSection: revealSection, isGroup: isGroup
             )
             if isIndexing && !isGroup {
                 // Do not mount editors, actions or their lifecycle callbacks in the index.
@@ -174,7 +174,7 @@ struct SettingsSearchScrollView<Content: View>: View {
                     await Task.yield()
                     guard !Task.isCancelled else { return }
                     withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
-                        proxy.scrollTo(request.entry.id, anchor: .center)
+                        proxy.scrollTo(request.entry.id, anchor: request.entry.isGroup ? .top : .center)
                     }
                     if !reduceMotion {
                         do { try await Task.sleep(for: .milliseconds(220)) }

@@ -66,7 +66,7 @@ extension AppDelegate {
                     throw AppError("Выбранная версия уже не является более старой. Обновите список релизов.")
                 }
                 let url: URL = try await withCheckedThrowingContinuation { continuation in
-                    downloader.downloadDarwinArm64(releaseTag: release.tagName) { [weak self] progress in
+                    self.downloader.downloadDarwinArm64(releaseTag: release.tagName) { [weak self] progress in
                         self?.updateTorrServerTransferProgress(progress)
                     } completion: { result in
                         continuation.resume(with: result)

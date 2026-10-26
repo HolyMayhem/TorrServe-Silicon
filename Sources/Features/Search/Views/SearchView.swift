@@ -160,7 +160,7 @@ struct SearchView: View {
                         }
                     }
                     .padding(.top, resultsHeaderOverlayHeight)
-                    .padding(.bottom, 14)
+                    .padding(.bottom, resultsBottomFadeHeight)
                     .padding(.trailing, 14)
                     .padding(.vertical, 2)
                     .background {

@@ -6,6 +6,7 @@ struct SettingsSearchEntry: Hashable, Identifiable {
     let group: String
     let title: String
     var revealSection: String? = nil
+    var isGroup = false
 
     struct ID: Hashable {
         let category: String
