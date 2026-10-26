@@ -55,20 +55,29 @@ struct TorrServerVersion: Comparable {
     }
 }
 
+struct TorrServerDowngradeRelease: Equatable, Identifiable {
+    let tagName: String
+    let version: String
+    var id: String { tagName }
+}
+
 final class TorrServerReleaseChecker {
     private struct GitHubRelease: Decodable {
         struct Asset: Decodable {
             let name: String
+            let size: Int64
         }
 
         let tagName: String
         let htmlURL: URL
         let assets: [Asset]
+        let draft: Bool
+        let prerelease: Bool
 
         enum CodingKeys: String, CodingKey {
             case tagName = "tag_name"
             case htmlURL = "html_url"
-            case assets
+            case assets, draft, prerelease
         }
     }
 
@@ -107,6 +116,38 @@ final class TorrServerReleaseChecker {
             return nil
         }
         return try await availableUpdate(installedVersion: installed)
+    }
+
+    /// Only stable Apple Silicon releases older than the actual selected binary.
+    /// Bound the catalogue to GitHub's 100 most recent releases.
+    func olderReleases(than installed: TorrServerVersion) async throws -> [TorrServerDowngradeRelease] {
+        var request = URLRequest(
+            url: URL(string: "https://api.github.com/repos/YouROK/TorrServer/releases?per_page=100")!,
+            cachePolicy: .reloadRevalidatingCacheData, timeoutInterval: 20
+        )
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
+        request.setValue("TorrServerManager", forHTTPHeaderField: "User-Agent")
+        let (data, response) = try await session.data(for: request)
+        guard let response = response as? HTTPURLResponse, response.statusCode == 200 else {
+            throw AppError("Не удалось получить старые релизы TorrServer с GitHub.")
+        }
+        return try Self.olderReleases(from: data, than: installed)
+    }
+
+    static func olderReleases(from data: Data, than installed: TorrServerVersion) throws -> [TorrServerDowngradeRelease] {
+        let releases = try JSONDecoder().decode([GitHubRelease].self, from: data)
+        var seen = Set<String>()
+        return releases.compactMap { release -> TorrServerDowngradeRelease? in
+            guard !release.draft, !release.prerelease,
+                  let version = TorrServerVersion(release.tagName), version < installed,
+                  release.assets.contains(where: { $0.name == torrServerExecutableName && $0.size > 32 }),
+                  seen.insert(version.displayName).inserted else { return nil }
+            return TorrServerDowngradeRelease(tagName: release.tagName, version: version.displayName)
+        }.sorted {
+            // Versions above have already been parsed successfully.
+            TorrServerVersion($0.version)! > TorrServerVersion($1.version)!
+        }
     }
 
     private func fetchLatestRelease() async throws -> GitHubRelease {
@@ -166,5 +207,15 @@ final class TorrServerReleaseChecker {
             let text = String(data: data, encoding: .utf8) ?? ""
             return TorrServerVersion(text)
         }.value
+    }
+}
+
+/// A downgrade test pauses automatic installation without disabling discovery.
+enum TorrServerUpdatePolicy {
+    static func shouldAutomaticallyInstall(
+        enabled: Bool, testingDowngrade: Bool,
+        failedVersion: String?, latestVersion: String
+    ) -> Bool {
+        enabled && !testingDowngrade && failedVersion != latestVersion
     }
 }

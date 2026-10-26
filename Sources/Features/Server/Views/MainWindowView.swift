@@ -423,9 +423,7 @@ struct MainWindowView: View {
         if let activity = model.torrServerUpdateActivity {
             Button {} label: {
                 Label(
-                    activity.kind == .update
-                        ? (model.language == .russian ? "Обновление…" : "Updating…")
-                        : texts.downloading,
+                    activity.title(language: model.language),
                     systemImage: "arrow.down.circle.fill"
                 )
             }

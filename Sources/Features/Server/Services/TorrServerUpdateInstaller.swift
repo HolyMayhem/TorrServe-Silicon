@@ -33,9 +33,9 @@ struct TorrServerUpdateInstaller {
                 let previousPID = try start(previousPath)
                 try await waitForReadiness(pid: previousPID)
             } catch {
-                throw AppError("Обновление TorrServer не запустилось: \(updateError.localizedDescription) Предыдущая версия сохранена, но её запуск также не удался: \(error.localizedDescription)")
+                throw AppError("Выбранная версия TorrServer не запустилась: \(updateError.localizedDescription) Предыдущая версия сохранена, но её запуск также не удался: \(error.localizedDescription)")
             }
-            throw AppError("Обновление TorrServer не запустилось: \(updateError.localizedDescription) Работа предыдущей версии восстановлена.")
+            throw AppError("Выбранная версия TorrServer не запустилась: \(updateError.localizedDescription) Работа предыдущей версии восстановлена.")
         }
     }
 

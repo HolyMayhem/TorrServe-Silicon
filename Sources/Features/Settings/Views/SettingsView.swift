@@ -250,6 +250,10 @@ struct SettingsView: View {
             }
             Divider()
             toggleRow(texts.autoUpdateTorrServer, keyPath: \.autoUpdateTorrServer, callback: model.onAutoUpdateTorrServerChanged)
+            if model.matrixDowngradeTestActive {
+                Divider()
+                MatrixUpdateTestStatusView(model: model)
+            }
         }
     }
 

@@ -33,6 +33,7 @@ struct TorrServerUpdateActivity: Equatable {
     enum Kind: Equatable {
         case download
         case update
+        case downgrade
     }
 
     enum Stage: Equatable {
@@ -62,6 +63,8 @@ struct TorrServerUpdateActivity: Equatable {
                 return language == .russian ? "Скачивается" : "Downloading"
             case .update:
                 return language == .russian ? "Обновляется" : "Updating"
+            case .downgrade:
+                return language == .russian ? "Даунгрейд MatriX" : "Downgrading MatriX"
             }
         }
     }
@@ -132,6 +135,10 @@ final class MainWindowModel: ObservableObject {
     @Published var notificationSystemState = NotificationSystemState()
     @Published var lastNotificationResult: NotificationDeliveryResult?
     @Published var developerMenuEnabled = false
+    @Published var olderMatrixReleases: [TorrServerDowngradeRelease] = []
+    @Published var isLoadingOlderMatrixReleases = false
+    @Published var matrixDowngradeMessage: String?
+    @Published var matrixDowngradeTestActive = false
     @Published var notificationTestsInFlight: Set<AppNotificationEvent> = []
     @Published var notificationTestResults: [AppNotificationEvent: NotificationDeliveryResult] = [:]
     @Published var jackettEnabled = true
@@ -203,6 +210,9 @@ final class MainWindowModel: ObservableObject {
     var onNotificationsChanged: ((Bool) -> Void)?
     var onRefreshNotificationStatus: (() -> Void)?
     var onOpenNotificationSettings: (() -> Void)?
+    var onLoadOlderMatrixReleases: (() -> Void)?
+    var onDowngradeMatrix: ((TorrServerDowngradeRelease) -> Void)?
+    var onResumeMatrixUpdates: (() -> Void)?
     var onSendTestNotification: ((AppNotificationEvent) -> Void)?
     var onNotificationPreferencesChanged: ((AppNotificationPreferences) -> Void)?
     var onConfigureSearch: (() -> Void)?

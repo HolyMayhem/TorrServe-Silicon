@@ -35,7 +35,26 @@ final class TorrServerDownloader {
         onProgress: @escaping (Double) -> Void = { _ in },
         completion: @escaping (Result<URL, Error>) -> Void
     ) {
-        var request = URLRequest(url: latestReleaseURL)
+        downloadRelease(at: latestReleaseURL, expectedTag: nil, onProgress: onProgress, completion: completion)
+    }
+
+    func downloadDarwinArm64(
+        releaseTag: String,
+        onProgress: @escaping (Double) -> Void = { _ in },
+        completion: @escaping (Result<URL, Error>) -> Void
+    ) {
+        let releaseURL = URL(string: "https://api.github.com/repos/YouROK/TorrServer/releases/tags")!
+            .appendingPathComponent(releaseTag)
+        downloadRelease(at: releaseURL, expectedTag: releaseTag, onProgress: onProgress, completion: completion)
+    }
+
+    private func downloadRelease(
+        at url: URL,
+        expectedTag: String?,
+        onProgress: @escaping (Double) -> Void,
+        completion: @escaping (Result<URL, Error>) -> Void
+    ) {
+        var request = URLRequest(url: url)
         request.timeoutInterval = 20
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         session.dataTask(with: request) { data, response, error in
@@ -44,6 +63,9 @@ final class TorrServerDownloader {
                 try Self.validateHTTPResponse(response)
                 guard let data else { throw AppError("GitHub не вернул данные релиза.") }
                 let release = try JSONDecoder().decode(Release.self, from: data)
+                if let expectedTag, release.tag_name != expectedTag {
+                    throw AppError("GitHub вернул другую версию TorrServer. Исполняемый файл не изменён.")
+                }
                 guard let version = TorrServerVersion(release.tag_name),
                       let asset = release.assets.first(where: { $0.name == torrServerExecutableName }),
                       asset.size > 32 else {

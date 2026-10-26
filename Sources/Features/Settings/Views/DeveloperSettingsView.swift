@@ -45,6 +45,8 @@ struct DeveloperSettingsView: View {
 
     var body: some View {
         VStack(spacing: SettingsScreenLayout.sectionSpacing) {
+            MatrixDowngradeSettingsView(model: model)
+
             ServerSettingsGroup(title: isRussian ? "Системные уведомления" : "System notifications") {
                 NotificationSettingsStatusView(model: model)
                 Divider()

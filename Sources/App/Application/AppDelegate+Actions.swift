@@ -36,6 +36,8 @@ extension AppDelegate {
 
             switch result {
             case .success(let url):
+                self.mainWindowModel.matrixDowngradeTestActive = false
+                self.mainWindowModel.olderMatrixReleases = []
                 self.mainWindowModel.path = url.path
                 self.saveCurrentPath()
                 self.completeTorrServerTransfer()
@@ -99,9 +101,12 @@ extension AppDelegate {
                 )
                 guard path == self.executablePath,
                       revision == self.torrServerUpdateCheckRevision else { return }
-                if let update,
-                   update.latestVersion != self.failedAutomaticTorrServerVersion,
-                   UserDefaults.standard.bool(forKey: autoUpdateTorrServerKey) {
+                if let update, TorrServerUpdatePolicy.shouldAutomaticallyInstall(
+                    enabled: UserDefaults.standard.bool(forKey: autoUpdateTorrServerKey),
+                    testingDowngrade: self.mainWindowModel.matrixDowngradeTestActive,
+                    failedVersion: self.failedAutomaticTorrServerVersion,
+                    latestVersion: update.latestVersion
+                ) {
                     self.mainWindowModel.torrServerUpdate = nil
                     self.automaticallyInstallTorrServerUpdate(update)
                 } else {
@@ -231,6 +236,8 @@ extension AppDelegate {
                     }
                 )
                 failedAutomaticTorrServerVersion = nil
+                mainWindowModel.matrixDowngradeTestActive = false
+                mainWindowModel.olderMatrixReleases = []
                 mainWindowModel.torrServerUpdate = nil
                 mainWindowModel.torrServerVersion = update.latestVersion
                 completeTorrServerTransfer()
@@ -254,7 +261,7 @@ extension AppDelegate {
         }
     }
 
-    private func beginTorrServerTransfer(
+    func beginTorrServerTransfer(
         kind: TorrServerUpdateActivity.Kind,
         targetVersion: String?
     ) {
@@ -268,7 +275,7 @@ extension AppDelegate {
         updateUI(for: processController.state)
     }
 
-    private func updateTorrServerTransferProgress(_ downloadProgress: Double) {
+    func updateTorrServerTransferProgress(_ downloadProgress: Double) {
         guard let activity = mainWindowModel.torrServerUpdateActivity else { return }
         let isInstalling = downloadProgress >= 0.995
         mainWindowModel.torrServerUpdateActivity = TorrServerUpdateActivity(
@@ -279,7 +286,7 @@ extension AppDelegate {
         )
     }
 
-    private func advanceTorrServerTransfer(
+    func advanceTorrServerTransfer(
         to stage: TorrServerUpdateActivity.Stage,
         progress: Double
     ) {
@@ -292,7 +299,7 @@ extension AppDelegate {
         )
     }
 
-    private func completeTorrServerTransfer() {
+    func completeTorrServerTransfer() {
         guard let activity = mainWindowModel.torrServerUpdateActivity else { return }
         let completed = TorrServerUpdateActivity(
             kind: activity.kind,

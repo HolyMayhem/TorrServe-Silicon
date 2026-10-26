@@ -76,6 +76,9 @@ extension AppDelegate {
         }
         mainWindowModel.onRefreshNotificationStatus = { [weak self] in self?.refreshNotificationStatus() }
         mainWindowModel.onOpenNotificationSettings = { [weak self] in self?.openNotificationSettings() }
+        mainWindowModel.onLoadOlderMatrixReleases = { [weak self] in self?.loadOlderMatrixReleases() }
+        mainWindowModel.onDowngradeMatrix = { [weak self] release in self?.downgradeMatrix(to: release) }
+        mainWindowModel.onResumeMatrixUpdates = { [weak self] in self?.resumeMatrixAutomaticUpdates() }
         mainWindowModel.onSendTestNotification = { [weak self] event in self?.sendTestNotification(event) }
         mainWindowModel.onNotificationPreferencesChanged = { [weak self] preferences in
             self?.setNotificationPreferences(preferences)
