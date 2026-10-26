@@ -27,6 +27,13 @@ enum SettingsVisualStyle {
     static var windowBackgroundNSColor: NSColor { .clear }
     static var windowBackground: some View { AppWindowSurface().ignoresSafeArea() }
     static var sidebarBackground: some View { AppWindowSurface(material: .sidebar).ignoresSafeArea() }
+    static var sidebarDivider: some View {
+        Rectangle()
+            .fill(Color(nsColor: .separatorColor))
+            .frame(width: 1)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
     private static let panelFill = NSColor(name: "TorrServeSettingsGroup") { appearance in
         let dark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         return NSColor.white.withAlphaComponent(dark ? 0.035 : 0.65)

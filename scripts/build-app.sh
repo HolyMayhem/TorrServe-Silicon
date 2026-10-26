@@ -14,6 +14,7 @@ COMPILED_ICON_DIR="$GENERATED_DIR/AppIcon"
 PARTIAL_INFO_PLIST="$GENERATED_DIR/AppIcon-Info.plist"
 SOURCE_ICON="$PROJECT_DIR/Resources/AppIcon.icon"
 XCODE_DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
+CODE_SIGN_IDENTITY="${CODE_SIGN_IDENTITY:--}"
 ACTOOL="$XCODE_DEVELOPER_DIR/usr/bin/actool"
 MACOS_DEPLOYMENT_TARGET="15.0"
 MACOS_SDKROOT="$(
@@ -194,8 +195,8 @@ chflags -R nohidden "$APP_PATH" 2>/dev/null || true
 SIGNED_APP_PATH="$SIGNING_DIR/$APP_NAME"
 ditto --norsrc "$APP_PATH" "$SIGNED_APP_PATH"
 xattr -cr "$SIGNED_APP_PATH" 2>/dev/null || true
-codesign --force --sign - "$SIGNED_APP_PATH/Contents/Resources/$TORRSERVER_ASSET_NAME"
-codesign --force --sign - --deep "$SIGNED_APP_PATH"
+codesign --force --sign "$CODE_SIGN_IDENTITY" "$SIGNED_APP_PATH/Contents/Resources/$TORRSERVER_ASSET_NAME"
+codesign --force --sign "$CODE_SIGN_IDENTITY" --deep "$SIGNED_APP_PATH"
 codesign --verify --deep --strict "$SIGNED_APP_PATH"
 
 rm -rf "$APP_PATH"

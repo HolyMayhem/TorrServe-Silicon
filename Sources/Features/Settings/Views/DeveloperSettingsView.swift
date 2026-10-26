@@ -24,6 +24,12 @@ struct NotificationSettingsStatusView: View {
                     .textSelection(.enabled)
             }
             HStack {
+                if model.notificationSystemState.authorization == .notDetermined {
+                    Button(isRussian ? "Разрешить уведомления" : "Allow notifications") {
+                        model.onNotificationsChanged?(true)
+                    }
+                    .disabled(model.notificationsAuthorizationPending)
+                }
                 Button(isRussian ? "Открыть настройки macOS" : "Open macOS Settings") {
                     model.onOpenNotificationSettings?()
                 }

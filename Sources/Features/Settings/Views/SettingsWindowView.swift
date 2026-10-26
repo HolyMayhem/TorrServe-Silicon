@@ -196,6 +196,11 @@ struct SettingsWindowView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .ignoresSafeArea(.container, edges: .top)
+            .overlay(alignment: .leading) {
+                if columnVisibility != .detailOnly {
+                    SettingsVisualStyle.sidebarDivider
+                }
+            }
             .environment(
                 \.settingsSidebarIsVisible,
                 columnVisibility != .detailOnly
