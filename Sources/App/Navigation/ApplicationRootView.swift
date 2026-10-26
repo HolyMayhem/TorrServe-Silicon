@@ -8,8 +8,6 @@ struct ApplicationRootView: View {
 
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
-    private let mainContentInset: CGFloat = 15
-
     private var selection: Binding<AppSection?> {
         Binding(
             get: { mainModel.selectedSection },
@@ -77,13 +75,11 @@ struct ApplicationRootView: View {
                 model: libraryModel,
                 offlineDownloadManager: libraryModel.offlineDownloadManager
             )
-            .padding(mainContentInset)
         case .search:
             SearchView(
                 mainModel: mainModel,
                 model: searchModel
             )
-            .padding(mainContentInset)
         }
     }
 

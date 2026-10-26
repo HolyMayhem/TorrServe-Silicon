@@ -41,13 +41,15 @@ struct SearchView: View {
     }
 
     private var searchContent: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 0) {
             searchBar
+            Divider()
             if model.hasSearched { sourceStatus }
 
-            HStack(spacing: 12) {
+            HStack(spacing: 0) {
                 resultsPanel
                     .frame(width: 400)
+                Divider()
                 resultDetailPanel
                     .frame(maxWidth: .infinity)
             }
@@ -123,8 +125,7 @@ struct SearchView: View {
             .help(mainModel.language == .russian ? "Настроить источники поиска" : "Configure search sources")
             .accessibilityLabel(mainModel.language == .russian ? "Настройки поиска" : "Search settings")
         }
-        .padding(8)
-        .appPanel()
+        .padding(14)
     }
 
     private var resultsPanel: some View {
@@ -201,7 +202,6 @@ struct SearchView: View {
         }
         .padding(.leading, 14)
         .padding(.top, 14)
-        .appPanel()
     }
 
     private var resultsHeader: some View {
@@ -284,7 +284,6 @@ struct SearchView: View {
                 serverIsRunning: mainModel.canStop
             )
             .padding(16)
-            .appPanel()
         } else {
             VStack(spacing: 12) {
                 Image(systemName: "sparkle.magnifyingglass")
@@ -299,7 +298,6 @@ struct SearchView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(14)
-            .appPanel()
         }
     }
 
@@ -343,7 +341,8 @@ struct SearchView: View {
             }
         }
         .font(.caption)
-        .padding(.horizontal, 4)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
     }
 
     private var searchEmpty: some View {

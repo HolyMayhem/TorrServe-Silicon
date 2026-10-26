@@ -95,9 +95,11 @@ struct LibraryView: View {
     private var libraryContent: some View {
         Group {
             if model.displayMode == .compact {
-                HStack(spacing: 12) {
+                HStack(spacing: 0) {
                     torrentListPanel
                         .frame(width: 314)
+
+                    Divider()
 
                     torrentDetailPanel
                         .frame(maxWidth: .infinity)
@@ -187,10 +189,9 @@ struct LibraryView: View {
         }
         .padding(.horizontal, libraryContentInset)
         .padding(.top, 14)
-        .appPanel()
         .overlay {
             if model.isDropTargeted {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                Rectangle()
                     .stroke(Color.accentColor, style: StrokeStyle(
                         lineWidth: 2,
                         dash: [6, 4]
@@ -296,7 +297,7 @@ struct LibraryView: View {
     }
 
     private var visualLibrary: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 0) {
             HStack(spacing: 10) {
                 Label(texts.library, systemImage: "film.stack")
                     .font(.headline)
@@ -337,15 +338,14 @@ struct LibraryView: View {
                 .disabled(model.isAdding || !mainModel.canStop)
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 11)
-            .appPanel()
+            .padding(.vertical, 14)
+
+            Divider()
 
             if !mainModel.canStop {
                 serverUnavailable
-                    .appPanel()
             } else if model.filteredTorrents.isEmpty {
                 emptyLibrary
-                    .appPanel()
             } else {
                 ScrollView {
                     if model.displayMode == .posters {
@@ -437,7 +437,6 @@ struct LibraryView: View {
                         isVisible: visualScrollIndicatorIsVisible
                     )
                 }
-                .appPanel()
             }
         }
     }
@@ -454,7 +453,6 @@ struct LibraryView: View {
                 translationMode: mainModel.overviewTranslationMode
             )
             .padding(14)
-            .appPanel()
         } else {
             VStack(spacing: 12) {
                 Image(systemName: "film.stack")
@@ -469,7 +467,6 @@ struct LibraryView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(14)
-            .appPanel()
         }
     }
 
