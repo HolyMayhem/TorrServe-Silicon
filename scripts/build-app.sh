@@ -40,7 +40,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-python3 "$PROJECT_DIR/scripts/validate-whats-new.py"   "$PROJECT_DIR/Resources/WhatsNew.json" "$PROJECT_DIR/Resources/Info.plist"
+python3 "$PROJECT_DIR/scripts/validate-whats-new.py" \
+  "$PROJECT_DIR/Resources/WhatsNew.json" "$PROJECT_DIR/Resources/Info.plist"
 
 find "$PROJECT_DIR/Resources" -name ".DS_Store" -type f -delete
 

@@ -61,6 +61,7 @@ struct WhatsNewView: View {
                     .buttonStyle(.borderedProminent)
                     .buttonBorderShape(.capsule)
                     .controlSize(.large)
+                    .clipShape(Capsule())
                     .keyboardShortcut(.defaultAction)
                 if manifest.detailsURL != nil {
                     Button(content.detailsTitle, action: onShowDetails)

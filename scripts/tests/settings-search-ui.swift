@@ -88,23 +88,32 @@ private struct SearchFixture: View {
 struct SettingsSearchUIChecks {
     @MainActor static func main() {
         _ = NSApplication.shared
-        NSApp.setActivationPolicy(.accessory)
+        NSApp.setActivationPolicy(.regular)
+        NSApp.finishLaunching()
         let state = FixtureState()
         let host = NSHostingView(rootView: SearchFixture(state: state))
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 500, height: 300), styleMask: [.borderless], backing: .buffered, defer: false)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 500, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         window.contentView = host
-        window.orderFrontRegardless()
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
         defer { window.close() }
         var checks = 0
         func expect(_ condition: @autoclosure () -> Bool, _ message: String) {
             checks += 1
-            guard condition() else { fatalError(message) }
+            guard condition() else {
+                let details = "\(message); target=\(state.targetFrame), heading=\(state.headingFrame), entries=\(state.entries.count), active=\(NSApp.isActive), key=\(NSApp.keyWindow === window)\n"
+                FileHandle.standardError.write(Data(details.utf8))
+                fatalError(message)
+            }
         }
         func wait(_ message: String, until condition: () -> Bool) {
             let deadline = Date().addingTimeInterval(8)
             while !condition(), Date() < deadline {
                 host.layoutSubtreeIfNeeded()
+                while let event = NSApp.nextEvent(matching: .any, until: Date(), inMode: .default, dequeue: true) {
+                    NSApp.sendEvent(event)
+                }
                 RunLoop.main.run(until: Date().addingTimeInterval(0.02))
             }
             expect(condition(), message)
