@@ -215,13 +215,12 @@ struct MenuBarPopoverView: View {
             SpeedSparkline(samples: model.speedSamples)
                 .frame(height: 58)
         }
-
     }
 
     private var actionButtons: some View {
         HStack(spacing: 8) {
             PopoverActionButton(
-                title: model.canStop ? texts.stop : texts.start,
+                title: model.canStop ? (model.language == .russian ? "Стоп" : texts.stop) : texts.start,
                 systemImage: model.canStop ? "stop.fill" : "play.fill",
                 isEnabled: model.canStop || model.canStart,
                 action: {
@@ -232,6 +231,7 @@ struct MenuBarPopoverView: View {
                     }
                 }
             )
+            .accessibilityLabel(model.canStop ? texts.stop : texts.start)
 
             PopoverActionButton(
                 title: texts.webUI,
@@ -302,7 +302,6 @@ struct MenuBarPopoverView: View {
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
             }
         }
-
     }
 
     private var footer: some View {

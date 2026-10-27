@@ -24,8 +24,8 @@ struct MenuBarUIChecks {
         func descendants(_ root: NSView) -> [NSView] {
             [root] + root.subviews.flatMap { descendants($0) }
         }
-        func accessibilityTree(_ root: Any) -> [any NSAccessibility] {
-            guard let node = root as? any NSAccessibility else { return [] }
+        func accessibilityTree(_ root: Any) -> [any NSAccessibilityProtocol] {
+            guard let node = root as? any NSAccessibilityProtocol else { return [] }
             return [node] + (node.accessibilityChildren() ?? []).flatMap { accessibilityTree($0) }
         }
         func press(_ label: String, in controller: MenuBarPopoverController) {

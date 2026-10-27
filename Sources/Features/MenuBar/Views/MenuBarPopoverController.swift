@@ -12,6 +12,7 @@ final class MenuBarPopoverController: NSObject, NSWindowDelegate {
     private let hostingView: NSHostingView<MenuBarPopoverView>
     private weak var anchor: NSView?
     private var modelChanges: AnyCancellable?
+    private var isClosing = false
     var onClose: (() -> Void)?
 
     var isShown: Bool { panel.isVisible }
@@ -63,7 +64,9 @@ final class MenuBarPopoverController: NSObject, NSWindowDelegate {
     }
 
     func performClose(_ sender: Any?) {
-        guard isShown else { return }
+        guard isShown, !isClosing else { return }
+        isClosing = true
+        defer { isClosing = false }
         panel.orderOut(sender)
         onClose?()
     }
