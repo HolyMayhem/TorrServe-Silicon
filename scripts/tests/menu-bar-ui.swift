@@ -24,22 +24,19 @@ struct MenuBarUIChecks {
         func descendants(_ root: NSView) -> [NSView] {
             [root] + root.subviews.flatMap { descendants($0) }
         }
-        func accessibilityTree(_ root: Any) -> [any NSAccessibilityProtocol] {
-            guard let node = root as? any NSAccessibilityProtocol else { return [] }
-            return [node] + (node.accessibilityChildren() ?? []).flatMap { accessibilityTree($0) }
-        }
-        func press(_ label: String, in controller: MenuBarPopoverController) {
-            let buttons = accessibilityTree(controller.contentView).filter {
-                $0.accessibilityRole() == .button && ($0.accessibilityLabel() ?? $0.accessibilityTitle()) == label
-            }
-            if buttons.count != 1 {
-                for item in accessibilityTree(controller.contentView) {
-                    print("AX: role=\(item.accessibilityRole()?.rawValue ?? "nil") label=\(item.accessibilityLabel() ?? "nil") title=\(item.accessibilityTitle() ?? "nil")")
-                }
-                fflush(stdout)
-            }
-            expect(buttons.count == 1, "Find one accessible button: \(label)")
-            expect(buttons.first?.accessibilityPerformPress() == true, "Press \(label)")
+        // Exercise real hit testing and button tracking at the approved layout's
+        // control centers, without requiring Accessibility permission on CI.
+        func click(x: CGFloat, y: CGFloat, in controller: MenuBarPopoverController) {
+            let shell = controller.window.contentView!
+            let point = shell.convert(NSPoint(x: x, y: y), to: nil)
+            let up = NSEvent.mouseEvent(with: .leftMouseUp, location: point, modifierFlags: [],
+                timestamp: 0, windowNumber: controller.window.windowNumber, context: nil,
+                eventNumber: 1, clickCount: 1, pressure: 0)!
+            let down = NSEvent.mouseEvent(with: .leftMouseDown, location: point, modifierFlags: [],
+                timestamp: 0, windowNumber: controller.window.windowNumber, context: nil,
+                eventNumber: 0, clickCount: 1, pressure: 1)!
+            NSApp.postEvent(up, atStart: false)
+            controller.window.sendEvent(down)
             pump()
         }
 
@@ -105,20 +102,25 @@ struct MenuBarUIChecks {
         model.onShowWindow = { shown += 1 }
         model.onDownload = { downloaded += 1 }
         model.onQuit = { quit += 1 }
-        press(Texts(language: .russian).stop, in: controller)
-        press("Web UI", in: controller)
-        press(Texts(language: .russian).openWindow, in: controller)
-        press(Texts(language: .russian).downloadArm, in: controller)
-        press("Выйти", in: controller)
-        expect(stopped == 1 && web == 1 && shown == 1 && downloaded == 1 && quit == 1, "Actions reach their existing callbacks")
+        click(x: 68, y: 112, in: controller)
+        click(x: 190, y: 112, in: controller)
+        click(x: 310, y: 112, in: controller)
+        click(x: 60, y: 20, in: controller)
+        click(x: 345, y: 20, in: controller)
+        expect(stopped == 1, "Stop click reaches the existing callback")
+        expect(web == 1 && shown == 1, "Web UI and window clicks reach the existing callbacks")
+        expect(downloaded == 1 && quit == 1, "Footer clicks reach the existing callbacks")
 
-        press(Texts(language: .russian).showQRCode, in: controller)
+        let qrRowFromTop = root.bounds.height - 64
+        click(x: 110, y: root.bounds.height - qrRowFromTop, in: controller)
+        pump(0.35)
         expect(model.showsQRCode && controller.contentView.fittingSize.height > collapsed + 180,
                "QR disclosure expands the content")
         expect(controller.window.frame.minY >= screen.visibleFrame.minY,
                "Expanded content stays above the screen edge")
         try snapshot("qr-dark")
-        press(Texts(language: .russian).hideQRCode, in: controller)
+        click(x: 110, y: root.bounds.height - qrRowFromTop, in: controller)
+        pump(0.35)
         expect(!model.showsQRCode && abs(controller.contentView.fittingSize.height - collapsed) < 1,
                "Collapsing QR restores the original height")
 
@@ -131,14 +133,12 @@ struct MenuBarUIChecks {
         model.statusText = "Сервер остановлен"
         model.statusKind = .stopped
         pump()
-        press(Texts(language: .russian).start, in: controller)
+        click(x: 68, y: 112, in: controller)
         expect(started == 1, "Stopped state routes Start correctly")
         model.canStart = false
         pump()
-        let startButton = accessibilityTree(controller.contentView).first {
-            $0.accessibilityRole() == .button && ($0.accessibilityLabel() ?? $0.accessibilityTitle()) == Texts(language: .russian).start
-        }
-        expect(startButton?.isAccessibilityEnabled() == false, "Unavailable actions stay disabled")
+        click(x: 68, y: 112, in: controller)
+        expect(started == 1, "Unavailable actions stay disabled")
         try snapshot("stopped-dark")
 
         model.preferences.showsRecentMaterial = false
