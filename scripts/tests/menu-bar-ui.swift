@@ -240,11 +240,12 @@ struct MenuBarUIChecks {
             let host = NSHostingView(rootView: view)
             host.appearance = NSAppearance(named: appearance)
             host.frame = NSRect(origin: .zero, size: host.fittingSize)
-            let preview = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+            let preview = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
             preview.isReleasedWhenClosed = false
             preview.contentView = host
             preview.appearance = host.appearance
-            preview.orderFront(nil)
+            preview.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
             host.layoutSubtreeIfNeeded()
             pump()
             if let directory = ProcessInfo.processInfo.environment["MENU_BAR_SNAPSHOT_DIR"] {
@@ -315,8 +316,13 @@ private struct MenuBarEditorPreview: View {
             Text("Дополнительные элементы").font(.headline)
             VStack(spacing: 10) {
                 ForEach(MenuBarExtraOption.allCases) { option in
-                    Toggle(option.title(language: language), isOn: .constant(preferences[keyPath: option.keyPath]))
-                        .toggleStyle(.switch)
+                    HStack {
+                        Text(option.title(language: language))
+                        Spacer()
+                        Toggle("", isOn: .constant(preferences[keyPath: option.keyPath]))
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                    }
                     if option != MenuBarExtraOption.allCases.last { Divider() }
                 }
             }

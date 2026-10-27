@@ -370,21 +370,10 @@ private final class MenuBarSectionChipView: NSView {
         title: String,
         isVisible: Bool
     ) {
-        if #available(macOS 26.0, *) {
-            let glassView = NSGlassEffectView()
-            glassView.style = .regular
-            glassView.cornerRadius = 14.5
-            backgroundView = glassView
-        } else {
-            let effectView = NSVisualEffectView()
-            effectView.material = .popover
-            effectView.blendingMode = .withinWindow
-            effectView.state = .active
-            effectView.wantsLayer = true
-            effectView.layer?.cornerRadius = 14.5
-            effectView.layer?.masksToBounds = true
-            backgroundView = effectView
-        }
+        backgroundView = NSView()
+        backgroundView.wantsLayer = true
+        backgroundView.layer?.cornerRadius = 14.5
+        backgroundView.layer?.masksToBounds = true
         iconView = NSImageView(image: NSImage(
             systemSymbolName: section.systemImage,
             accessibilityDescription: nil
@@ -462,16 +451,10 @@ private final class MenuBarSectionChipView: NSView {
             : NSColor.separatorColor.withAlphaComponent(0.45)
         ).cgColor
 
-        if #available(macOS 26.0, *), let glassView = backgroundView as? NSGlassEffectView {
-            glassView.tintColor = isDragging
-                ? NSColor.controlAccentColor.withAlphaComponent(0.20)
-                : NSColor.secondaryLabelColor.withAlphaComponent(isVisible ? 0.06 : 0.025)
-        } else if let effectView = backgroundView as? NSVisualEffectView {
-            effectView.layer?.backgroundColor = (isDragging
-                ? NSColor.controlAccentColor.withAlphaComponent(0.16)
-                : NSColor.secondaryLabelColor.withAlphaComponent(isVisible ? 0.04 : 0.015)
-            ).cgColor
-        }
+        backgroundView.layer?.backgroundColor = (isDragging
+            ? NSColor.controlAccentColor.withAlphaComponent(0.16)
+            : NSColor.controlColor
+        ).cgColor
     }
 
     func update(title: String, isVisible: Bool) {
