@@ -43,13 +43,10 @@ extension AppDelegate {
         popoverModel.onQRCodeVisibilityChanged = { [weak self] in
             self?.synchronizePopoverLayout()
         }
-        statusPopover = NSPopover()
-        statusPopover.behavior = .transient
-        statusPopover.animates = true
-        statusPopover.delegate = self
-        statusPopover.contentViewController = NSHostingController(
-            rootView: MenuBarPopoverView(model: popoverModel)
-        )
+        statusPopover = MenuBarPopoverController(model: popoverModel)
+        statusPopover.onClose = { [weak self] in
+            self?.stopMonitoringPopoverDismissal()
+        }
 
         refreshQRCode()
     }
@@ -68,31 +65,8 @@ extension AppDelegate {
         refreshPopoverMaterial()
         synchronizePopoverLayout()
         NSApp.activate(ignoringOtherApps: true)
-        statusPopover.show(
-            relativeTo: button.bounds,
-            of: button,
-            preferredEdge: .minY
-        )
+        statusPopover.show(relativeTo: button)
         beginMonitoringPopoverDismissal()
-        synchronizePopoverLayout()
-
-        DispatchQueue.main.async { [weak self] in
-            guard
-                let self,
-                self.statusPopover.isShown,
-                let contentView = self.statusPopover.contentViewController?.view,
-                let popoverWindow = contentView.window
-            else {
-                return
-            }
-
-            popoverWindow.makeKey()
-            popoverWindow.makeFirstResponder(contentView)
-        }
-    }
-
-    func popoverDidClose(_ notification: Notification) {
-        stopMonitoringPopoverDismissal()
     }
 
     func beginMonitoringPopoverDismissal() {
@@ -108,7 +82,7 @@ extension AppDelegate {
                 return event
             }
 
-            let popoverWindow = self.statusPopover.contentViewController?.view.window
+            let popoverWindow = self.statusPopover.window
             let statusItemWindow = self.statusItem.button?.window
             if event.window === popoverWindow || event.window === statusItemWindow {
                 return event
@@ -141,54 +115,7 @@ extension AppDelegate {
     }
 
     func synchronizePopoverLayout() {
-        guard
-            statusPopover != nil,
-            let contentView = statusPopover.contentViewController?.view
-        else {
-            return
-        }
-
-        contentView.layoutSubtreeIfNeeded()
-        let fittingSize = contentView.fittingSize
-        if fittingSize.width > 0, fittingSize.height > 0 {
-            statusPopover.contentSize = fittingSize
-        }
-
-        guard statusPopover.isShown else { return }
-
-        DispatchQueue.main.async { [weak self] in
-            guard
-                let self,
-                let popoverWindow = self.statusPopover.contentViewController?.view.window,
-                let button = self.statusItem.button,
-                let screen = button.window?.screen ?? popoverWindow.screen ?? NSScreen.main
-            else {
-                return
-            }
-
-            var frame = popoverWindow.frame
-            let horizontalMargin: CGFloat = 4
-            let verticalMargin: CGFloat = 4
-            let minimumY = screen.visibleFrame.minY + verticalMargin
-            let maximumY = screen.frame.maxY - verticalMargin
-            let minimumX = screen.frame.minX + horizontalMargin
-            let maximumX = screen.frame.maxX - horizontalMargin
-
-            if frame.maxY > maximumY {
-                frame.origin.y -= frame.maxY - maximumY
-            }
-            if frame.minY < minimumY {
-                frame.origin.y = minimumY
-            }
-            if frame.minX < minimumX {
-                frame.origin.x = minimumX
-            }
-            if frame.maxX > maximumX {
-                frame.origin.x -= frame.maxX - maximumX
-            }
-
-            popoverWindow.setFrameOrigin(frame.origin)
-        }
+        statusPopover?.synchronizeLayout()
     }
 
     func applyLanguage() {

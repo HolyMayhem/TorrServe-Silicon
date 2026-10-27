@@ -43,66 +43,72 @@ struct MenuBarPopoverView: View {
         Texts(language: model.language)
     }
 
+    private var visibleSections: [MenuBarPopoverSection] {
+        model.preferences.sectionOrder.filter { model.preferences.isVisible($0) }
+    }
+
     var body: some View {
-        ZStack {
-            Rectangle()
-                .fill(.ultraThinMaterial)
-                .ignoresSafeArea()
+        VStack(spacing: 0) {
+            header
+                .padding(.horizontal, 16)
+                .padding(.vertical, 16)
 
-            LinearGradient(
-                colors: [
-                    Color(nsColor: .windowBackgroundColor).opacity(0.44),
-                    Color.green.opacity(0.055),
-                    Color(nsColor: .windowBackgroundColor).opacity(0.24)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
+            Divider()
 
-            VStack(spacing: 10) {
-                header
-                ForEach(model.preferences.sectionOrder) { section in
+            VStack(spacing: 0) {
+                ForEach(visibleSections) { section in
                     popoverSection(section)
+                        .padding(.vertical, section == .quickActions ? 15 : 14)
+
+                    if section != visibleSections.last {
+                        Divider()
+                    }
                 }
-                footer
             }
-            .padding(13)
+            .padding(.horizontal, 16)
+
+            if !visibleSections.isEmpty {
+                Divider()
+            }
+            footer
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
         }
         .frame(width: 380)
         .fixedSize(horizontal: false, vertical: true)
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     private var header: some View {
         HStack(spacing: 10) {
-            ZStack {
-                Circle()
-                    .fill(model.statusKind.color.opacity(0.18))
-                    .frame(width: 34, height: 34)
-                Image(systemName: "bolt.fill")
-                    .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(model.statusKind.color)
-            }
+            Image(systemName: "bolt.circle")
+                .font(.system(size: 30, weight: .regular))
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text("TorrServer")
-                    .font(.system(size: 15, weight: .semibold, design: .rounded))
-                Text(model.statusText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .font(.system(size: 15, weight: .semibold))
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(model.statusKind.color)
+                        .frame(width: 6, height: 6)
+                        .accessibilityHidden(true)
+                    Text(model.statusText)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
 
             Spacer(minLength: 8)
 
             if model.isRunning && model.preferences.showsSpeed {
                 Text(model.speedText)
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .font(.system(size: 12))
                     .monospacedDigit()
-                    .foregroundStyle(.primary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .popoverGlass(in: Capsule())
+                    .foregroundStyle(.secondary)
+                    .fixedSize()
             }
         }
     }
@@ -191,8 +197,7 @@ struct MenuBarPopoverView: View {
                 .padding(.top, 5)
             }
         }
-        .frame(height: 140, alignment: .top)
-        .popoverSection()
+        .frame(maxWidth: .infinity, minHeight: 140, alignment: .topLeading)
     }
 
     private var speedCard: some View {
@@ -210,7 +215,7 @@ struct MenuBarPopoverView: View {
             SpeedSparkline(samples: model.speedSamples)
                 .frame(height: 58)
         }
-        .popoverSection()
+
     }
 
     private var actionButtons: some View {
@@ -219,7 +224,6 @@ struct MenuBarPopoverView: View {
                 title: model.canStop ? texts.stop : texts.start,
                 systemImage: model.canStop ? "stop.fill" : "play.fill",
                 isEnabled: model.canStop || model.canStart,
-                isProminent: true,
                 action: {
                     if model.canStop {
                         model.onStop?()
@@ -237,11 +241,13 @@ struct MenuBarPopoverView: View {
             )
 
             PopoverActionButton(
-                title: texts.openWindow,
+                title: model.language == .russian ? "Окно" : "Window",
                 systemImage: "macwindow",
                 isEnabled: true,
                 action: { model.onShowWindow?() }
             )
+            .accessibilityLabel(texts.openWindow)
+            .help(texts.openWindow)
         }
     }
 
@@ -296,7 +302,7 @@ struct MenuBarPopoverView: View {
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
             }
         }
-        .popoverSection()
+
     }
 
     private var footer: some View {
@@ -311,14 +317,13 @@ struct MenuBarPopoverView: View {
 
             Spacer()
 
-            Button(texts.quit) {
+            Button(model.language == .russian ? "Выйти" : texts.quit) {
                 model.onQuit?()
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
         }
         .font(.caption)
-        .padding(.horizontal, 4)
     }
 
     private func statisticBadge(
@@ -330,9 +335,6 @@ struct MenuBarPopoverView: View {
             .font(.caption)
             .monospacedDigit()
             .foregroundStyle(.secondary)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
-            .popoverGlass(in: Capsule())
     }
 }
 
@@ -379,7 +381,7 @@ private struct SpeedSparkline: View {
                     .fill(
                         LinearGradient(
                             colors: [
-                                Color.green.opacity(0.30),
+                                Color.green.opacity(0.10),
                                 Color.green.opacity(0.015)
                             ],
                             startPoint: .top,
@@ -406,65 +408,17 @@ private struct PopoverActionButton: View {
     let title: String
     let systemImage: String
     let isEnabled: Bool
-    var isProminent = false
     let action: () -> Void
 
     var body: some View {
-        Group {
-            if #available(macOS 26.0, *) {
-                if isProminent {
-                    Button(action: action) {
-                        Label(title, systemImage: systemImage)
-                            .lineLimit(1)
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.glassProminent)
-                } else {
-                    Button(action: action) {
-                        Label(title, systemImage: systemImage)
-                            .lineLimit(1)
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.glass)
-                }
-            } else {
-                Button(action: action) {
-                    Label(title, systemImage: systemImage)
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .tint(isProminent ? .green : nil)
-            }
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .font(.system(size: 12))
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, minHeight: 17)
         }
+        .buttonStyle(.bordered)
         .controlSize(.regular)
         .disabled(!isEnabled)
-    }
-}
-
-private extension View {
-    @ViewBuilder
-    func popoverGlass<S: Shape>(in shape: S) -> some View {
-        if #available(macOS 26.0, *) {
-            self.glassEffect(.regular, in: shape)
-        } else {
-            self.background(.regularMaterial, in: shape)
-                .overlay(shape.stroke(.white.opacity(0.10), lineWidth: 0.5))
-        }
-    }
-
-    @ViewBuilder
-    func popoverSection() -> some View {
-        let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
-        if #available(macOS 26.0, *) {
-            self
-                .padding(12)
-                .glassEffect(.regular, in: shape)
-        } else {
-            self
-                .padding(12)
-                .background(.regularMaterial, in: shape)
-                .overlay(shape.stroke(.white.opacity(0.10), lineWidth: 0.5))
-        }
     }
 }

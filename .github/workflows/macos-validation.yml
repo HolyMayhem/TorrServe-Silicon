@@ -55,6 +55,18 @@ jobs:
       - name: Native settings search UI checks
         if: ${{ !cancelled() }}
         run: ./scripts/verify-settings-search-ui.sh
+      - name: Native menu bar UI checks
+        if: ${{ !cancelled() }}
+        env:
+          MENU_BAR_SNAPSHOT_DIR: .build/menu-bar-snapshots
+        run: ./scripts/verify-menu-bar-ui.sh
+      - name: Upload native menu bar previews
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: menu-bar-native-previews-macos-15
+          path: .build/menu-bar-snapshots/*.png
+          if-no-files-found: ignore
       - name: What’s New content and history checks
         if: ${{ !cancelled() }}
         run: ./scripts/verify-whats-new.sh
@@ -69,4 +81,21 @@ jobs:
         with:
           name: whats-new-native-previews
           path: .build/whats-new-snapshots/*.png
+          if-no-files-found: ignore
+
+  menu-bar-macos-26:
+    runs-on: macos-26
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Native menu bar UI checks on macOS 26
+        env:
+          MENU_BAR_SNAPSHOT_DIR: .build/menu-bar-snapshots
+        run: ./scripts/verify-menu-bar-ui.sh
+      - name: Upload native menu bar previews
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: menu-bar-native-previews-macos-26
+          path: .build/menu-bar-snapshots/*.png
           if-no-files-found: ignore

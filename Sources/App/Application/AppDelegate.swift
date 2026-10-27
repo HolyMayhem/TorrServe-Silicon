@@ -70,7 +70,7 @@ func migrateLegacyPreferencesIfNeeded() {
 
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSMenuItemValidation {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     // Capture prior-install markers before Sparkle or the UI can persist new ones.
     let whatsNewController = WhatsNewWindowController()
     let processController = TorrServerProcessController()
@@ -100,7 +100,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSM
     var serverContentSize = NSSize(width: 580, height: 500)
 
     var statusItem: NSStatusItem!
-    var statusPopover: NSPopover!
+    var statusPopover: MenuBarPopoverController!
     var menuBarMaterialTimer: Timer?
     var torrServerUpdateTimer: Timer?
     var torrServerUpdateWorkItem: DispatchWorkItem?
