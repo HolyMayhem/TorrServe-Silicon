@@ -24,7 +24,7 @@ extension AppDelegate {
     }
 
     @objc func downloadLatestTorrServer(_ sender: Any?) {
-        guard !isDownloading else { return }
+        guard !isDownloading, !popoverModel.isRestarting else { return }
 
         beginTorrServerTransfer(kind: .download, targetVersion: nil)
 
@@ -69,7 +69,7 @@ extension AppDelegate {
     }
 
     func checkForTorrServerUpdate() {
-        guard !isDownloading else { return }
+        guard !isDownloading, !popoverModel.isRestarting else { return }
 
         let path = executablePath
         torrServerUpdateCheckRevision += 1
@@ -147,7 +147,7 @@ extension AppDelegate {
     private func automaticallyInstallTorrServerUpdate(
         _ update: TorrServerAvailableUpdate
     ) {
-        guard !isDownloading else { return }
+        guard !isDownloading, !popoverModel.isRestarting else { return }
 
         let previousPath = executablePath
         mainWindowModel.torrServerUpdate = nil
@@ -432,6 +432,8 @@ extension AppDelegate {
         menuBarPreferencesStore.save(normalized)
         mainWindowModel.menuBarPreferences = normalized
         popoverModel.preferences = normalized
+        if !normalized.showsCache { cancelMenuBarCacheRefresh() }
+        if statusPopover?.isShown == true { refreshPopoverMaterial() }
         statusItem?.isVisible = normalized.isIconVisible
         if !normalized.showsQRCode {
             popoverModel.showsQRCode = false

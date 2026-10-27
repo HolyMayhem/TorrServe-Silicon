@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import CoreImage
 import CoreImage.CIFilterBuiltins
 import Darwin
@@ -101,6 +102,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     var statusItem: NSStatusItem!
     var statusPopover: MenuBarPopoverController!
+    var menuBarServerInfoObservation: AnyCancellable?
+    var menuBarCacheTask: Task<Void, Never>?
+    var menuBarCacheRevision = 0
+    var menuBarCacheHashes = Set<String>()
     var menuBarMaterialTimer: Timer?
     var torrServerUpdateTimer: Timer?
     var torrServerUpdateWorkItem: DispatchWorkItem?

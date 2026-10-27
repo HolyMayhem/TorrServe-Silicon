@@ -1,5 +1,7 @@
 import AppKit
 import SwiftUI
+import CoreImage
+import CoreImage.CIFilterBuiltins
 
 @main
 struct MenuBarUIChecks {
@@ -67,8 +69,11 @@ struct MenuBarUIChecks {
         model.speedText = "12,4 МБ/с"
         model.speedSamples = [2, 2.4, 2.1, 4, 3.7, 5, 4.7, 6, 5.2, 7, 8, 7.4, 9, 8.3, 10, 9.1, 11, 10.4, 9.8, 12, 11.4, 12.4]
         model.webUIAddress = "http://192.168.1.42:8090"
-        // A real QR image is supplied by the app; keep a harmless fixture here.
-        model.qrImage = NSImage(systemSymbolName: "qrcode", accessibilityDescription: nil)
+        let filter = CIFilter.qrCodeGenerator()
+        filter.message = Data(model.webUIAddress.utf8)
+        let qrOutput = filter.outputImage!.transformed(by: CGAffineTransform(scaleX: 6, y: 6))
+        let qr = CIContext().createCGImage(qrOutput, from: qrOutput.extent)!
+        model.qrImage = NSImage(cgImage: qr, size: NSSize(width: 180, height: 180))
         let controller = MenuBarPopoverController(model: model)
         var closed = 0
         controller.onClose = { closed += 1 }
@@ -128,6 +133,8 @@ struct MenuBarUIChecks {
         model.canStart = true
         model.isRunning = false
         model.activeTitle = nil
+        model.materialIsActive = false
+        model.speedText = "0 МБ/с"
         model.bufferProgress = nil
         model.speedSamples = []
         model.statusText = "Сервер остановлен"
@@ -168,6 +175,159 @@ struct MenuBarUIChecks {
         controller.window.resignKey()
         pump()
         expect(!controller.isShown && closed == 2, "Losing focus dismisses the menu")
+        // Each extra works independently of the original quick-actions group.
+        var onlyExtras = MenuBarPreferences.defaults
+        onlyExtras.showsRecentMaterial = false
+        onlyExtras.showsSpeed = false
+        onlyExtras.showsQuickActions = false
+        onlyExtras.showsQRCode = false
+        model.language = .russian
+        model.isRunning = true
+        model.canStop = true
+        model.isRestarting = false
+        var restarts = 0, settings = 0, updates = 0, library = 0
+        model.onRestart = { restarts += 1 }
+        model.onShowSettings = { settings += 1 }
+        model.onShowUpdates = { updates += 1 }
+        model.onShowLibrary = { library += 1 }
+        for option in [MenuBarExtraOption.restart, .settings, .activeTorrents, .updateStatus] {
+            var selected = onlyExtras
+            selected[keyPath: option.keyPath] = true
+            model.preferences = selected
+            controller.show(relativeTo: anchor)
+            pump()
+            expect(controller.contentView.fittingSize.height < 220, "A single extra does not bring hidden blocks back")
+            click(x: 100, y: 60, in: controller)
+            controller.performClose(nil)
+        }
+        expect(restarts == 1 && settings == 1 && updates == 1 && library == 1,
+               "Restart, settings, updates, and library actions route independently")
+        var copyOnly = onlyExtras
+        copyOnly.showsCopyAddress = true
+        model.preferences = copyOnly
+        controller.show(relativeTo: anchor)
+        pump()
+        click(x: 354, y: 60, in: controller)
+        expect(NSPasteboard.general.string(forType: .string) == model.webUIAddress, "Copy writes the full connection URL")
+        controller.performClose(nil)
+        var restartOnly = onlyExtras
+        restartOnly.showsRestart = true
+        model.preferences = restartOnly
+        model.isRestarting = true
+        controller.show(relativeTo: anchor)
+        pump()
+        click(x: 100, y: 60, in: controller)
+        expect(restarts == 1, "Prevent duplicate restarts while busy")
+        controller.performClose(nil)
+
+        var all = MenuBarPreferences.defaults
+        for option in MenuBarExtraOption.allCases { all[keyPath: option.keyPath] = true }
+        model.preferences = all
+        model.isRestarting = false
+        model.statusText = "Сервер запущен"
+        model.statusKind = .running
+        model.activeTitle = "Дюна: Часть вторая (2024)"
+        model.materialIsActive = true
+        model.bufferProgress = 0.68
+        model.speedText = "12,4 МБ/с"
+        model.speedSamples = [2, 2.4, 2.1, 4, 3.7, 5, 4.7, 6, 5.2, 7, 8, 7.4, 9, 8.3, 10, 9.1, 11, 10.4, 9.8, 12, 11.4, 12.4]
+        model.installedVersion = "MatriX.147"
+        model.availableVersion = "MatriX.147.1"
+        model.activeTorrentCount = 3
+        model.cacheSnapshot = MenuBarCacheSnapshot(used: 640 * 1024 * 1024, capacity: 2 * 1024 * 1024 * 1024)
+
+        func exportView<V: View>(_ view: V, name: String, appearance: NSAppearance.Name) throws -> NSHostingView<V> {
+            let host = NSHostingView(rootView: view)
+            host.appearance = NSAppearance(named: appearance)
+            host.frame = NSRect(origin: .zero, size: host.fittingSize)
+            let preview = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+            preview.isReleasedWhenClosed = false
+            preview.contentView = host
+            preview.appearance = host.appearance
+            preview.orderFront(nil)
+            host.layoutSubtreeIfNeeded()
+            pump()
+            if let directory = ProcessInfo.processInfo.environment["MENU_BAR_SNAPSHOT_DIR"] {
+                let target = URL(fileURLWithPath: directory, isDirectory: true)
+                let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
+                host.cacheDisplay(in: host.bounds, to: bitmap)
+                try bitmap.representation(using: .png, properties: [:])!.write(to: target.appendingPathComponent("menu-bar-\(name).png"))
+            }
+            preview.orderOut(nil)
+            return host
+        }
+        for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
+            let full = try exportView(MenuBarPopoverView(model: model), name: "all-enabled-\(name)", appearance: appearance)
+            expect(full.bounds.height > collapsed + 200, "Export every enabled block, including below the viewport")
+        }
+        controller.show(relativeTo: anchor)
+        pump()
+        expect(controller.window.frame.minY >= screen.visibleFrame.minY, "All extras still fit the screen using scrolling")
+        let scroll = descendants(root).compactMap { $0 as? NSScrollView }.first!
+        let end = max(controller.contentView.bounds.height - scroll.contentSize.height, 0)
+        scroll.contentView.scroll(to: NSPoint(x: 0, y: end))
+        scroll.reflectScrolledClipView(scroll.contentView)
+        pump()
+        expect(scroll.documentVisibleRect.maxY >= controller.contentView.bounds.maxY - 1,
+               "The bottom settings and footer remain reachable in a tall menu")
+        controller.performClose(nil)
+
+        // The existing native editor must wrap ten draggable chips and move
+        // items between rows without changing their independent visibility.
+        var editedOrder = all.sectionOrder
+        let editor = try exportView(MenuBarEditorPreview(preferences: all, language: .russian) {
+            editedOrder = $0
+        }, name: "editor-all-enabled", appearance: .aqua)
+        guard let orderControl = descendants(editor).first(where: {
+            String(describing: type(of: $0)) == "MenuBarSectionOrderNSView"
+        }) else { fatalError("Native order editor missing") }
+        let chips = orderControl.subviews
+        expect(chips.count == 10, "All old and new sections can be reordered")
+        expect(chips.allSatisfy { $0.frame.maxX <= orderControl.bounds.maxX + 1 && $0.frame.minX >= 0 },
+               "Order chips wrap without horizontal clipping")
+        expect(Set(chips.map { Int($0.frame.minY) }).count > 1, "Editor uses several rows")
+        let first = chips.first { $0.accessibilityLabel() == MenuBarPopoverSection.serverVersion.title(language: .russian) }!
+        let last = chips.first { $0.accessibilityLabel() == MenuBarPopoverSection.settings.title(language: .russian) }!
+        func dragEvent(_ type: NSEvent.EventType, at point: NSPoint) -> NSEvent {
+            NSEvent.mouseEvent(with: type, location: orderControl.convert(point, to: nil), modifierFlags: [],
+                timestamp: 0, windowNumber: orderControl.window?.windowNumber ?? 0, context: nil,
+                eventNumber: 0, clickCount: 1, pressure: 1)!
+        }
+        let source = NSPoint(x: last.frame.midX, y: last.frame.midY)
+        let destination = NSPoint(x: first.frame.midX, y: first.frame.midY)
+        orderControl.mouseDown(with: dragEvent(.leftMouseDown, at: source))
+        orderControl.mouseDragged(with: dragEvent(.leftMouseDragged, at: destination))
+        orderControl.mouseUp(with: dragEvent(.leftMouseUp, at: destination))
+        pump()
+        expect(editedOrder.first == .settings && editedOrder.count == 10, "Drag a new block across editor rows")
         print("Native menu bar UI: \(checks) checks passed")
+    }
+}
+
+private struct MenuBarEditorPreview: View {
+    let preferences: MenuBarPreferences
+    let language: AppLanguage
+    let onChange: ([MenuBarPopoverSection]) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            Text("Редактор меню").font(.system(size: 22, weight: .semibold))
+            Text("Дополнительные элементы").font(.headline)
+            VStack(spacing: 10) {
+                ForEach(MenuBarExtraOption.allCases) { option in
+                    Toggle(option.title(language: language), isOn: .constant(preferences[keyPath: option.keyPath]))
+                        .toggleStyle(.switch)
+                    if option != MenuBarExtraOption.allCases.last { Divider() }
+                }
+            }
+            Text("Порядок элементов").font(.headline)
+            Text("Перетащите любой блок на нужное место. Отключённые элементы показаны бледнее.")
+                .font(.caption).foregroundStyle(.secondary)
+            MenuBarSectionOrderView(sections: preferences.sectionOrder, preferences: preferences,
+                                    language: language, onChange: onChange)
+        }
+        .padding(24)
+        .frame(width: 650)
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 }

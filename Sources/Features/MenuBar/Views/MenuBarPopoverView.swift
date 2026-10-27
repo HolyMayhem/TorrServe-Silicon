@@ -11,6 +11,13 @@ final class MenuBarPopoverModel: ObservableObject {
     @Published var canOpenWeb = true
     @Published var canDownload = true
     @Published var isDownloading = false
+    @Published var isRestarting = false
+    @Published var installedVersion: String?
+    @Published var availableVersion: String?
+    @Published var isCheckingForUpdate = false
+    @Published var isInstallingUpdate = false
+    @Published var activeTorrentCount: Int?
+    @Published var cacheSnapshot: MenuBarCacheSnapshot?
     @Published var preferences = MenuBarPreferences.defaults
 
     @Published var speedText = ""
@@ -32,6 +39,10 @@ final class MenuBarPopoverModel: ObservableObject {
     var onOpenWeb: (() -> Void)?
     var onShowWindow: (() -> Void)?
     var onDownload: (() -> Void)?
+    var onRestart: (() -> Void)?
+    var onShowSettings: (() -> Void)?
+    var onShowUpdates: (() -> Void)?
+    var onShowLibrary: (() -> Void)?
     var onQuit: (() -> Void)?
     var onQRCodeVisibilityChanged: (() -> Void)?
 }
@@ -39,12 +50,14 @@ final class MenuBarPopoverModel: ObservableObject {
 struct MenuBarPopoverView: View {
     @ObservedObject var model: MenuBarPopoverModel
 
+    @State private var copiedAddress = false
+
     private var texts: Texts {
         Texts(language: model.language)
     }
 
     private var visibleSections: [MenuBarPopoverSection] {
-        model.preferences.sectionOrder.filter { model.preferences.isVisible($0) }
+        MenuBarPreferences.normalizedOrder(model.preferences.sectionOrder).filter { model.preferences.isVisible($0) }
     }
 
     var body: some View {
@@ -117,6 +130,21 @@ struct MenuBarPopoverView: View {
     private func popoverSection(_ section: MenuBarPopoverSection) -> some View {
         if model.preferences.isVisible(section) {
             switch section {
+            case .serverVersion:
+                versionSection
+            case .serverAddress:
+                addressSection
+            case .activeTorrents:
+                activeTorrentsSection
+            case .cache:
+                cacheSection
+            case .restart:
+                restartSection
+            case .settings:
+                navigationRow(
+                    title: model.language == .russian ? "Настройки" : "Settings",
+                    systemImage: "gearshape", action: { model.onShowSettings?() }
+                )
             case .recentMaterial:
                 currentMaterialCard
             case .speed:
@@ -127,6 +155,162 @@ struct MenuBarPopoverView: View {
                 webUICard
             }
         }
+    }
+
+    private var versionSection: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            if model.preferences.showsServerVersion {
+                HStack {
+                    Label("MatriX", systemImage: "shippingbox")
+                    Spacer()
+                    Text(model.installedVersion ?? "—")
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+            }
+            if model.preferences.showsUpdateStatus {
+                Button { model.onShowUpdates?() } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: model.availableVersion == nil ? "arrow.triangle.2.circlepath" : "arrow.down.circle")
+                        Text(updateStatusText)
+                            .lineLimit(2)
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10))
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(model.availableVersion == nil ? Color.secondary : Color.accentColor)
+            }
+        }
+        .font(.system(size: 12))
+    }
+
+    private var updateStatusText: String {
+        if model.isInstallingUpdate {
+            return model.language == .russian ? "Установка обновления…" : "Installing update…"
+        }
+        if model.isCheckingForUpdate {
+            return model.language == .russian ? "Проверка обновлений…" : "Checking for updates…"
+        }
+        if let version = model.availableVersion {
+            return model.language == .russian ? "Доступно обновление: \(version)" : "Update available: \(version)"
+        }
+        return model.language == .russian ? "Проверить обновления" : "Check for updates"
+    }
+
+    private var addressSection: some View {
+        HStack(spacing: 9) {
+            Image(systemName: "network")
+                .foregroundStyle(.secondary)
+            if model.preferences.showsServerAddress {
+                Text(model.webUIAddress.isEmpty ? "—" : model.webUIAddress)
+                    .font(.system(size: 11.5, design: .monospaced))
+                    .lineLimit(1)
+                    .textSelection(.enabled)
+                    .help(model.webUIAddress)
+            } else {
+                Text(model.language == .russian ? "Скопировать адрес сервера" : "Copy server address")
+                    .font(.system(size: 12))
+            }
+            Spacer(minLength: 4)
+            if model.preferences.showsCopyAddress {
+                Button {
+                    let pasteboard = NSPasteboard.general
+                    pasteboard.clearContents()
+                    copiedAddress = pasteboard.setString(model.webUIAddress, forType: .string)
+                } label: {
+                    Image(systemName: copiedAddress ? "checkmark" : "doc.on.doc")
+                        .frame(width: 22, height: 20)
+                }
+                .buttonStyle(.borderless)
+                .disabled(model.webUIAddress.isEmpty)
+                .accessibilityLabel(model.language == .russian ? "Скопировать адрес сервера" : "Copy server address")
+                .help(copiedAddress
+                    ? (model.language == .russian ? "Адрес скопирован" : "Address copied")
+                    : (model.language == .russian ? "Скопировать адрес сервера" : "Copy server address"))
+                .task(id: copiedAddress) {
+                    guard copiedAddress else { return }
+                    try? await Task.sleep(for: .seconds(1.5))
+                    guard !Task.isCancelled else { return }
+                    copiedAddress = false
+                }
+            }
+        }
+    }
+
+    private var activeTorrentsSection: some View {
+        navigationRow(
+            title: model.language == .russian ? "Активные торренты" : "Active torrents",
+            systemImage: "square.stack.3d.up",
+            value: model.activeTorrentCount.map(String.init) ?? "—",
+            action: { model.onShowLibrary?() }
+        )
+    }
+
+    private var cacheSection: some View {
+        VStack(spacing: 8) {
+            HStack {
+                Label(model.language == .russian ? "Кэш" : "Cache", systemImage: "memorychip")
+                Spacer()
+                if !model.isRunning {
+                    Text(model.language == .russian ? "Сервер остановлен" : "Server stopped")
+                        .foregroundStyle(.secondary)
+                } else if let cache = model.cacheSnapshot {
+                    Text(cache.capacity > 0 ? cache.formattedUsage : (model.language == .russian ? "Пуст" : "Empty"))
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text(model.language == .russian ? "Нет данных" : "Unavailable")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            if model.isRunning, let cache = model.cacheSnapshot, cache.capacity > 0 {
+                ProgressView(value: cache.fraction)
+                    .tint(.accentColor)
+            }
+        }
+        .font(.system(size: 12))
+        .help(model.language == .russian
+            ? "Суммарный буфер активных торрентов. Это не объём памяти всего приложения."
+            : "Combined buffers of active torrents, rather than total application memory.")
+    }
+
+    private var restartSection: some View {
+        Button { model.onRestart?() } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.clockwise")
+                Text(model.isRestarting
+                    ? (model.language == .russian ? "Перезапуск…" : "Restarting…")
+                    : (model.language == .russian ? "Перезапустить сервер" : "Restart server"))
+                Spacer()
+            }
+            .font(.system(size: 12))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!model.isRunning || !model.canStop || model.isDownloading || model.isRestarting)
+        .help(model.language == .russian
+            ? "Перезапуск прервёт текущую трансляцию."
+            : "Restarting interrupts the current stream.")
+    }
+
+    private func navigationRow(title: String, systemImage: String, value: String? = nil,
+                               action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Label(title, systemImage: systemImage)
+                Spacer()
+                if let value { Text(value).monospacedDigit().foregroundStyle(.secondary) }
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+            .font(.system(size: 12))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private var currentMaterialCard: some View {
@@ -222,7 +406,7 @@ struct MenuBarPopoverView: View {
             PopoverActionButton(
                 title: model.canStop ? (model.language == .russian ? "Стоп" : texts.stop) : texts.start,
                 systemImage: model.canStop ? "stop.fill" : "play.fill",
-                isEnabled: model.canStop || model.canStart,
+                isEnabled: (model.canStop || model.canStart) && !model.isRestarting,
                 action: {
                     if model.canStop {
                         model.onStop?()

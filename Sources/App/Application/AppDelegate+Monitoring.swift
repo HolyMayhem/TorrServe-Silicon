@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 @MainActor
 extension AppDelegate {
     func updatePopoverMaterial(with torrents: [NativeTorrent]) {
+        popoverModel.activeTorrentCount = torrents.filter(\.isActive).count
         let active = torrents.first(where: \.isActive)
         let selected = active ?? torrents.first
         popoverModel.activeTitle = selected?.displayTitle
@@ -192,7 +193,7 @@ extension AppDelegate {
     }
 
     func handleNotification(for state: TorrServerProcessController.State) {
-        guard !isActivatingTorrServerUpdate else { return }
+        guard !isActivatingTorrServerUpdate, !popoverModel.isRestarting else { return }
         switch state {
         case .running:
             guard !hasAnnouncedRunningState else { return }
@@ -256,6 +257,7 @@ extension AppDelegate {
         popoverModel.statusKind = mainStatusKind(for: state.dotColor)
         popoverModel.statusText = state.menuStatus
         popoverModel.isRunning = processController.isRunning
+        if !popoverModel.isRunning { cancelMenuBarCacheRefresh() }
         popoverModel.canStart = state.canStart
         popoverModel.canStop = state.canStop
         popoverModel.canOpenWeb = state.canOpenWeb

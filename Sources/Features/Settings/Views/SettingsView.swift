@@ -210,6 +210,17 @@ struct SettingsView: View {
                 menuBarToggleRow(texts.expandQRCodeOnOpen, keyPath: \.expandsQRCodeOnOpen)
                     .disabled(!model.menuBarPreferences.showsQRCode)
             }
+            settingsSection(
+                title: model.language == .russian ? "Дополнительные элементы" : "Additional items",
+                footer: model.language == .russian
+                    ? "Каждый элемент включается отдельно. Их расположение меняется ниже, вместе с остальными блоками меню."
+                    : "Enable each item separately. Reorder them below along with the other menu sections."
+            ) {
+                ForEach(MenuBarExtraOption.allCases) { option in
+                    if option != MenuBarExtraOption.allCases.first { Divider() }
+                    menuBarToggleRow(option.title(language: model.language), keyPath: option.keyPath)
+                }
+            }
             settingsSection(title: texts.menuBarElementOrder) { menuBarOrderRow }
         }
     }

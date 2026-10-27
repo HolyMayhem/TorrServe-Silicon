@@ -14,32 +14,14 @@ struct MenuBarSectionOrderView: View {
             preferences: preferences,
             language: language,
             helpText: language == .russian
-                ? "Перетащите элемент влево или вправо, чтобы изменить порядок"
-                : "Drag an item left or right to change its order",
+                ? "Перетащите элемент на нужное место, чтобы изменить порядок"
+                : "Drag an item to its new position to change the order",
             onChange: onChange
         )
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityLabel(language == .russian
             ? "Порядок элементов меню-бара"
             : "Menu bar item order")
-    }
-}
-
-enum MenuBarSectionOrdering {
-    static func moving(
-        _ sections: [MenuBarPopoverSection],
-        section: MenuBarPopoverSection,
-        to destinationIndex: Int
-    ) -> [MenuBarPopoverSection] {
-        guard let sourceIndex = sections.firstIndex(of: section) else {
-            return MenuBarPreferences.normalizedOrder(sections)
-        }
-
-        var result = sections
-        result.remove(at: sourceIndex)
-        let insertionIndex = min(max(destinationIndex, 0), result.endIndex)
-        result.insert(section, at: insertionIndex)
-        return MenuBarPreferences.normalizedOrder(result)
     }
 }
 
@@ -75,11 +57,7 @@ private struct MenuBarSectionOrderControl: NSViewRepresentable {
         nsView: MenuBarSectionOrderNSView,
         context: Context
     ) -> CGSize? {
-        let intrinsicSize = nsView.intrinsicContentSize
-        return CGSize(
-            width: proposal.width ?? intrinsicSize.width,
-            height: intrinsicSize.height
-        )
+        nsView.fittingSize(forWidth: proposal.width)
     }
 }
 
@@ -89,7 +67,6 @@ private final class MenuBarSectionOrderNSView: NSView {
     private let itemSpacing: CGFloat = 7
     private let dragThreshold: CGFloat = 2
     private let reorderAnimationDuration: TimeInterval = 0.18
-    private let chipVerticalOffset: CGFloat = -4
 
     private var sections: [MenuBarPopoverSection]
     private var workingSections: [MenuBarPopoverSection]
@@ -100,6 +77,7 @@ private final class MenuBarSectionOrderNSView: NSView {
     private var draggedSection: MenuBarPopoverSection?
     private var mouseDownPoint: NSPoint?
     private var dragGrabOffsetX: CGFloat = 0
+    private var dragGrabOffsetY: CGFloat = 0
     private var hasDragged = false
 
     init(
@@ -139,7 +117,13 @@ private final class MenuBarSectionOrderNSView: NSView {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override var intrinsicContentSize: NSSize {
-        NSSize(width: totalWidth(for: workingSections), height: controlHeight)
+        fittingSize(forWidth: bounds.width > 0 ? bounds.width : nil)
+    }
+
+    func fittingSize(forWidth proposedWidth: CGFloat?) -> NSSize {
+        let width = proposedWidth ?? totalWidth(for: workingSections)
+        let frames = chipFrames(for: workingSections, availableWidth: width)
+        return NSSize(width: width, height: (frames.last?.maxY ?? chipHeight) + controlHeight - chipHeight)
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -164,6 +148,7 @@ private final class MenuBarSectionOrderNSView: NSView {
         draggedSection = section
         mouseDownPoint = point
         dragGrabOffsetX = point.x - chipView.frame.minX
+        dragGrabOffsetY = point.y - chipView.frame.minY
         hasDragged = false
         window?.invalidateCursorRects(for: self)
     }
@@ -190,13 +175,16 @@ private final class MenuBarSectionOrderNSView: NSView {
             max(point.x - dragGrabOffsetX, 0),
             max(bounds.width - draggedFrame.width, 0)
         )
-        draggedFrame.origin.y = targetY + chipVerticalOffset
+        draggedFrame.origin.y = min(
+            max(point.y - dragGrabOffsetY, 0),
+            max(bounds.height - draggedFrame.height, 0)
+        )
         draggedView.frame = draggedFrame
 
         let targetFrames = chipFrames(for: workingSections)
         guard let destinationIndex = targetFrames.indices.min(by: {
-            abs(targetFrames[$0].midX - draggedFrame.midX)
-                < abs(targetFrames[$1].midX - draggedFrame.midX)
+            hypot(targetFrames[$0].midX - draggedFrame.midX, targetFrames[$0].midY - draggedFrame.midY)
+                < hypot(targetFrames[$1].midX - draggedFrame.midX, targetFrames[$1].midY - draggedFrame.midY)
         }),
         workingSections.firstIndex(of: draggedSection) != destinationIndex else {
             return
@@ -283,10 +271,6 @@ private final class MenuBarSectionOrderNSView: NSView {
         needsLayout = true
     }
 
-    private var targetY: CGFloat {
-        (bounds.height - chipHeight) / 2
-    }
-
     private func updateAccessibilityLabel() {
         setAccessibilityLabel(language == .russian
             ? "Порядок элементов меню-бара"
@@ -335,20 +319,26 @@ private final class MenuBarSectionOrderNSView: NSView {
         }
     }
 
-    private func chipFrames(for values: [MenuBarPopoverSection]) -> [NSRect] {
+    private func chipFrames(for values: [MenuBarPopoverSection], availableWidth: CGFloat? = nil) -> [NSRect] {
+        let rowWidth = max(availableWidth ?? bounds.width, 1)
         var x: CGFloat = 0
+        var y: CGFloat = 0
         return values.enumerated().map { index, section in
             let width = chipViews[section]?.intrinsicContentSize.width
                 ?? MenuBarSectionChipView.width(
                     for: section.title(language: language)
                 )
+            if x > 0, x + width > rowWidth {
+                x = 0
+                y += controlHeight
+            }
             let frame = NSRect(
                 x: x,
-                y: targetY + chipVerticalOffset,
-                width: width,
+                y: y,
+                width: min(width, rowWidth),
                 height: chipHeight
             )
-            x += width
+            x += frame.width
             if index < values.count - 1 {
                 x += itemSpacing
             }

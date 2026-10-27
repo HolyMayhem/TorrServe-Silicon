@@ -55,6 +55,9 @@ jobs:
       - name: Native settings search UI checks
         if: ${{ !cancelled() }}
         run: ./scripts/verify-settings-search-ui.sh
+      - name: Menu bar preferences and cache checks
+        if: ${{ !cancelled() }}
+        run: ./scripts/verify-menu-bar-preferences.sh
       - name: Native menu bar UI checks
         if: ${{ !cancelled() }}
         env:
@@ -88,6 +91,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
+      - name: Menu bar preferences and cache checks
+        run: ./scripts/verify-menu-bar-preferences.sh
       - name: Native menu bar UI checks on macOS 26
         env:
           MENU_BAR_SNAPSHOT_DIR: .build/menu-bar-snapshots
