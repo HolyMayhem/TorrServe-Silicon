@@ -89,7 +89,6 @@ struct MenuBarPopoverView: View {
         }
         .frame(width: 380)
         .fixedSize(horizontal: false, vertical: true)
-        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     private var header: some View {

@@ -26,9 +26,23 @@ struct MenuBarUIChecks {
         func descendants(_ root: NSView) -> [NSView] {
             [root] + root.subviews.flatMap { descendants($0) }
         }
+        func activate(_ controller: MenuBarPopoverController) {
+            guard !controller.window.isKeyWindow else { return }
+            controller.synchronizeLayout()
+            NSApp.activate(ignoringOtherApps: true)
+            let deadline = Date().addingTimeInterval(5)
+            repeat {
+                controller.window.makeKeyAndOrderFront(nil)
+                pump(0.05)
+            } while !controller.window.isKeyWindow && Date() < deadline
+            guard controller.isShown && controller.window.isKeyWindow else {
+                fatalError("Native mouse checks require an active menu window")
+            }
+        }
         // Exercise real hit testing and button tracking at the approved layout's
         // control centers, without requiring Accessibility permission on CI.
         func click(x: CGFloat, y: CGFloat, in controller: MenuBarPopoverController) {
+            activate(controller)
             let shell = controller.window.contentView!
             let point = shell.convert(NSPoint(x: x, y: y), to: nil)
             let up = NSEvent.mouseEvent(with: .leftMouseUp, location: point, modifierFlags: [],
@@ -79,13 +93,17 @@ struct MenuBarUIChecks {
         controller.onClose = { closed += 1 }
         controller.show(relativeTo: anchor)
         pump()
+        activate(controller)
         expect(controller.isShown && controller.window.isKeyWindow, "Popover opens and accepts keyboard focus")
-        expect(abs(controller.contentView.fittingSize.width - 380) < 1, "Keep the approved content width")
+        expect(abs(controller.naturalContentSize.width - 380) < 1, "Keep the approved content width")
         let root = controller.window.contentView!
-        expect(!descendants(root).contains { $0 is NSVisualEffectView || String(describing: type(of: $0)).contains("GlassEffect") }, "The shell and sections contain no glass or vibrancy views")
+        let surfaces = descendants(root).compactMap { $0 as? NSVisualEffectView }
+        expect(surfaces.count == 1 && surfaces[0].material == .popover
+               && surfaces[0].blendingMode == .behindWindow && surfaces[0].maskImage != nil,
+               "A single system blur surface covers the menu and follows its rounded arrow shape")
         expect(controller.window.frame.minX >= screen.visibleFrame.minX && controller.window.frame.maxX <= screen.visibleFrame.maxX,
                "Popover stays horizontally on screen")
-        let collapsed = controller.contentView.fittingSize.height
+        let collapsed = controller.naturalContentSize.height
         func snapshot(_ name: String) throws {
             guard let directory = ProcessInfo.processInfo.environment["MENU_BAR_SNAPSHOT_DIR"] else { return }
             let target = URL(fileURLWithPath: directory, isDirectory: true)
@@ -119,14 +137,14 @@ struct MenuBarUIChecks {
         let qrRowFromTop = root.bounds.height - 64
         click(x: 110, y: root.bounds.height - qrRowFromTop, in: controller)
         pump(0.35)
-        expect(model.showsQRCode && controller.contentView.fittingSize.height > collapsed + 180,
+        expect(model.showsQRCode && controller.naturalContentSize.height > collapsed + 180,
                "QR disclosure expands the content")
         expect(controller.window.frame.minY >= screen.visibleFrame.minY,
                "Expanded content stays above the screen edge")
         try snapshot("qr-dark")
         click(x: 110, y: root.bounds.height - qrRowFromTop, in: controller)
         pump(0.35)
-        expect(!model.showsQRCode && abs(controller.contentView.fittingSize.height - collapsed) < 1,
+        expect(!model.showsQRCode && abs(controller.naturalContentSize.height - collapsed) < 1,
                "Collapsing QR restores the original height")
 
         model.canStop = false
@@ -153,28 +171,32 @@ struct MenuBarUIChecks {
         model.preferences.showsQuickActions = false
         model.preferences.showsQRCode = false
         pump()
-        expect(controller.contentView.fittingSize.height < 150, "Hidden blocks leave no empty cards or separator gaps")
+        expect(controller.naturalContentSize.height < 150, "Hidden blocks leave no empty cards or separator gaps")
         model.language = .english
         model.preferences = .defaults
         model.preferences.sectionOrder = [.qrCode, .quickActions, .speed, .recentMaterial]
         pump()
-        expect(controller.contentView.fittingSize.width == 380, "English and reordered blocks retain the fixed width")
+        expect(controller.naturalContentSize.width == 380, "English and reordered blocks retain the fixed width")
         try snapshot("english-dark")
 
         let escape = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
             windowNumber: controller.window.windowNumber, context: nil, characters: "\u{1b}",
             charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53)!
+        activate(controller)
+        let closesBeforeEscape = closed
         controller.window.sendEvent(escape)
         pump()
-        expect(!controller.isShown && closed == 1, "Escape dismisses the menu and removes dismissal monitors")
+        expect(!controller.isShown && closed == closesBeforeEscape + 1, "Escape dismisses the menu and removes dismissal monitors")
         controller.performClose(nil)
-        expect(closed == 1, "Repeated dismissal is harmless")
+        expect(closed == closesBeforeEscape + 1, "Repeated dismissal is harmless")
         controller.show(relativeTo: anchor)
         pump()
+        activate(controller)
         expect(controller.isShown, "Menu reopens after Escape")
+        let closesBeforeResign = closed
         controller.window.resignKey()
         pump()
-        expect(!controller.isShown && closed == 2, "Losing focus dismisses the menu")
+        expect(!controller.isShown && closed == closesBeforeResign + 1, "Losing focus dismisses the menu")
         // Each extra works independently of the original quick-actions group.
         var onlyExtras = MenuBarPreferences.defaults
         onlyExtras.showsRecentMaterial = false
@@ -196,7 +218,7 @@ struct MenuBarUIChecks {
             model.preferences = selected
             controller.show(relativeTo: anchor)
             pump()
-            expect(controller.contentView.fittingSize.height < 220, "A single extra does not bring hidden blocks back")
+            expect(controller.naturalContentSize.height < 220, "A single extra does not bring hidden blocks back")
             click(x: 100, y: 60, in: controller)
             controller.performClose(nil)
         }
@@ -261,17 +283,39 @@ struct MenuBarUIChecks {
             let full = try exportView(MenuBarPopoverView(model: model), name: "all-enabled-\(name)", appearance: appearance)
             expect(full.bounds.height > collapsed + 200, "Export every enabled block, including below the viewport")
         }
+        let originalParentFrame = parent.frame
+        parent.setFrameOrigin(NSPoint(x: parent.frame.minX, y: screen.visibleFrame.minY + 280))
+        NSApp.activate(ignoringOtherApps: true)
         controller.show(relativeTo: anchor)
         pump()
-        expect(controller.window.frame.minY >= screen.visibleFrame.minY, "All extras still fit the screen using scrolling")
-        let scroll = descendants(root).compactMap { $0 as? NSScrollView }.first!
-        let end = max(controller.contentView.bounds.height - scroll.contentSize.height, 0)
-        scroll.contentView.scroll(to: NSPoint(x: 0, y: end))
-        scroll.reflectScrolledClipView(scroll.contentView)
-        pump()
-        expect(scroll.documentVisibleRect.maxY >= controller.contentView.bounds.maxY - 1,
-               "The bottom settings and footer remain reachable in a tall menu")
+        activate(controller)
+        expect(controller.window.isKeyWindow, "The fitted menu is active before testing native mouse clicks")
+        expect(controller.window.frame.minY >= screen.visibleFrame.minY, "All extras fit the screen without scrolling")
+        expect(controller.contentView.convert(controller.contentView.bounds, to: root).height < controller.naturalContentSize.height,
+               "Limited space fits an oversized menu instead of clipping its bottom")
+        expect(!descendants(root).contains { $0 is NSScrollView }, "The menu has no scrolling container")
+        let visibleContent = controller.contentView.convert(controller.contentView.bounds, to: root)
+        expect(root.bounds.insetBy(dx: 0.5, dy: 0.5).contains(visibleContent),
+               "The whole menu, including its footer, fits inside the visible panel")
+        let originalBounds = controller.contentView.bounds
+        let originalFrame = controller.window.frame
+        for delta: Int32 in [-240, 240] {
+            let wheel = CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1,
+                                wheel1: delta, wheel2: 0, wheel3: 0)!
+            controller.contentView.scrollWheel(with: NSEvent(cgEvent: wheel)!)
+            pump(0.1)
+        }
+        expect(controller.contentView.bounds == originalBounds && controller.window.frame == originalFrame,
+               "Precise upward and downward scroll events must not move the menu")
+        let quitsBeforeFitClick = quit
+        let fittedScale = controller.contentView.bounds.width / controller.naturalContentSize.width
+        let footerY = controller.contentView.isFlipped ? controller.contentView.bounds.maxY - 20 * fittedScale : 20 * fittedScale
+        let quitPoint = controller.contentView.convert(NSPoint(x: 355 * fittedScale, y: footerY), to: root)
+        try snapshot("fitted-menu")
+        click(x: quitPoint.x, y: quitPoint.y, in: controller)
+        expect(quit == quitsBeforeFitClick + 1, "The fitted menu footer keeps correct native hit testing")
         controller.performClose(nil)
+        parent.setFrame(originalParentFrame, display: false)
 
         // The existing native editor must wrap ten draggable chips and move
         // items between rows without changing their independent visibility.

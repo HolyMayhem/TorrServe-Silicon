@@ -2,14 +2,14 @@ import AppKit
 import Combine
 import SwiftUI
 
-/// Own the small popover shell so macOS 26 cannot add Liquid Glass behind the
-/// otherwise opaque content. Uses public AppKit drawing and window APIs only.
+/// Own the popover's shape and its system blur surface, including the arrow.
 @MainActor
 final class MenuBarPopoverController: NSObject, NSWindowDelegate {
     private let panel = MenuBarPanel()
     private let shell = MenuBarPopoverShell()
-    private let scrollView = NSScrollView()
-    private let hostingView: NSHostingView<MenuBarPopoverView>
+    private let model: MenuBarPopoverModel
+    private let measurementView: NSHostingView<MenuBarPopoverView>
+    private let hostingView: NSHostingView<MenuBarPopoverPresentation>
     private weak var anchor: NSView?
     private var modelChanges: AnyCancellable?
     private var isClosing = false
@@ -18,9 +18,12 @@ final class MenuBarPopoverController: NSObject, NSWindowDelegate {
     var isShown: Bool { panel.isVisible }
     var window: NSWindow { panel }
     var contentView: NSView { hostingView }
+    var naturalContentSize: NSSize { measurementView.fittingSize }
 
     init(model: MenuBarPopoverModel) {
-        hostingView = NSHostingView(rootView: MenuBarPopoverView(model: model))
+        self.model = model
+        measurementView = NSHostingView(rootView: MenuBarPopoverView(model: model))
+        hostingView = NSHostingView(rootView: MenuBarPopoverPresentation(model: model, size: .zero, scale: 1))
         super.init()
         panel.delegate = self
         panel.isReleasedWhenClosed = false
@@ -34,18 +37,7 @@ final class MenuBarPopoverController: NSObject, NSWindowDelegate {
         panel.onEscape = { [weak self] in self?.performClose(nil) }
         panel.contentView = shell
 
-        scrollView.drawsBackground = false
-        scrollView.borderType = .noBorder
-        scrollView.hasVerticalScroller = true
-        scrollView.autohidesScrollers = true
-        scrollView.scrollerStyle = .overlay
-        scrollView.horizontalScrollElasticity = .none
-        scrollView.contentView.drawsBackground = false
-        scrollView.wantsLayer = true
-        scrollView.layer?.cornerRadius = 11
-        scrollView.layer?.masksToBounds = true
-        scrollView.documentView = hostingView
-        shell.addSubview(scrollView)
+        shell.addSubview(hostingView)
         modelChanges = model.objectWillChange.sink { [weak self] _ in
             DispatchQueue.main.async {
                 guard let self, self.isShown else { return }
@@ -59,8 +51,6 @@ final class MenuBarPopoverController: NSObject, NSWindowDelegate {
         synchronizeLayout()
         panel.makeKeyAndOrderFront(nil)
         panel.makeFirstResponder(hostingView)
-        scrollView.contentView.scroll(to: .zero)
-        scrollView.reflectScrolledClipView(scrollView.contentView)
     }
 
     func performClose(_ sender: Any?) {
@@ -75,14 +65,19 @@ final class MenuBarPopoverController: NSObject, NSWindowDelegate {
         guard let anchor, let anchorWindow = anchor.window,
               let screen = anchorWindow.screen ?? NSScreen.main else { return }
 
-        hostingView.layoutSubtreeIfNeeded()
-        let ideal = hostingView.fittingSize
+        measurementView.layoutSubtreeIfNeeded()
+        let ideal = naturalContentSize
         guard ideal.width > 0, ideal.height > 0 else { return }
         let anchorRect = anchorWindow.convertToScreen(anchor.convert(anchor.bounds, to: nil))
         let available = screen.visibleFrame.insetBy(dx: 4, dy: 4)
         let top = min(anchorRect.minY, available.maxY)
-        let width = ideal.width + 2
-        let height = min(ideal.height + 2 + MenuBarPopoverShell.arrowHeight, top - available.minY)
+        // Keep all entries reachable without a scrolling or bouncing container.
+        // Normal menus stay at their natural size; oversized menus fit the screen.
+        let availableContentHeight = max(top - available.minY - MenuBarPopoverShell.arrowHeight - 2, 1)
+        let scale = min(1, availableContentHeight / ideal.height)
+        let contentSize = NSSize(width: ideal.width * scale, height: ideal.height * scale)
+        let width = contentSize.width + 2
+        let height = contentSize.height + 2 + MenuBarPopoverShell.arrowHeight
         let left = min(max(anchorRect.midX - width / 2, available.minX), available.maxX - width)
         let frame = NSRect(x: left, y: top - height, width: width, height: height)
 
@@ -91,15 +86,27 @@ final class MenuBarPopoverController: NSObject, NSWindowDelegate {
         }
         shell.frame = NSRect(origin: .zero, size: frame.size)
         shell.arrowX = min(max(anchorRect.midX - left, 20), width - 20)
-        scrollView.frame = NSRect(x: 1, y: 1, width: ideal.width,
-                                  height: height - MenuBarPopoverShell.arrowHeight - 2)
-        hostingView.frame = NSRect(origin: .zero, size: ideal)
+        shell.updateSurfaceMask()
+        hostingView.rootView = MenuBarPopoverPresentation(model: model, size: ideal, scale: scale)
+        hostingView.frame = NSRect(origin: NSPoint(x: 1, y: 1), size: contentSize)
         shell.needsDisplay = true
         panel.invalidateShadow()
     }
 
     func windowDidResignKey(_ notification: Notification) {
         performClose(nil)
+    }
+}
+
+private struct MenuBarPopoverPresentation: View {
+    let model: MenuBarPopoverModel
+    let size: NSSize
+    let scale: CGFloat
+
+    var body: some View {
+        MenuBarPopoverView(model: model)
+            .scaleEffect(scale, anchor: .topLeading)
+            .frame(width: size.width * scale, height: size.height * scale, alignment: .topLeading)
     }
 }
 
@@ -118,10 +125,40 @@ private final class MenuBarPanel: NSPanel {
     }
 }
 
-private final class MenuBarPopoverShell: NSView {
+private final class MenuBarPopoverShell: NSVisualEffectView {
     static let arrowHeight: CGFloat = 8
     var arrowX: CGFloat = 190
-    override var allowsVibrancy: Bool { false }
+    private var maskedSize = NSSize.zero
+    private var maskedArrowX: CGFloat = .nan
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        configureSurface()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        configureSurface()
+    }
+
+    private func configureSurface() {
+        material = .popover
+        blendingMode = .behindWindow
+        state = .active
+    }
+
+    func updateSurfaceMask() {
+        guard bounds.width > 0, bounds.height > 0,
+              bounds.size != maskedSize || arrowX != maskedArrowX else { return }
+        maskedSize = bounds.size
+        maskedArrowX = arrowX
+        let path = surfacePath
+        maskImage = NSImage(size: bounds.size, flipped: false) { _ in
+            NSColor.white.setFill()
+            path.fill()
+            return true
+        }
+    }
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
@@ -129,6 +166,14 @@ private final class MenuBarPopoverShell: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        NSColor.separatorColor.setStroke()
+        let path = surfacePath
+        path.lineWidth = 1
+        path.stroke()
+    }
+
+    private var surfacePath: NSBezierPath {
         let rect = bounds.insetBy(dx: 0.5, dy: 0.5)
         let top = rect.maxY - Self.arrowHeight
         let radius: CGFloat = 12
@@ -150,10 +195,6 @@ private final class MenuBarPopoverShell: NSView {
         path.appendArc(withCenter: NSPoint(x: rect.minX + radius, y: rect.minY + radius),
                        radius: radius, startAngle: 180, endAngle: 270)
         path.close()
-        NSColor.windowBackgroundColor.setFill()
-        path.fill()
-        NSColor.separatorColor.setStroke()
-        path.lineWidth = 1
-        path.stroke()
+        return path
     }
 }
