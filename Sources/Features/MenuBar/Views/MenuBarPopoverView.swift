@@ -323,6 +323,7 @@ struct MenuBarPopoverView: View {
             .foregroundStyle(.secondary)
         }
         .font(.caption)
+        .foregroundStyle(.secondary)
     }
 
     private func statisticBadge(

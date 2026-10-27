@@ -30,7 +30,13 @@ struct MenuBarUIChecks {
         }
         func press(_ label: String, in controller: MenuBarPopoverController) {
             let buttons = accessibilityTree(controller.contentView).filter {
-                $0.accessibilityRole() == .button && $0.accessibilityLabel() == label
+                $0.accessibilityRole() == .button && ($0.accessibilityLabel() ?? $0.accessibilityTitle()) == label
+            }
+            if buttons.count != 1 {
+                for item in accessibilityTree(controller.contentView) {
+                    print("AX: role=\(item.accessibilityRole()?.rawValue ?? "nil") label=\(item.accessibilityLabel() ?? "nil") title=\(item.accessibilityTitle() ?? "nil")")
+                }
+                fflush(stdout)
             }
             expect(buttons.count == 1, "Find one accessible button: \(label)")
             expect(buttons.first?.accessibilityPerformPress() == true, "Press \(label)")
@@ -78,20 +84,6 @@ struct MenuBarUIChecks {
         expect(controller.window.frame.minX >= screen.visibleFrame.minX && controller.window.frame.maxX <= screen.visibleFrame.maxX,
                "Popover stays horizontally on screen")
         let collapsed = controller.contentView.fittingSize.height
-        var stopped = 0, started = 0, web = 0, shown = 0, downloaded = 0, quit = 0
-        model.onStop = { stopped += 1 }
-        model.onStart = { started += 1 }
-        model.onOpenWeb = { web += 1 }
-        model.onShowWindow = { shown += 1 }
-        model.onDownload = { downloaded += 1 }
-        model.onQuit = { quit += 1 }
-        press(Texts(language: .russian).stop, in: controller)
-        press("Web UI", in: controller)
-        press(Texts(language: .russian).openWindow, in: controller)
-        press(Texts(language: .russian).downloadArm, in: controller)
-        press("Выйти", in: controller)
-        expect(stopped == 1 && web == 1 && shown == 1 && downloaded == 1 && quit == 1, "Actions reach their existing callbacks")
-
         func snapshot(_ name: String) throws {
             guard let directory = ProcessInfo.processInfo.environment["MENU_BAR_SNAPSHOT_DIR"] else { return }
             let target = URL(fileURLWithPath: directory, isDirectory: true)
@@ -106,6 +98,20 @@ struct MenuBarUIChecks {
             pump()
             try snapshot(name)
         }
+        var stopped = 0, started = 0, web = 0, shown = 0, downloaded = 0, quit = 0
+        model.onStop = { stopped += 1 }
+        model.onStart = { started += 1 }
+        model.onOpenWeb = { web += 1 }
+        model.onShowWindow = { shown += 1 }
+        model.onDownload = { downloaded += 1 }
+        model.onQuit = { quit += 1 }
+        press(Texts(language: .russian).stop, in: controller)
+        press("Web UI", in: controller)
+        press(Texts(language: .russian).openWindow, in: controller)
+        press(Texts(language: .russian).downloadArm, in: controller)
+        press("Выйти", in: controller)
+        expect(stopped == 1 && web == 1 && shown == 1 && downloaded == 1 && quit == 1, "Actions reach their existing callbacks")
+
         press(Texts(language: .russian).showQRCode, in: controller)
         expect(model.showsQRCode && controller.contentView.fittingSize.height > collapsed + 180,
                "QR disclosure expands the content")
@@ -130,7 +136,7 @@ struct MenuBarUIChecks {
         model.canStart = false
         pump()
         let startButton = accessibilityTree(controller.contentView).first {
-            $0.accessibilityRole() == .button && $0.accessibilityLabel() == Texts(language: .russian).start
+            $0.accessibilityRole() == .button && ($0.accessibilityLabel() ?? $0.accessibilityTitle()) == Texts(language: .russian).start
         }
         expect(startButton?.isAccessibilityEnabled() == false, "Unavailable actions stay disabled")
         try snapshot("stopped-dark")
