@@ -530,6 +530,14 @@ extension AppDelegate {
         }
     }
 
+    func setShowsOfflineSection(_ visible: Bool) {
+        UserDefaults.standard.set(visible, forKey: showsOfflineSectionKey)
+        mainWindowModel.showsOfflineSection = visible
+        if !visible, mainWindowModel.selectedSection == .offline {
+            mainWindowModel.selectedSection = .library
+        }
+    }
+
     func setMetadataSource(_ source: MetadataSourceMode) {
         do {
             try metadataSettings.save(selectedSource: source)
@@ -778,6 +786,7 @@ extension AppDelegate {
             hideDockIconKey: false,
             notificationsEnabledKey: false,
             jackettSearchEnabledKey: true,
+            showsOfflineSectionKey: false,
             autoUpdateTorrServerKey: false,
             speedDisplayUnitKey: SpeedDisplayUnit.automatic.rawValue
         ])

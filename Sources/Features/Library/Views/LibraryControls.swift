@@ -96,24 +96,33 @@ struct LibraryModePicker: View {
     let language: AppLanguage
 
     var body: some View {
+        LibraryDisplayModePicker(selection: Binding(get: { model.displayMode }, set: { model.setDisplayMode($0) }), language: language)
+    }
+}
+
+struct LibraryDisplayModePicker: View {
+    @Binding var selection: LibraryDisplayMode
+    let language: AppLanguage
+
+    var body: some View {
         HStack(spacing: 1) {
             ForEach(LibraryDisplayMode.allCases) { mode in
                 Button {
                     withAnimation(.easeInOut(duration: 0.18)) {
-                        model.setDisplayMode(mode)
+                        selection = mode
                     }
                 } label: {
                     Image(systemName: mode.systemImage)
                         .frame(width: 25, height: 23)
                         .background(
-                            model.displayMode == mode
+                            selection == mode
                                 ? Color.accentColor.opacity(0.72)
                                 : Color.clear,
                             in: RoundedRectangle(cornerRadius: 7)
                         )
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(model.displayMode == mode ? Color.white : .secondary)
+                .foregroundStyle(selection == mode ? Color.white : .secondary)
                 .help(mode.title(language: language))
             }
         }
@@ -245,7 +254,6 @@ struct TorrentContextMenu: View {
                     } label: {
                         Label(texts.resumeDownload, systemImage: "play.fill")
                     }
-                    cancelOfflineDownloadButton(for: offlineFile)
                 } else {
                     Button {
                         model.retryOfflineDownload(language: language)
@@ -253,6 +261,7 @@ struct TorrentContextMenu: View {
                         Label(texts.retryDownload, systemImage: "arrow.clockwise")
                     }
                 }
+                cancelOfflineDownloadButton(for: offlineFile)
             case .idle, .cancelled:
                 startOfflineDownloadButton
             }
@@ -289,7 +298,7 @@ struct TorrentContextMenu: View {
         for file: NativeTorrentFile
     ) -> some View {
         Button(role: .destructive) {
-            model.cancelOfflineDownload(torrent: torrent, file: file)
+            model.cancelOfflineDownload(torrent: torrent, file: file, language: language)
         } label: {
             Label(texts.cancelDownload, systemImage: "xmark")
         }

@@ -28,6 +28,7 @@ extension AppDelegate {
         mainWindowModel.jackettEnabled = UserDefaults.standard.bool(
             forKey: jackettSearchEnabledKey
         )
+        mainWindowModel.showsOfflineSection = UserDefaults.standard.bool(forKey: showsOfflineSectionKey)
         let metadataProviderSettings = metadataSettings.settings
         mainWindowModel.metadataSource = metadataProviderSettings.selectedSource
         mainWindowModel.aniListEnabled = metadataProviderSettings.aniListEnabled
@@ -95,6 +96,15 @@ extension AppDelegate {
         }
         mainWindowModel.onJackettEnabledChanged = { [weak self] enabled in
             self?.setJackettEnabled(enabled)
+        }
+        mainWindowModel.onShowsOfflineSectionChanged = { [weak self] visible in
+            self?.setShowsOfflineSection(visible)
+        }
+        mainWindowModel.onOpenOfflinePreview = { [weak self] in
+            guard let self, self.mainWindowModel.developerMenuEnabled else { return }
+            self.setShowsOfflineSection(true)
+            self.mainWindowModel.selectedSection = .offline
+            self.ensureWindowForCommand()
         }
         mainWindowModel.onMetadataSourceChanged = { [weak self] source in
             self?.setMetadataSource(source)

@@ -41,6 +41,7 @@ extension AppDelegate {
         switch mainWindowModel.selectedSection {
         case .library: libraryModel.refresh()
         case .search: searchModel.search(language: currentLanguage)
+        case .offline: offlineDownloadManager.refreshCompletedDownloads()
         }
     }
 
@@ -85,6 +86,7 @@ extension AppDelegate {
             if mainWindowModel.selectedSection == .library {
                 return mainWindowModel.canStop && !libraryModel.isRefreshing && libraryModel.alert == nil
             }
+            if mainWindowModel.selectedSection == .offline { return true }
             return searchModel.isConfigured && !searchModel.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         case #selector(showLibraryList(_:)), #selector(showLibraryPosters(_:)), #selector(showLibraryCards(_:)):
             return libraryCommandsAvailable

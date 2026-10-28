@@ -90,7 +90,8 @@ final class WhatsNewWindowController: NSObject, NSWindowDelegate {
 
     private func present(languageCode: String, relativeTo parent: NSWindow?, acknowledge: Bool) {
         guard let manifest else { return }
-        let size = NSSize(width: 520, height: 480)
+        let featureCount = manifest.content(languageCode: languageCode).features.count
+        let size = NSSize(width: 520, height: featureCount > 3 ? 560 : 480)
         let window = WhatsNewWindow(
             contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.borderless], backing: .buffered, defer: false

@@ -2,6 +2,45 @@ import AppKit
 import Foundation
 
 extension LibraryViewModel {
+    var offlineMediaCatalog: [String: OfflineMediaInfo] {
+        var result = [String: OfflineMediaInfo]()
+        for (hash, metadata) in metadataByHash {
+            guard !metadata.displayTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+            result[hash.lowercased()] = offlineMediaInfo(hash: hash, title: metadata.displayTitle, metadata: metadata, isSeries: metadata.mediaKind == .tv || metadata.season != nil)
+        }
+        for torrent in torrents { result[torrent.hash.lowercased()] = offlineMediaInfo(for: torrent) }
+        return result
+    }
+
+    private func offlineMediaInfo(for torrent: NativeTorrent) -> OfflineMediaInfo {
+        let metadata = metadata(for: torrent)
+        let parsed = MediaNameParser().parse(torrent.displayTitle)
+        let metadataTitle = metadata?.displayTitle.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let isSeries = metadata?.mediaKind == .tv || parsed.kind == .tv
+            || torrent.playableFiles.contains { MediaNameParser().parse($0.displayName).kind == .tv }
+        return offlineMediaInfo(
+            hash: torrent.hash,
+            title: metadataTitle.isEmpty ? parsed.title : metadataTitle,
+            metadata: metadata,
+            isSeries: isSeries,
+            fallbackPoster: torrent.poster
+        )
+    }
+
+    private func offlineMediaInfo(hash: String, title: String, metadata: LibraryMetadata?, isSeries: Bool, fallbackPoster: String = "") -> OfflineMediaInfo {
+        let kind = isSeries ? "tv" : "movie"
+        let canonicalID: String
+        if metadata?.mediaKind == (isSeries ? .tv : .movie),
+           let provider = metadata?.metadataProvider, let id = metadata?.metadataProviderID, !id.isEmpty {
+            canonicalID = "\(provider.rawValue):\(kind):\(id)"
+        } else {
+            canonicalID = "torrent:\(hash.lowercased())"
+        }
+        let metadataPoster = metadata?.posterURL ?? ""
+        let poster = metadataPoster.isEmpty ? fallbackPoster : metadataPoster
+        return OfflineMediaInfo(id: canonicalID, title: title, posterURL: poster.isEmpty ? nil : poster, isSeries: isSeries, torrentHash: hash.lowercased())
+    }
+
     func offlineDownloadProgress(in torrent: NativeTorrent) -> OfflineDownloadProgress? {
         guard let request = offlineDownloadManager.currentRequest,
               torrent.allFiles.contains(where: {
@@ -152,7 +191,8 @@ extension LibraryViewModel {
             try offlineDownloadManager.enqueue(OfflineDownloadRequest(
                 sourceURL: sourceURL,
                 destinationURL: destinationURL,
-                expectedLength: file.length
+                expectedLength: file.length,
+                media: offlineMediaInfo(for: torrent)
             ))
             return true
         } catch {
@@ -197,15 +237,25 @@ extension LibraryViewModel {
 
     func cancelOfflineDownload(
         torrent: NativeTorrent,
-        file: NativeTorrentFile
+        file: NativeTorrentFile,
+        language: AppLanguage
     ) {
         guard let sourceURL = api.streamURL(torrent: torrent, file: file) else {
             return
         }
-        offlineDownloadManager.cancel(
-            sourceURL: sourceURL,
-            expectedLength: file.length
-        )
+        do {
+            try offlineDownloadManager.cancel(
+                sourceURL: sourceURL,
+                expectedLength: file.length
+            )
+        } catch {
+            alert = AppAlert(
+                title: language == .russian
+                    ? "Не удалось отменить загрузку"
+                    : "Could Not Cancel Download",
+                message: error.localizedDescription
+            )
+        }
     }
 
     func revealOfflineDownload() {

@@ -193,14 +193,16 @@ struct SettingsWindowView: View {
                 .environment(\.settingsSearchCategory, selectedCategory)
                 .environment(\.settingsSearchRequest, searchRequest)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .overlay(alignment: .leading) {
+                    if columnVisibility != .detailOnly {
+                        SettingsVisualStyle.sidebarDivider
+                            .ignoresSafeArea(.container, edges: .vertical)
+                            .transition(.identity)
+                    }
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .ignoresSafeArea(.container, edges: .top)
-            .overlay(alignment: .leading) {
-                if columnVisibility != .detailOnly {
-                    SettingsVisualStyle.sidebarDivider
-                }
-            }
             .environment(
                 \.settingsSidebarIsVisible,
                 columnVisibility != .detailOnly

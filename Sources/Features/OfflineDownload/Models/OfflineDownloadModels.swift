@@ -1,9 +1,19 @@
 import Foundation
 
+struct OfflineMediaInfo: Codable, Equatable, Sendable {
+    let id: String
+    let title: String
+    let posterURL: String?
+    let isSeries: Bool
+    let torrentHash: String?
+}
+
 struct OfflineDownloadRequest: Codable, Equatable, Sendable {
     let sourceURL: URL
     let destinationURL: URL
     let expectedLength: Int64
+    // Optional provenance keeps existing queue/checkpoint JSON compatible.
+    var media: OfflineMediaInfo? = nil
 
     var partialFileURL: URL {
         destinationURL.appendingPathExtension("torrserve-part")
@@ -42,6 +52,8 @@ struct OfflineDownloadRecord: Codable, Equatable, Sendable {
     let destinationURL: URL
     let expectedLength: Int64
     let completedAt: Date
+    // Older history records remain valid when this field is absent.
+    var media: OfflineMediaInfo? = nil
 }
 
 enum OfflineDownloadDirectoryError: Error, Equatable, Sendable {

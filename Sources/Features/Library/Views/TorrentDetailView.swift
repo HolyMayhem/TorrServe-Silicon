@@ -193,7 +193,8 @@ struct TorrentDetailView: View {
                                 cancelDownload: {
                                     model.cancelOfflineDownload(
                                         torrent: torrent,
-                                        file: file
+                                        file: file,
+                                        language: language
                                     )
                                 },
                                 deleteDownload: {
@@ -550,7 +551,6 @@ struct TorrentFileRow: View {
                         help: texts.resumeDownload,
                         action: resumeDownload
                     )
-                    cancelButton
                 } else {
                     Button(action: retryDownload) {
                         Label(texts.retryDownload, systemImage: "arrow.clockwise")
@@ -558,6 +558,7 @@ struct TorrentFileRow: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                 }
+                cancelButton
             }
         } else {
             downloadButton

@@ -3,6 +3,10 @@ import Foundation
 import UniformTypeIdentifiers
 
 extension LibraryViewModel {
+    func playOfflineFile(_ url: URL) throws {
+        try ExternalPlayerLauncher.open(url, using: playerChoice, customPlayerPath: customPlayerPath)
+    }
+
     func play(
         file: NativeTorrentFile,
         language: AppLanguage

@@ -252,6 +252,7 @@ extension AppDelegate {
         mainWindowModel.jackettEnabled = UserDefaults.standard.bool(
             forKey: jackettSearchEnabledKey
         )
+        mainWindowModel.showsOfflineSection = UserDefaults.standard.bool(forKey: showsOfflineSectionKey)
         mainWindowModel.speedUnit = currentSpeedDisplayUnit
 
         popoverModel.statusKind = mainStatusKind(for: state.dotColor)

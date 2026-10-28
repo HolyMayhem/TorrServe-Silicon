@@ -13,7 +13,7 @@
         {
           "symbol": "sidebar.left",
           "title": "Обновлённый интерфейс",
-          "body": "Боковая панель в стиле macOS и больше места для поиска и медиатеки."
+          "body": "Боковая панель в стиле macOS, обновлённая медиатека и нативное поле поиска."
         },
         {
           "symbol": "magnifyingglass",
@@ -22,8 +22,18 @@
         },
         {
           "symbol": "bell.badge",
-          "title": "Уведомления под контролем",
-          "body": "Разрешение macOS и результат отправки теперь видны в настройках."
+          "title": "Настройки уведомлений",
+          "body": "Проверяйте разрешение macOS и отправляйте тестовые уведомления прямо из настроек."
+        },
+        {
+          "symbol": "menubar.rectangle",
+          "title": "Обновлённое меню TorrServe",
+          "body": "Полупрозрачное оформление и управление сервером прямо из строки меню."
+        },
+        {
+          "symbol": "arrow.down.circle",
+          "title": "Офлайн стал удобнее",
+          "body": "Улучшили работу с торрент-файлами. Фильмы и сериалы собраны в карточки."
         }
       ]
     },
@@ -35,7 +45,7 @@
         {
           "symbol": "sidebar.left",
           "title": "A refreshed interface",
-          "body": "A macOS-style sidebar and more room for search and your library."
+          "body": "A macOS-style sidebar, a refreshed library, and a native search field."
         },
         {
           "symbol": "magnifyingglass",
@@ -44,8 +54,18 @@
         },
         {
           "symbol": "bell.badge",
-          "title": "Notifications under control",
-          "body": "Check macOS authorization and notification delivery results in Settings."
+          "title": "Notification settings",
+          "body": "Check macOS authorization and send test notifications directly from Settings."
+        },
+        {
+          "symbol": "menubar.rectangle",
+          "title": "A refreshed TorrServe menu",
+          "body": "A translucent design with server controls right in the menu bar."
+        },
+        {
+          "symbol": "arrow.down.circle",
+          "title": "A better offline library",
+          "body": "Better torrent handling. Offline movies and series are grouped into cards."
         }
       ]
     }

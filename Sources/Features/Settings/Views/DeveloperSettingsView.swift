@@ -71,6 +71,8 @@ struct DeveloperSettingsView: View {
                 .searchableSetting(isRussian ? "Предпросмотр «Что нового»" : "What’s New preview")
             }
 
+            OfflineDownloadsPreviewControls(model: model, preview: model.offlineDownloadsPreview)
+
             MatrixDowngradeSettingsView(model: model)
 
             ServerSettingsGroup(title: isRussian ? "Системные уведомления" : "System notifications") {
@@ -131,5 +133,42 @@ struct DeveloperSettingsView: View {
         }
         .padding(.vertical, 12)
         .searchableSetting(event.displayTitle(isRussian: isRussian))
+    }
+}
+
+private struct OfflineDownloadsPreviewControls: View {
+    @ObservedObject var model: MainWindowModel
+    @ObservedObject var preview: OfflineDownloadsPreview
+    private var isRussian: Bool { model.language == .russian }
+
+    var body: some View {
+        ServerSettingsGroup(
+            title: isRussian ? "Демо-материалы офлайн" : "Offline demo downloads",
+            footer: isRussian
+                ? "Добавляет 15 материалов: 12 фильмов и 3 сериала с сериями по сезонам. Видео не скачиваются. Демо исчезнет после перезапуска; настоящие загрузки сохранятся."
+                : "Adds 15 titles: 12 movies and 3 series with episodes grouped by season. No videos are downloaded. Demo data disappears after restarting; real downloads are retained."
+        ) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Button(isRussian ? "Заполнить офлайн демо-материалами" : "Fill Offline with demo titles") {
+                        preview.populate(isRussian: isRussian)
+                        model.onOpenOfflinePreview?()
+                    }
+                    Button(isRussian ? "Очистить демо-материалы" : "Clear demo downloads") {
+                        preview.clear()
+                    }
+                    .disabled(preview.records.isEmpty)
+                }
+                .controlSize(.small)
+
+                if !preview.records.isEmpty {
+                    Text(isRussian ? "Демо-материалов: \(OfflineMediaLibrary.groups(records: preview.records).count)" : "Demo items: \(OfflineMediaLibrary.groups(records: preview.records).count)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.vertical, 12)
+            .searchableSetting(isRussian ? "Демо-материалы офлайн" : "Offline demo downloads")
+        }
     }
 }

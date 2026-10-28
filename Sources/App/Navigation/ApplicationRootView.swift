@@ -36,14 +36,16 @@ struct ApplicationRootView: View {
 
                 detailContent
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .overlay(alignment: .leading) {
+                        if columnVisibility != .detailOnly {
+                            SettingsVisualStyle.sidebarDivider
+                                .ignoresSafeArea(.container, edges: .vertical)
+                                .transition(.identity)
+                        }
+                    }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .ignoresSafeArea(.container, edges: .top)
-            .overlay(alignment: .leading) {
-                if columnVisibility != .detailOnly {
-                    SettingsVisualStyle.sidebarDivider
-                }
-            }
             .environment(
                 \.settingsSidebarIsVisible,
                 columnVisibility != .detailOnly
@@ -66,6 +68,11 @@ struct ApplicationRootView: View {
         .onChange(of: mainModel.selectedSection) { _, section in
             mainModel.onSectionChanged?(section)
         }
+        .onChange(of: mainModel.showsOfflineSection) { _, visible in
+            if !visible, mainModel.selectedSection == .offline {
+                mainModel.selectedSection = .library
+            }
+        }
         .onAppear {
             mainModel.onSectionChanged?(mainModel.selectedSection)
         }
@@ -84,6 +91,15 @@ struct ApplicationRootView: View {
             SearchView(
                 mainModel: mainModel,
                 model: searchModel
+            )
+        case .offline:
+            OfflineDownloadsView(
+                manager: libraryModel.offlineDownloadManager,
+                preview: mainModel.offlineDownloadsPreview,
+                catalog: libraryModel.offlineMediaCatalog,
+                language: mainModel.language,
+                openLibrary: { mainModel.selectedSection = .library },
+                play: { try libraryModel.playOfflineFile($0) }
             )
         }
     }

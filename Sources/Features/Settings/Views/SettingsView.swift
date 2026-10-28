@@ -553,6 +553,12 @@ struct SettingsView: View {
                     .frame(width: pickerColumnWidth, alignment: .trailing)
                     .onChange(of: model.language) { _, language in model.onLanguageChanged?(language) }
                 }
+                Divider()
+                toggleRow(
+                    model.language == .russian ? "Показывать раздел «Офлайн»" : "Show Offline in sidebar",
+                    keyPath: \.showsOfflineSection,
+                    callback: model.onShowsOfflineSectionChanged
+                )
             }
             settingsSection(
                 title: model.language == .russian ? "Поиск торрентов" : "Torrent Search",
