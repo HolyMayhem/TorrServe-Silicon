@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>Вход — TorrServe Silicon</title>
+    <link rel="stylesheet" href="/admin/login.css" />
+    <script type="module" src="/admin/login.js"></script>
+  </head>
+  <body>
+    <main>
+      <a class="brand" href="/admin/">TorrServe <span>Silicon</span></a>
+      <section>
+        <h1>Вход в аналитику</h1>
+        <p>Панель доступна только администратору.</p>
+        <form id="login">
+          <label for="key" id="credential-label"
+            >Пароль или начальный ключ</label
+          ><input
+            id="key"
+            name="key"
+            type="password"
+            autocomplete="current-password"
+            required
+            minlength="1"
+            maxlength="128"
+            autocapitalize="off"
+            spellcheck="false"
+          /><button id="submit" type="submit">Войти</button>
+          <p id="status" role="status" aria-live="polite"></p>
+        </form>
+      </section>
+      <p class="hint" id="login-hint">
+        При первом входе используйте ключ из macOS Keychain. После смены — свой
+        пароль. Сессия действует 8 часов.
+      </p>
+    </main>
+  </body>
+</html>

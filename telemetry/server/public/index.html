@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>TorrServe Silicon — Аналитика</title>
+    <link rel="stylesheet" href="/admin/styles.css" />
+    <script type="module" src="/admin/app.js"></script>
+  </head>
+  <body>
+    <div class="shell">
+      <header>
+        <a class="brand" href="/admin/"
+          ><span class="brand-mark" aria-hidden="true">T</span
+          ><span>TorrServe <strong>Silicon</strong></span></a
+        >
+        <div class="admin-controls">
+          <span class="private">Закрытая аналитика</span
+          ><button id="change-password" type="button" hidden>
+            Сменить пароль</button
+          ><button id="logout" type="button" hidden>Выйти</button>
+        </div>
+      </header>
+      <main>
+        <div class="heading">
+          <div>
+            <p class="context">Анонимная статистика использования</p>
+            <h1>Активность приложения</h1>
+            <p class="lede">Установки, которые возвращаются.</p>
+          </div>
+          <button id="refresh" type="button">
+            Обновить данные <span aria-hidden="true">↻</span>
+          </button>
+        </div>
+        <form id="filters" class="toolbar">
+          <div class="segments" aria-label="Период">
+            <button type="button" data-days="7" aria-pressed="false">
+              7 дней</button
+            ><button type="button" data-days="30" aria-pressed="true">
+              30 дней</button
+            ><button type="button" data-days="90" aria-pressed="false">
+              90 дней
+            </button>
+          </div>
+          <div class="dates">
+            <label>С <input type="date" id="start" required /></label
+            ><label>По <input type="date" id="end" required /></label
+            ><button class="apply" type="submit">Применить</button
+            ><span class="timezone">UTC</span>
+          </div>
+        </form>
+        <div id="message" class="message" role="status" aria-live="polite">
+          Загрузка данных…
+        </div>
+        <div id="content" hidden>
+          <section class="metrics" aria-label="Основные показатели">
+            <article>
+              <h2>
+                Установки за всё время
+                <span
+                  title="Случайные ID установок, а не люди. После 400 дней неактивности ID удаляется; возвращение увеличит оценку повторно."
+                  >≈</span
+                >
+              </h2>
+              <p id="installations" class="metric">—</p>
+              <p>Приблизительное число уникальных ID</p>
+            </article>
+            <article>
+              <h2>DAU</h2>
+              <p id="dau" class="metric">—</p>
+              <p>Активны в последний выбранный день</p>
+            </article>
+            <article>
+              <h2>WAU</h2>
+              <p id="wau" class="metric">—</p>
+              <p>За 7 дней до выбранной даты включительно</p>
+            </article>
+            <article>
+              <h2>MAU</h2>
+              <p id="mau" class="metric">—</p>
+              <p>За 30 дней до выбранной даты включительно</p>
+            </article>
+          </section>
+          <section class="activity panel">
+            <div class="section-heading">
+              <div>
+                <h2>Ежедневная активность</h2>
+                <p id="range-caption"></p>
+              </div>
+              <div class="legend">
+                <span class="dot"></span>Активные установки
+              </div>
+            </div>
+            <div id="chart" class="chart"></div>
+            <details>
+              <summary>Данные по дням</summary>
+              <div class="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th scope="col">Дата (UTC)</th>
+                      <th scope="col">Активные</th>
+                      <th scope="col">Новые ID</th>
+                    </tr>
+                  </thead>
+                  <tbody id="daily-table"></tbody>
+                </table>
+              </div>
+            </details>
+          </section>
+          <section class="adoption panel">
+            <div>
+              <h2>Актуальная версия</h2>
+              <p id="latest-version">—</p>
+            </div>
+            <div class="adoption-value">
+              <strong id="adoption">—</strong>
+              <p id="adoption-count"></p>
+            </div>
+            <svg
+              id="adoption-bar"
+              viewBox="0 0 100 4"
+              preserveAspectRatio="none"
+              role="img"
+              aria-label="Доля актуальной версии"
+            >
+              <rect width="100" height="4" class="track" />
+              <rect id="adoption-fill" width="0" height="4" class="fill" />
+            </svg>
+          </section>
+          <section class="distributions" aria-label="Распределения установок">
+            <article class="panel">
+              <h2>Версии приложения</h2>
+              <p>Последняя версия каждой установки в периоде</p>
+              <div id="versions" class="rows"></div>
+            </article>
+            <article class="panel">
+              <h2>Версии macOS</h2>
+              <p>Последняя система каждой установки в периоде</p>
+              <div id="macOS" class="rows"></div>
+            </article>
+            <article class="panel">
+              <h2>Процессоры</h2>
+              <p>Семейства Apple Silicon и Intel</p>
+              <div id="processors" class="rows"></div>
+            </article>
+            <article class="panel">
+              <h2>Страны подключений</h2>
+              <p>По последнему heartbeat в периоде; VPN влияет на страну</p>
+              <div id="countries" class="rows"></div>
+            </article>
+          </section>
+        </div>
+        <dialog id="password-dialog" aria-labelledby="password-heading">
+          <form id="password-form">
+            <div class="password-heading">
+              <h2 id="password-heading">Сменить пароль</h2>
+              <button id="password-cancel" type="button" aria-label="Закрыть">
+                Закрыть
+              </button>
+            </div>
+            <p class="password-detail">
+              После смены все сессии завершатся. Начальный ключ больше не будет
+              давать доступ.
+            </p>
+            <label for="current-password">Текущий пароль или ключ</label
+            ><input
+              id="current-password"
+              type="password"
+              autocomplete="current-password"
+              required
+              maxlength="128"
+              autofocus
+            />
+            <label for="new-password">Новый пароль</label
+            ><input
+              id="new-password"
+              type="password"
+              autocomplete="new-password"
+              minlength="12"
+              maxlength="128"
+              required
+            />
+            <p class="password-detail">
+              От 12 до 128 символов. Подойдёт длинная уникальная фраза.
+            </p>
+            <label for="confirm-password">Повторите новый пароль</label
+            ><input
+              id="confirm-password"
+              type="password"
+              autocomplete="new-password"
+              minlength="12"
+              maxlength="128"
+              required
+            />
+            <p id="password-status" role="status" aria-live="polite"></p>
+            <button id="password-save" class="password-save" type="submit">
+              Сохранить пароль
+            </button>
+          </form>
+        </dialog>
+        <footer>
+          <div>
+            <span id="system-dot" class="system-dot"></span
+            ><span id="system-status">Ожидание ответа API</span>
+          </div>
+          <div id="last-received">Данные ещё не получены</div>
+          <div id="last-refreshed"></div>
+        </footer>
+        <p class="method">
+          Одна установка — один случайный ID. Телеметрия поступает не чаще раза
+          в 24 часа и зависит от настройки телеметрии, доступности сети и работы
+          приложения. Показатели DAU / WAU / MAU отражают полученные heartbeat,
+          а не всех пользователей. Текущий день ещё не завершён.
+        </p>
+      </main>
+    </div>
+  </body>
+</html>

@@ -10,21 +10,25 @@ var packageTargets: [Target] = [
     .executableTarget(
         name: "TorrServerManager",
         dependencies: [
-            .product(name: "Sparkle", package: "Sparkle")
+            .product(name: "Sparkle", package: "Sparkle"),
+            "Telemetry"
         ],
         path: "Sources",
+        exclude: ["Telemetry"],
         linkerSettings: [
             .unsafeFlags([
                 "-Xlinker", "-rpath",
                 "-Xlinker", "@executable_path/../Frameworks"
             ])
         ]
-    )
+    ),
+    .target(name: "Telemetry", path: "Sources/Telemetry"),
+    .testTarget(name: "TelemetryTests", dependencies: ["Telemetry"], path: "Tests/TelemetryTests")
 ]
 
 if FileManager.default.fileExists(
     atPath: packageRoot.appendingPathComponent(localTestsPath).path
-) {
+) && ProcessInfo.processInfo.environment["TORRSERVE_TELEMETRY_TESTS_ONLY"] != "1" {
     packageTargets.append(
         .testTarget(
             name: "TorrServerManagerTests",

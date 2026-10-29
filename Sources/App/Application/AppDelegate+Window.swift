@@ -66,6 +66,10 @@ extension AppDelegate {
             self?.setAutoUpdateTorrServer(enabled)
         }
         appUpdateController.bind(to: mainWindowModel)
+        mainWindowModel.telemetryEnabled = telemetryController.isEnabled
+        mainWindowModel.onTelemetryChanged = { [weak self] enabled in
+            self?.telemetryController.setEnabled(enabled)
+        }
         mainWindowModel.onMenuBarPreferencesChanged = { [weak self] preferences in
             self?.setMenuBarPreferences(preferences)
         }

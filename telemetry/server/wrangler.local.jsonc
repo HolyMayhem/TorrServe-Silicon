@@ -1,0 +1,45 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "torrserve-telemetry-local",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-23",
+  "workers_dev": false,
+  "preview_urls": false,
+  "assets": {
+    "directory": "public",
+    "binding": "ASSETS",
+    "run_worker_first": true,
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "torrserve-telemetry-local",
+      "database_id": "local-only",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "vars": {
+    "ENVIRONMENT": "local",
+    "LATEST_APP_VERSION": "2.8.0",
+    "MAX_DAILY_HEARTBEATS": "5000",
+  },
+  "ratelimits": [
+    {
+      "name": "ADMIN_LIMITER",
+      "namespace_id": "108343",
+      "simple": { "limit": 5, "period": 60 },
+    },
+    {
+      "name": "INGRESS_LIMITER",
+      "namespace_id": "108341",
+      "simple": { "limit": 120, "period": 60 },
+    },
+    {
+      "name": "INSTALLATION_LIMITER",
+      "namespace_id": "108342",
+      "simple": { "limit": 4, "period": 60 },
+    },
+  ],
+  "observability": { "enabled": false },
+  "triggers": { "crons": ["17 3 * * *"] },
+}

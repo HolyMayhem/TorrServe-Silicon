@@ -1,0 +1,24 @@
+{
+  "name": "torrserve-telemetry",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev -c wrangler.local.jsonc --ip 127.0.0.1 --port 8787 --local",
+    "migrate:local": "wrangler d1 migrations apply DB --local -c wrangler.local.jsonc",
+    "test": "vitest run",
+    "check": "tsc --noEmit",
+    "dry-run": "wrangler deploy --dry-run -c wrangler.local.jsonc --outdir .test-output/worker",
+    "inspect:remote": "node scripts/inspect-remote.mjs"
+  },
+  "dependencies": {
+    "jose": "6.2.14"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261029.1",
+    "miniflare": "5.20261023.3-beta",
+    "typescript": "7.0.2",
+    "vitest": "5.0.5",
+    "wrangler": "4.156.0"
+  }
+}

@@ -92,6 +92,7 @@ struct SettingsView: View {
         switch category {
         case .general:
             applicationSection
+            telemetrySection
             notificationsSection
         case .interface:
             interfaceSection
@@ -136,6 +137,21 @@ struct SettingsView: View {
                 callback: model.onHideDockIconChanged
             )
             .disabled(!model.menuBarPreferences.isIconVisible)
+        }
+    }
+
+    private var telemetrySection: some View {
+        settingsSection(
+            title: model.language == .russian ? "Конфиденциальность" : "Privacy",
+            footer: model.language == .russian
+                ? "Не чаще раза в 24 часа отправляются случайный ID установки, версия приложения, macOS и семейство процессора. Cloudflare определяет страну подключения; VPN может изменить её. Без названий торрентов, файлов и истории просмотров. IP и User-Agent не сохраняются в базе статистики. Отключение прекращает отправку; ранее полученные данные удаляются по сроку хранения."
+                : "At most once per 24 hours: a random installation ID, app version, macOS version, and CPU family. Cloudflare determines the connection country; a VPN may change it. No torrent names, files, or viewing history. IP and User-Agent are not stored in the analytics database. Turning this off stops sending; previous data expires under the retention policy."
+        ) {
+            toggleRow(
+                model.language == .russian ? "Анонимная статистика использования" : "Anonymous usage statistics",
+                keyPath: \.telemetryEnabled,
+                callback: model.onTelemetryChanged
+            )
         }
     }
 

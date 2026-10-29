@@ -110,6 +110,7 @@ final class MainWindowModel: ObservableObject {
     @Published var menuBarPreferences = MenuBarPreferences.defaults
     @Published var hideDockIcon = false
     @Published var notificationsEnabled = false
+    @Published var telemetryEnabled = true
     @Published var notificationsAuthorizationPending = false
     @Published var notificationPreferences = AppNotificationPreferences.defaults
     @Published var notificationSystemState = NotificationSystemState()
@@ -192,6 +193,7 @@ final class MainWindowModel: ObservableObject {
     var onMenuBarPreferencesChanged: ((MenuBarPreferences) -> Void)?
     var onHideDockIconChanged: ((Bool) -> Void)?
     var onNotificationsChanged: ((Bool) -> Void)?
+    var onTelemetryChanged: ((Bool) -> Void)?
     var onRefreshNotificationStatus: (() -> Void)?
     var onOpenNotificationSettings: (() -> Void)?
     var onPreviewWhatsNew: (() -> Void)?

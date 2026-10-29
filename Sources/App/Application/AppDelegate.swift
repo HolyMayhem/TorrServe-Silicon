@@ -8,6 +8,7 @@ import Security
 import SwiftUI
 import UniformTypeIdentifiers
 import UserNotifications
+import Telemetry
 
 let savedPathKey = "TorrServerExecutablePath"
 let autoStartServerKey = "AutoStartServerOnLaunch"
@@ -81,6 +82,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     let speedMonitor = TorrServerSpeedMonitor()
     let notificationController = NotificationController()
     let appUpdateController = AppUpdateController()
+    let telemetryController = TelemetryController()
     let releaseChecker = TorrServerReleaseChecker()
     let nativeTorrServerAPI = NativeTorrServerAPI()
     let offlineDownloadManager = OfflineDownloadManager()
@@ -143,6 +145,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         buildWindow()
         applyLanguage()
         appUpdateController.start()
+        telemetryController.start()
         notificationController.onSystemStateChange = { [weak self] state in
             self?.mainWindowModel.notificationSystemState = state
         }
@@ -204,6 +207,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
+        telemetryController.activityOpportunity()
         refreshNotificationStatus()
         scheduleTorrServerUpdateCheck()
     }

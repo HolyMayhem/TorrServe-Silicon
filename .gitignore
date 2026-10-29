@@ -7,6 +7,18 @@ Package.resolved
 
 # Local-only test suite
 /Tests/
+!/Tests/
+/Tests/*
+!/Tests/TelemetryTests/
+
+# Telemetry development state and credentials
+telemetry/server/node_modules/
+telemetry/server/.wrangler/
+telemetry/server/.dev.vars*
+telemetry/server/wrangler.production.json
+telemetry/server/remote-inspection/
+telemetry/server/.test-output/
+**/.wrangler/
 
 # Local editor and Xcode state
 .vscode/

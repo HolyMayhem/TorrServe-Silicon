@@ -1,0 +1,64 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "torrserve-telemetry",
+  "account_id": "11fb0018827f06abfb9d651295753029",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-29",
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": {
+    "directory": "public",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "torrserve-analytics",
+      "database_id": "8d44e16c-fa2a-46ed-9032-4c7690a4c30b",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    "ENVIRONMENT": "production",
+    "LATEST_APP_VERSION": "2.8.0",
+    "MAX_DAILY_HEARTBEATS": "5000",
+    "ADMIN_AUTH_MODE": "key"
+  },
+  "ratelimits": [
+    {
+      "name": "INGRESS_LIMITER",
+      "namespace_id": "108341",
+      "simple": {
+        "limit": 120,
+        "period": 60
+      }
+    },
+    {
+      "name": "INSTALLATION_LIMITER",
+      "namespace_id": "108342",
+      "simple": {
+        "limit": 4,
+        "period": 60
+      }
+    },
+    {
+      "name": "ADMIN_LIMITER",
+      "namespace_id": "108343",
+      "simple": {
+        "limit": 5,
+        "period": 60
+      }
+    }
+  ],
+  "observability": {
+    "enabled": false,
+    "logs": {
+      "enabled": false,
+      "invocation_logs": false
+    }
+  },
+  "triggers": {
+    "crons": ["17 3 * * *"]
+  }
+}
