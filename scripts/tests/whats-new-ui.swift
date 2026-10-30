@@ -41,7 +41,13 @@ struct WhatsNewUIChecks {
         }
         func wait(_ message: String, until condition: () -> Bool) {
             let deadline = Date().addingTimeInterval(6)
-            while !condition(), Date() < deadline { pump(0.05) }
+            while !condition(), Date() < deadline {
+                // Snapshot capture or another app may have taken activation away.
+                // Automatic presentation intentionally waits for this parent to be key.
+                parent.makeKeyAndOrderFront(nil)
+                NSApp.activate(ignoringOtherApps: true)
+                pump(0.05)
+            }
             expect(condition(), message)
         }
 
@@ -51,6 +57,21 @@ struct WhatsNewUIChecks {
         expect(preview.preview(languageCode: "ru", relativeTo: parent), "Preview works with automatic presentation disabled")
         let window = preview.presentedWindow!
         pump(0.2)
+        func checkCompleteLayout(_ window: NSWindow) {
+            let view = window.contentView!
+            view.layoutSubtreeIfNeeded()
+            func containsScrollView(_ view: NSView) -> Bool {
+                view is NSScrollView || view.subviews.contains(where: containsScrollView)
+            }
+            expect(!containsScrollView(view), "Announcement must contain no scroll view")
+            expect(view.bounds.height >= ceil(view.fittingSize.height) - 1,
+                   "The complete localized announcement must fit without clipping")
+            if let screen = window.screen {
+                expect(screen.visibleFrame.insetBy(dx: -1, dy: -1).contains(window.frame),
+                       "The complete announcement window must fit on screen")
+            }
+        }
+        checkCompleteLayout(window)
         expect(window.isVisible, "Preview window is visible")
         expect(!window.styleMask.contains(.closable), "No standard close action")
         expect(!window.styleMask.contains(.resizable) && !window.styleMask.contains(.miniaturizable), "No resize or minimize controls")
@@ -77,6 +98,10 @@ struct WhatsNewUIChecks {
         }
         preview.continuePresentation()
         expect(preview.presentedWindow == nil && !window.isVisible, "Continue dismisses the preview")
+        expect(preview.preview(languageCode: "en", relativeTo: parent), "English preview opens")
+        pump(0.2)
+        checkCompleteLayout(preview.presentedWindow!)
+        preview.continuePresentation()
 
         // Same ID, next build: preview must not consume the real announcement.
         json["enabled"] = true

@@ -27,35 +27,32 @@ struct WhatsNewView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.top, 56)
-            .padding(.bottom, 36)
+            .padding(.top, 36)
+            .padding(.bottom, 28)
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
-                    ForEach(Array(content.features.enumerated()), id: \.offset) { _, feature in
-                        HStack(alignment: .top, spacing: 17) {
-                            Image(systemName: NSImage(systemSymbolName: feature.symbol, accessibilityDescription: nil) == nil ? "sparkles" : feature.symbol)
-                                .font(.system(size: 26, weight: .regular))
-                                .foregroundStyle(Color.accentColor)
-                                .frame(width: 34, height: 37)
-                                .accessibilityHidden(true)
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(feature.title)
-                                    .font(.system(size: 15, weight: .semibold))
-                                Text(feature.body)
-                                    .font(.system(size: 12.5))
-                                    .foregroundStyle(.secondary)
-                                    .lineSpacing(3)
-                            }
-                            .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 20) {
+                ForEach(Array(content.features.enumerated()), id: \.offset) { _, feature in
+                    HStack(alignment: .top, spacing: 17) {
+                        Image(systemName: NSImage(systemSymbolName: feature.symbol, accessibilityDescription: nil) == nil ? "sparkles" : feature.symbol)
+                            .font(.system(size: 26, weight: .regular))
+                            .foregroundStyle(Color.accentColor)
+                            .frame(width: 34, height: 37)
+                            .accessibilityHidden(true)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(feature.title)
+                                .font(.system(size: 15, weight: .semibold))
+                            Text(feature.body)
+                                .font(.system(size: 12.5))
+                                .foregroundStyle(.secondary)
+                                .lineSpacing(3)
                         }
-                        .accessibilityElement(children: .combine)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
+                    .accessibilityElement(children: .combine)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .scrollIndicators(.automatic)
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             VStack(spacing: 13) {
                 Button(content.continueTitle, action: onContinue)
@@ -73,10 +70,11 @@ struct WhatsNewView: View {
                 }
             }
             .padding(.top, 24)
-            .padding(.bottom, 36)
+            .padding(.bottom, 28)
         }
         .padding(.horizontal, 38)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity)
+        .fixedSize(horizontal: false, vertical: true)
         .background(AppWindowSurface().ignoresSafeArea())
         .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
         .overlay {

@@ -90,8 +90,27 @@ final class WhatsNewWindowController: NSObject, NSWindowDelegate {
 
     private func present(languageCode: String, relativeTo parent: NSWindow?, acknowledge: Bool) {
         guard let manifest else { return }
-        let featureCount = manifest.content(languageCode: languageCode).features.count
-        let size = NSSize(width: 520, height: featureCount > 3 ? 560 : 480)
+        let content = WhatsNewView(
+            manifest: manifest, languageCode: languageCode, appVersion: appVersion,
+            onContinue: { [weak self] in self?.continuePresentation() },
+            onShowDetails: {
+                if let url = manifest.detailsURL { NSWorkspace.shared.open(url) }
+            }
+        )
+        let available = (parent?.screen ?? NSScreen.main)?.visibleFrame.size
+            ?? NSSize(width: 1440, height: 900)
+        var width = min(600, available.width - 48)
+        let maximumWidth = min(900, available.width - 48)
+        let hostingView = NSHostingView(rootView: content.frame(width: width))
+        var height = ceil(hostingView.fittingSize.height)
+        // Measure the localized content, including every feature and both buttons.
+        // Wider text columns can also keep longer announcements within a small screen.
+        while height > available.height - 48, width < maximumWidth {
+            width = min(width + 60, maximumWidth)
+            hostingView.rootView = content.frame(width: width)
+            height = ceil(hostingView.fittingSize.height)
+        }
+        let size = NSSize(width: width, height: height)
         let window = WhatsNewWindow(
             contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.borderless], backing: .buffered, defer: false
@@ -114,13 +133,7 @@ final class WhatsNewWindowController: NSObject, NSWindowDelegate {
         window.contentMaxSize = size
         acknowledgesOnContinue = acknowledge
         presentedWindow = window
-        window.contentView = NSHostingView(rootView: WhatsNewView(
-            manifest: manifest, languageCode: languageCode, appVersion: appVersion,
-            onContinue: { [weak self] in self?.continuePresentation() },
-            onShowDetails: {
-                if let url = manifest.detailsURL { NSWorkspace.shared.open(url) }
-            }
-        ))
+        window.contentView = hostingView
         window.setContentSize(size)
         if let parent {
             let frame = NSRect(x: parent.frame.midX - window.frame.width / 2,
