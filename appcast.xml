@@ -6,6 +6,74 @@
         <description>Stable TorrServe Silicon application updates.</description>
         <language>en</language>
         <item>
+            <title>2.9.0</title>
+            <pubDate>Fri, 30 Oct 2026 21:12:11 +0000</pubDate>
+            <link>https://github.com/HolyMayhem/TorrServe-Silicon/releases</link>
+            <sparkle:version>42</sparkle:version>
+            <sparkle:shortVersionString>2.9.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[# TorrServe Silicon 2.9.0
+
+## Interface and Navigation
+
+- Refreshed the application interface with a macOS-style sidebar and updated library layouts.
+- Refined the menu bar panel, including server controls, status information, and customizable sections.
+- Improved the native search fields used throughout the application.
+
+## Settings Search
+
+- Search now finds individual settings rather than only matching entire categories.
+- Selecting a result opens the appropriate category, scrolls to the setting, and briefly highlights it.
+- Search results follow the selected application language.
+
+## Offline Library
+
+- Downloaded content is organized by movie or TV series instead of appearing as a flat list of files.
+- Choose between a detailed list, posters, and large cards.
+- Recognized TV episodes are grouped by season.
+- Individual downloaded files can be removed without deleting the remaining episodes.
+
+## What’s New Window
+
+- Removed scrolling from the announcement window.
+- The window now sizes itself to fit the localized content, keeping every feature and both buttons visible.
+- Improved spacing and text layout in both English and Russian.
+
+## Privacy and Usage Statistics
+
+Added optional usage statistics to help understand active installations, app versions, macOS versions, and CPU families.
+
+**Usage statistics are enabled by default.** You can turn them off at the bottom of **Settings → General**.
+
+### What is collected
+
+At most once every 24 hours, the application sends:
+
+- A randomly generated installation ID that persists across launches and app updates.
+- The TorrServe Silicon version.
+- The macOS version.
+- The CPU family, such as Apple M5 Pro or Intel Core i7.
+
+Cloudflare also determines the connection country. This reflects the network connection and may be affected by a VPN.
+
+### What is not collected
+
+- Torrent names or magnet links.
+- File paths or viewing history.
+- Device serial numbers, MAC addresses, or Apple IDs.
+
+IP addresses and User-Agent headers are not stored in the analytics database.
+
+Reports are sent in the background without blocking application startup. Network failures are handled silently, and disabling statistics stops further reporting.
+
+## System Requirements
+
+- macOS 15 or later.
+- A Mac with Apple Silicon.]]></description>
+            <enclosure url="https://github.com/HolyMayhem/TorrServe-Silicon/releases/download/v2.9.0/TorrServer-2.9.0-macOS-arm64.dmg" length="29482979" type="application/octet-stream" sparkle:edSignature="6uD3ScVDSj7cAhaTEAlyRVzvuXWLj3TwhbcSBv6ZYH3/SfDDRJr2r7db4/rzZSuNx5vwqPa8z2x0S9Z2JM6GBg=="/>
+        </item>
+        <item>
             <title>2.8.0</title>
             <pubDate>Sat, 26 Sep 2026 15:20:45 +0500</pubDate>
             <link>https://github.com/HolyMayhem/TorrServe-Silicon/releases</link>
