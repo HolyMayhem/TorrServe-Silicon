@@ -92,8 +92,8 @@ struct SettingsView: View {
         switch category {
         case .general:
             applicationSection
-            telemetrySection
             notificationsSection
+            telemetrySection
         case .interface:
             interfaceSection
         case .menuBar:

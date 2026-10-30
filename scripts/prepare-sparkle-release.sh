@@ -3,6 +3,7 @@ set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 INFO_PLIST="$PROJECT_DIR/Resources/Info.plist"
+APPCAST_OUTPUT_PATH="${APPCAST_OUTPUT_PATH:-$PROJECT_DIR/appcast.xml}"
 SPARKLE_ACCOUNT="${SPARKLE_ACCOUNT:-com.holymayhem.torrserve-silicon-updates}"
 SPARKLE_TOOLS_DIR="${SPARKLE_TOOLS_DIR:-$PROJECT_DIR/.build/artifacts/sparkle/Sparkle/bin}"
 GENERATE_KEYS="$SPARKLE_TOOLS_DIR/generate_keys"
@@ -64,18 +65,18 @@ fi
   --link "https://github.com/HolyMayhem/TorrServe-Silicon/releases" \
   --embed-release-notes \
   --maximum-deltas 0 \
-  -o "$PROJECT_DIR/appcast.xml" \
+  -o "$APPCAST_OUTPUT_PATH" \
   "$STAGING_DIR"
 
-xmllint --noout "$PROJECT_DIR/appcast.xml"
+xmllint --noout "$APPCAST_OUTPUT_PATH"
 
-if ! grep -q 'sparkle:edSignature=' "$PROJECT_DIR/appcast.xml"; then
+if ! grep -q 'sparkle:edSignature=' "$APPCAST_OUTPUT_PATH"; then
   echo "Generated appcast does not contain an EdDSA signature." >&2
   exit 1
 fi
 
 if ! grep -q "<sparkle:version>$BUILD_NUMBER</sparkle:version>" \
-  "$PROJECT_DIR/appcast.xml"; then
+  "$APPCAST_OUTPUT_PATH"; then
   echo "Generated appcast does not contain build $BUILD_NUMBER." >&2
   exit 1
 fi
@@ -84,4 +85,4 @@ echo "Prepared TorrServe Silicon $VERSION ($BUILD_NUMBER)"
 echo "Release tag: $RELEASE_TAG"
 echo "DMG: $DMG_PATH"
 echo "SHA-256: $(shasum -a 256 "$DMG_PATH" | awk '{print $1}')"
-echo "Appcast: $PROJECT_DIR/appcast.xml"
+echo "Appcast: $APPCAST_OUTPUT_PATH"

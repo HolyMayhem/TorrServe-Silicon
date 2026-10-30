@@ -81,6 +81,11 @@ if SETFILE="$(xcrun -f SetFile 2>/dev/null)"; then
   "$SETFILE" -a C "$MOUNT_DIR" 2>/dev/null || true
 fi
 
+if [[ -n "${DMG_FINDER_LAYOUT_TEMPLATE:-}" ]]; then
+  # Reuse an inspected installer layout for headless release preparation.
+  # The template must use the same app, Applications link and background paths.
+  cp "$DMG_FINDER_LAYOUT_TEMPLATE" "$MOUNT_DIR/.DS_Store"
+else
 /usr/bin/osascript <<APPLESCRIPT
 tell application "Finder"
     delay 1
@@ -114,6 +119,7 @@ tell application "Finder"
     end tell
 end tell
 APPLESCRIPT
+fi
 
 sync
 hdiutil detach "$DEVICE" -quiet

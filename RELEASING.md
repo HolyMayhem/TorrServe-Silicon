@@ -56,6 +56,19 @@ The script verifies that the Keychain key matches the public key embedded in
 the app, creates the DMG, signs the update with EdDSA, embeds the supplied
 release notes in the feed, and writes `appcast.xml`.
 
+For preparation before publication, keep the public feed unchanged:
+
+```bash
+APPCAST_OUTPUT_PATH="$PWD/dist/appcast-v2.9.0.xml" \
+  RELEASE_NOTES_FILE=/absolute/path/to/release-notes.md \
+  ./scripts/prepare-sparkle-release.sh
+```
+
+Use the staged feed in the final step of the publication sequence below:
+copy it to `appcast.xml` after publishing the exact verified DMG. For a headless build,
+`DMG_FINDER_LAYOUT_TEMPLATE=/absolute/path/to/.DS_Store` reuses the layout
+from an inspected previous installer with identical app and background paths.
+
 ## Publish safely
 
 1. Create the Git tag printed by the script.
