@@ -5,6 +5,12 @@ build/
 dist/
 Package.resolved
 
+# Local developer documentation; public release notes stay tracked
+/Docs/**/*.md
+!/Docs/ReleaseNotes/**/*.md
+/RELEASING.md
+/telemetry/server/*.md
+
 # Local-only test suite
 /Tests/
 !/Tests/
