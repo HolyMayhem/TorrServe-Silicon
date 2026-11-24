@@ -12,7 +12,7 @@ import { applyAllMigrations } from "./migrations";
 import { countryFromRequest, normalizeCountry } from "../src/country";
 import { generateKeyPair, exportJWK, SignJWT } from "jose";
 import { pbkdf2Sync } from "node:crypto";
-import { handleRequest } from "../src/index";
+import { handleRequest } from "../src/http";
 import { cleanup, installationHash, storeHeartbeat } from "../src/storage";
 import { statistics } from "../src/stats";
 import { DAY, dayOf, type Env, type Heartbeat } from "../src/types";
@@ -1030,4 +1030,12 @@ describe("administrator key sessions", () => {
         .status,
     ).toBe(401);
   });
+});
+
+it("does not expose the Hub RPC methods on the original HTTP handler", async () => {
+  for (const path of ["/HubAnalytics/snapshot", "/admin/api/snapshot", "/admin/api/HubAnalytics/health"]) {
+    const response = await handleRequest(new Request("http://localhost" + path), env, now);
+    expect([401, 404]).toContain(response.status);
+    expect(await response.text()).not.toContain("installations");
+  }
 });

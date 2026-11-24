@@ -10,7 +10,7 @@ function dateValue(value: string): number {
     throw new HTTPError(400, "Invalid date");
   return s;
 }
-export async function statistics(env: Env, url: URL, now: number) {
+export async function statistics(env: Env, url: URL, now: number, hubSection?: string) {
   const today = secondsOf(dayOf(now)),
     end = dateValue(url.searchParams.get("end") ?? dayOf(now));
   const start = dateValue(
@@ -31,16 +31,35 @@ export async function statistics(env: Env, url: URL, now: number) {
   const current = end === today;
   const populationArgs = current ? [start, end + DAY] : [startDay, endDay];
   const population = current
-    ? `WITH population AS (SELECT app_version, macos_version, cpu_model, country FROM telemetry_installations WHERE last_seen >= ? AND last_seen < ?)`
+    ? `WITH population AS (SELECT app_version, macos_version, cpu_model, cpu_architecture, country FROM telemetry_installations WHERE last_seen >= ? AND last_seen < ?)`
     : `WITH population AS (SELECT a.* FROM telemetry_activity a JOIN (
  SELECT installation_id,MAX(day) day FROM telemetry_activity WHERE day BETWEEN ? AND ? GROUP BY installation_id
  ) b ON a.installation_id=b.installation_id AND a.day=b.day)`;
-  const dimensions = [
-    "app_version",
-    "macos_version",
-    "cpu_model",
-    "country",
-  ] as const;
+  const dimensionGroups = {
+    admin: ["app_version", "macos_version", "cpu_model", "country"],
+    overview: ["app_version", "macos_version", "cpu_model", "country", "cpu_architecture"],
+    devices: ["macos_version", "cpu_model", "cpu_architecture"],
+    geography: ["country"],
+    versions: ["app_version"],
+  } as const;
+  const dimensions = dimensionGroups[(hubSection ?? "admin") as keyof typeof dimensionGroups] ?? [];
+  const dimensionSql = `${population}, grouped AS (
+    SELECT labels.key dimension, labels.value label, COUNT(*) count FROM population,
+      json_each(json_object(${dimensions.map(column => `'${column}',${column}`).join(",")})) labels
+    GROUP BY labels.key, labels.value
+  ), ranked AS (
+    SELECT *, SUM(count) OVER (PARTITION BY dimension) sample,
+      SUM(CASE WHEN label=? THEN count ELSE 0 END) OVER (PARTITION BY dimension) current,
+      ROW_NUMBER() OVER (PARTITION BY dimension ORDER BY count DESC,label) rank FROM grouped
+  )
+  SELECT dimension,label,count,sample,current FROM ranked
+  WHERE rank <= CASE dimension WHEN 'country' THEN 250 ELSE 100 END ORDER BY dimension,rank`;
+  const withAdoption = hubSection === undefined || ["summary", "overview", "versions"].includes(hubSection);
+  const previousEnd = end - (end === today ? DAY : 0);
+  const comparisonDays = Math.max(0, 1 + (previousEnd - start) / DAY);
+  const previousStart = start - comparisonDays * DAY;
+  const compare = ["summary", "overview", "audience"].includes(hubSection ?? "") &&
+    comparisonDays > 0 && previousStart >= today - 89 * DAY;
   const batch = await env.DB.batch<Record<string, string | number | null>>([
     env.DB.prepare(
       "SELECT installations FROM telemetry_totals WHERE singleton=1",
@@ -58,18 +77,14 @@ export async function statistics(env: Env, url: URL, now: number) {
         ).bind(endDay, dayOf(end - 6 * DAY), dayOf(end - 29 * DAY), endDay),
     env.DB.prepare(
       "SELECT day,active,new_installations FROM telemetry_daily WHERE day BETWEEN ? AND ? ORDER BY day",
-    ).bind(startDay, endDay),
-    ...dimensions.map((column) =>
-      env.DB.prepare(
-        `${population} SELECT ${column} label,COUNT(*) count FROM population GROUP BY ${column} ORDER BY count DESC,label LIMIT ${column === "country" ? 250 : 100}`,
-      ).bind(...populationArgs),
-    ),
-    env.DB.prepare(
-      `${population} SELECT COUNT(*) active,COALESCE(SUM(app_version=?),0) current FROM population`,
-    ).bind(...populationArgs, latest ?? ""),
+    ).bind(compare ? dayOf(previousStart) : startDay, endDay),
     env.DB.prepare(
       "SELECT MAX(last_seen) last_received_at FROM telemetry_installations",
     ),
+    ...(dimensions.length ? [env.DB.prepare(dimensionSql).bind(...populationArgs, latest ?? "")] :
+      withAdoption ? [env.DB.prepare(
+        `${population} SELECT COUNT(*) active,COALESCE(SUM(app_version=?),0) current FROM population`,
+      ).bind(...populationArgs, latest ?? "")] : []),
   ]);
   const daily = new Map(batch[2].results.map((row) => [row.day, row]));
   const activity = [];
@@ -81,7 +96,25 @@ export async function statistics(env: Env, url: URL, now: number) {
         new_installations: 0,
       },
     );
-  const adoption = batch[7].results[0] as { active: number; current: number };
+  type Bucket = { label: string | number | null; count: string | number | null };
+  const grouped = new Map<string, Bucket[]>();
+  const rows = batch[4]?.results ?? [];
+  if (dimensions.length) for (const row of rows) {
+    const key = String(row.dimension);
+    const values = grouped.get(key) ?? [];
+    values.push({ label: row.label, count: row.count });
+    grouped.set(key, values);
+  }
+  const sample = Number(dimensions.length ? rows[0]?.sample ?? 0 : rows[0]?.active ?? 0);
+  const adoption = {
+    active: withAdoption ? sample : 0,
+    current: withAdoption ? Number((dimensions.length ? rows.find(row => row.dimension === "app_version") : rows[0])?.current ?? 0) : 0,
+  };
+  const previous = [];
+  if (compare) for (let day = previousStart; day < start; day += DAY) {
+    const date = dayOf(day);
+    previous.push(daily.get(date) ?? { day: date, active: 0, new_installations: 0 });
+  }
   return {
     generatedAt: new Date(now * 1000).toISOString(),
     timezone: "UTC",
@@ -91,10 +124,15 @@ export async function statistics(env: Env, url: URL, now: number) {
       ...batch[1].results[0],
     },
     activity,
-    versions: batch[3].results,
-    macOS: batch[4].results,
-    processors: batch[5].results,
-    countries: batch[6].results,
+    versions: grouped.get("app_version") ?? [],
+    macOS: grouped.get("macos_version") ?? [],
+    processors: grouped.get("cpu_model") ?? [],
+    countries: grouped.get("country") ?? [],
+    ...(hubSection === undefined ? {} : {
+      architectures: grouped.get("cpu_architecture") ?? [],
+      previous,
+      ...(dimensions.length && !withAdoption ? { sample } : {}),
+    }),
     adoption: {
       latestVersion: latest,
       active: adoption.active,
@@ -104,7 +142,7 @@ export async function statistics(env: Env, url: URL, now: number) {
     },
     system: {
       status: "operational",
-      lastReceivedAt: batch[8].results[0].last_received_at,
+      lastReceivedAt: batch[3].results[0].last_received_at,
       environment: env.ENVIRONMENT,
       authMode:
         env.ENVIRONMENT === "local"
