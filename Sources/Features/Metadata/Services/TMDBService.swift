@@ -65,7 +65,8 @@ final class TMDBService: MetadataServicing, @unchecked Sendable {
 
     func request<Response: Decodable>(
         path: String,
-        queryItems: [URLQueryItem]
+        queryItems: [URLQueryItem],
+        timeout: TimeInterval = 12
     ) async throws -> Response {
         guard let configuration = configurationProvider.tmdbConfiguration() else {
             throw MetadataServiceError.notConfigured(.tmdb)
@@ -84,7 +85,7 @@ final class TMDBService: MetadataServicing, @unchecked Sendable {
 
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
-        request.timeoutInterval = 12
+        request.timeoutInterval = timeout
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
         let data = try await MetadataHTTPTransport.data(for: request, session: session)
