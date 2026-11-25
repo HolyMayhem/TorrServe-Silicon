@@ -4,6 +4,10 @@ struct CatalogView: View {
     @ObservedObject var mainModel: MainWindowModel
     @ObservedObject var searchModel: SearchViewModel
     @State private var showsTorrentSearch = false
+    @FocusState private var catalogSearchFocused: Bool
+    @State private var searchInput = ""
+    @State private var catalogQuery = ""
+    @State private var searchFilter = CatalogFilter()
     @State private var section = Section.home
     @State private var moviesFilter = CatalogFilter(kind: .movie)
     @State private var seriesFilter = CatalogFilter(kind: .tv)
@@ -34,26 +38,40 @@ struct CatalogView: View {
                 catalog
             }
         }
+        .onChange(of: mainModel.searchFocusRevision) { _, _ in
+            if !showsTorrentSearch {
+                path = NavigationPath()
+                catalogSearchFocused = true
+            }
+        }
+        .onChange(of: mainModel.catalogRefreshRevision) { _, _ in
+            if showsTorrentSearch {
+                searchModel.search(language: mainModel.language)
+            }
+        }
     }
 
     private var catalog: some View {
         NavigationStack(path: $path) {
             VStack(spacing: 0) {
-                Picker(text("Category", "Раздел"), selection: $section) {
-                    Text(text("Home", "Главная")).tag(Section.home)
-                    Text(text("Movies", "Фильмы")).tag(Section.movies)
-                    Text(text("TV Shows", "Сериалы")).tag(Section.series)
-                    Text(text("Genres", "Жанры")).tag(Section.genres)
+                searchBar
+                if catalogQuery.isEmpty {
+                    categories
+                    category
+                } else {
+                    CatalogFiltersView(filter: $searchFilter, repository: repository, connection: connection, text: text)
+                    grid(.search(catalogQuery, searchFilter))
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 20)
-                .padding(.top, 10)
-
-                category
             }
+                .task(id: searchInput) {
+                    let query = searchInput.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !query.isEmpty {
+                        do { try await Task.sleep(for: .milliseconds(300)) }
+                        catch { return }
+                    }
+                    guard !Task.isCancelled else { return }
+                    catalogQuery = query
+                }
                 .navigationDestination(for: CatalogCollection.self) { collection in
                     VStack(spacing: 0) {
                         destinationHeader(text.title(collection))
@@ -70,13 +88,53 @@ struct CatalogView: View {
                 }
         }
     }
+
+    private var searchBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+            TextField(text("Search for movies and TV shows", "Поиск фильмов и сериалов"), text: $searchInput)
+                .textFieldStyle(.plain)
+                .focused($catalogSearchFocused)
+                .onSubmit { catalogQuery = searchInput.trimmingCharacters(in: .whitespacesAndNewlines) }
+            if !searchInput.isEmpty {
+                Button {
+                    searchInput = ""
+                    catalogQuery = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(text("Clear search", "Очистить поиск"))
+            }
+        }
+        .padding(.horizontal, 10)
+        .appToolbarControlSurface()
+        .padding(.horizontal, 20)
+        .padding(.top, 12)
+    }
+
+    private var categories: some View {
+        Picker(text("Category", "Раздел"), selection: $section) {
+            Text(text("Home", "Главная")).tag(Section.home)
+            Text(text("Movies", "Фильмы")).tag(Section.movies)
+            Text(text("TV Shows", "Сериалы")).tag(Section.series)
+            Text(text("Genres", "Жанры")).tag(Section.genres)
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .fixedSize()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 20)
+        .padding(.top, 10)
+    }
+
     private enum Section { case home, movies, series, genres }
 
     @ViewBuilder
     private var category: some View {
         switch section {
         case .home:
-            CatalogHomeView(repository: repository, connection: connection, text: text)
+            CatalogHomeView(repository: repository, connection: connection, text: text, revision: mainModel.catalogRefreshRevision)
         case .movies:
             browse($moviesFilter, kind: .movie)
         case .series:
@@ -95,7 +153,7 @@ struct CatalogView: View {
 
     private func grid(_ listing: CatalogListing) -> some View {
         CatalogListingGrid(
-            request: CatalogRequest(listing: listing, language: text.apiLanguage, connection: connection),
+            request: CatalogRequest(listing: listing, language: text.apiLanguage, connection: connection, revision: mainModel.catalogRefreshRevision),
             repository: repository, text: text
         )
     }

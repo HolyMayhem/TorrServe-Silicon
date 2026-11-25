@@ -174,6 +174,7 @@ final class MainWindowModel: ObservableObject {
 
     @Published var isCheckingForTorrServerUpdates = false
     @Published var searchFocusRevision = 0
+    @Published var catalogRefreshRevision = 0
 
     var onPathChanged: ((String) -> Void)?
     var onChoose: (() -> Void)?

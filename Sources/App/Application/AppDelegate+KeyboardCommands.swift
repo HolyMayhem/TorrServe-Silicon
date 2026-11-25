@@ -40,7 +40,7 @@ extension AppDelegate {
         guard NSApp.keyWindow === window, window?.attachedSheet == nil else { return }
         switch mainWindowModel.selectedSection {
         case .library: libraryModel.refresh()
-        case .search: searchModel.search(language: currentLanguage)
+        case .search: mainWindowModel.catalogRefreshRevision &+= 1
         case .offline: offlineDownloadManager.refreshCompletedDownloads()
         }
     }
@@ -87,7 +87,7 @@ extension AppDelegate {
                 return mainWindowModel.canStop && !libraryModel.isRefreshing && libraryModel.alert == nil
             }
             if mainWindowModel.selectedSection == .offline { return true }
-            return searchModel.isConfigured && !searchModel.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            return true
         case #selector(showLibraryList(_:)), #selector(showLibraryPosters(_:)), #selector(showLibraryCards(_:)):
             return libraryCommandsAvailable
         case #selector(showSearchFromMenu(_:)):

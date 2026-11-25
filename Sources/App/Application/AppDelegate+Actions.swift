@@ -524,9 +524,6 @@ extension AppDelegate {
 
         withAnimation(.spring(response: 0.30, dampingFraction: 0.86)) {
             mainWindowModel.jackettEnabled = enabled
-            if !enabled, mainWindowModel.selectedSection == .search {
-                mainWindowModel.selectedSection = .library
-            }
         }
     }
 

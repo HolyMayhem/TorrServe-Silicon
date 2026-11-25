@@ -42,11 +42,12 @@ struct TMDBCatalogService: Sendable {
             return try await .combined(movies, series)
         case .search(let query, let filter):
             var parameters = ["query": query]
-            if let year = filter.year, let kind = filter.kind {
+            let kind = filter.effectiveKind
+            if let year = filter.year, let kind {
                 parameters[kind == .movie ? "primary_release_year" : "first_air_date_year"] = String(year)
             }
             return try await results(
-                "search/\(filter.kind?.rawValue ?? "multi")", kind: filter.kind,
+                "search/\(kind?.rawValue ?? "multi")", kind: kind,
                 page: page, language: language, timeout: timeout, parameters: parameters
             ).filtered(by: filter)
         }

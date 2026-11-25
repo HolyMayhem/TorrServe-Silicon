@@ -4,6 +4,7 @@ struct CatalogRequest: Hashable, Sendable {
     let listing: CatalogListing
     let language: String
     let connection: CatalogConnection
+    var revision = 0
 }
 
 @MainActor
@@ -20,13 +21,14 @@ final class CatalogListingModel: ObservableObject {
 
     func start(_ request: CatalogRequest, repository: CatalogRepository) async {
         if self.request == request, nextPage > 1 { return }
+        let refresh = self.request.map { $0.revision != request.revision } ?? (request.revision != 0)
         self.request = request
         generation = UUID()
         nextPage = 1
         source = nil
         items = []
         hasMore = false
-        await load(repository)
+        await load(repository, refresh: refresh)
     }
 
     func loadMore(_ repository: CatalogRepository) async {
@@ -34,7 +36,7 @@ final class CatalogListingModel: ObservableObject {
         await load(repository)
     }
 
-    private func load(_ repository: CatalogRepository) async {
+    private func load(_ repository: CatalogRepository, refresh: Bool = false) async {
         guard let request else { return }
         let currentGeneration = generation
         loading = true
@@ -47,7 +49,7 @@ final class CatalogListingModel: ObservableObject {
             for _ in 0..<3 {
                 let response = try await repository.page(
                     request.listing, number: nextPage, language: request.language,
-                    connection: request.connection, preferredSource: source
+                    connection: request.connection, preferredSource: source, refresh: refresh
                 )
                 guard !Task.isCancelled, generation == currentGeneration else { return }
                 if let source, source != response.source { items = [] }

@@ -12,13 +12,13 @@ struct CatalogRepository: Sendable {
 
     func page(
         _ listing: CatalogListing, number: Int, language: String,
-        connection: CatalogConnection, preferredSource: CatalogSource? = nil
+        connection: CatalogConnection, preferredSource: CatalogSource? = nil, refresh: Bool = false
     ) async throws -> CatalogBrowsePage {
         let source: CatalogSource = (preferredSource ?? connection.source) == .cub ? .cub : .tmdb
         let key = CatalogCache.Key.page(listing, number, language, source, source == .cub ? connection : nil)
         do {
             return try await load(
-                listing, number: number, language: language, source: source, connection: connection, key: key
+                listing, number: number, language: language, source: source, connection: connection, key: key, refresh: refresh
             )
         } catch {
             try Task.checkCancellation()
@@ -28,7 +28,7 @@ struct CatalogRepository: Sendable {
                 let fallbackKey = CatalogCache.Key.page(listing, 1, language, .cub, connection)
                 do {
                     return try await load(
-                        listing, number: 1, language: language, source: .cub, connection: connection, key: fallbackKey
+                        listing, number: 1, language: language, source: .cub, connection: connection, key: fallbackKey, refresh: refresh
                     )
                 } catch {
                     try Task.checkCancellation()
@@ -70,9 +70,9 @@ struct CatalogRepository: Sendable {
 
     private func load(
         _ listing: CatalogListing, number: Int, language: String,
-        source: CatalogSource, connection: CatalogConnection, key: CatalogCache.Key
+        source: CatalogSource, connection: CatalogConnection, key: CatalogCache.Key, refresh: Bool
     ) async throws -> CatalogBrowsePage {
-        if case .page(let page) = await cache.value(for: key) {
+        if !refresh, case .page(let page) = await cache.value(for: key) {
             return CatalogBrowsePage(page: page, source: source)
         }
         let page: CatalogPage

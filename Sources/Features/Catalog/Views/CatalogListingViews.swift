@@ -58,12 +58,13 @@ struct CatalogHomeView: View {
     let repository: CatalogRepository
     let connection: CatalogConnection
     let text: CatalogText
+    let revision: Int
 
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 26) {
                 ForEach(CatalogCollection.allCases, id: \.self) { collection in
-                    CatalogShelf(collection: collection, repository: repository, connection: connection, text: text)
+                    CatalogShelf(collection: collection, repository: repository, connection: connection, text: text, revision: revision)
                 }
             }
             .padding(.vertical, 20)
@@ -76,6 +77,7 @@ private struct CatalogShelf: View {
     let repository: CatalogRepository
     let connection: CatalogConnection
     let text: CatalogText
+    let revision: Int
     @StateObject private var model = CatalogListingModel()
     @State private var retry = 0
 
@@ -113,8 +115,8 @@ private struct CatalogShelf: View {
                 .padding(.horizontal, 20)
             }
         }
-        .task(id: CatalogRequest(listing: .collection(collection), language: text.apiLanguage, connection: connection)) {
-            await model.start(CatalogRequest(listing: .collection(collection), language: text.apiLanguage, connection: connection),
+        .task(id: CatalogRequest(listing: .collection(collection), language: text.apiLanguage, connection: connection, revision: revision)) {
+            await model.start(CatalogRequest(listing: .collection(collection), language: text.apiLanguage, connection: connection, revision: revision),
                               repository: repository)
         }
         .task(id: retry) {
