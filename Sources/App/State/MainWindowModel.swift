@@ -124,7 +124,6 @@ final class MainWindowModel: ObservableObject {
     @Published var matrixDowngradeTestActive = false
     @Published var notificationTestsInFlight: Set<AppNotificationEvent> = []
     @Published var notificationTestResults: [AppNotificationEvent: NotificationDeliveryResult] = [:]
-    @Published var jackettEnabled = true
     @Published var showsOfflineSection = false
     let offlineDownloadsPreview = OfflineDownloadsPreview()
     @Published var metadataSource = MetadataSourceMode.tmdb
@@ -204,7 +203,6 @@ final class MainWindowModel: ObservableObject {
     var onSendTestNotification: ((AppNotificationEvent) -> Void)?
     var onNotificationPreferencesChanged: ((AppNotificationPreferences) -> Void)?
     var onConfigureSearch: (() -> Void)?
-    var onJackettEnabledChanged: ((Bool) -> Void)?
     var onShowsOfflineSectionChanged: ((Bool) -> Void)?
     var onOpenOfflinePreview: (() -> Void)?
     var onMetadataSourceChanged: ((MetadataSourceMode) -> Void)?

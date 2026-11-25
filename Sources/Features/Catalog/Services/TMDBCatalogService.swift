@@ -3,7 +3,7 @@ import Foundation
 struct TMDBCatalogService: Sendable {
     let tmdb: TMDBService
 
-    func page(for listing: CatalogListing, page: Int, language: String, timeout: TimeInterval) async throws -> CatalogPage {
+    func page(for listing: CatalogListing, page: Int, language: String, connection: CatalogTMDBConnection) async throws -> CatalogPage {
         switch listing {
         case .collection(let collection):
             var parameters: [String: String] = [:]
@@ -28,17 +28,17 @@ struct TMDBCatalogService: Sendable {
                 parameters["primary_release_date.lte"] = Self.day(end)
                 parameters["sort_by"] = "popularity.desc"
             case .topRated:
-                async let movies = results("movie/top_rated", kind: .movie, page: page, language: language, timeout: timeout)
-                async let series = results("tv/top_rated", kind: .tv, page: page, language: language, timeout: timeout)
+                async let movies = results("movie/top_rated", kind: .movie, page: page, language: language, connection: connection)
+                async let series = results("tv/top_rated", kind: .tv, page: page, language: language, connection: connection)
                 return try await .combined(movies, series)
             }
-            return try await results(path, kind: kind, page: page, language: language, timeout: timeout, parameters: parameters)
+            return try await results(path, kind: kind, page: page, language: language, connection: connection, parameters: parameters)
         case .discover(let filter):
             if let kind = filter.effectiveKind {
-                return try await discover(filter, kind: kind, page: page, language: language, timeout: timeout)
+                return try await discover(filter, kind: kind, page: page, language: language, connection: connection)
             }
-            async let movies = discover(filter, kind: .movie, page: page, language: language, timeout: timeout)
-            async let series = discover(filter, kind: .tv, page: page, language: language, timeout: timeout)
+            async let movies = discover(filter, kind: .movie, page: page, language: language, connection: connection)
+            async let series = discover(filter, kind: .tv, page: page, language: language, connection: connection)
             return try await .combined(movies, series)
         case .search(let query, let filter):
             var parameters = ["query": query]
@@ -48,26 +48,26 @@ struct TMDBCatalogService: Sendable {
             }
             return try await results(
                 "search/\(kind?.rawValue ?? "multi")", kind: kind,
-                page: page, language: language, timeout: timeout, parameters: parameters
+                page: page, language: language, connection: connection, parameters: parameters
             ).filtered(by: filter)
         }
     }
 
-    func genres(kind: MediaKind, language: String, timeout: TimeInterval) async throws -> [CatalogGenre] {
-        let envelope: GenreResponse = try await tmdb.request(
-            path: "genre/\(kind.rawValue)/list", queryItems: [URLQueryItem(name: "language", value: language)], timeout: timeout
+    func genres(kind: MediaKind, language: String, connection: CatalogTMDBConnection) async throws -> [CatalogGenre] {
+        let envelope: GenreResponse = try await request(
+            path: "genre/\(kind.rawValue)/list", queryItems: [URLQueryItem(name: "language", value: language)], connection: connection
         )
         return envelope.genres
     }
 
-    func details(for identity: CatalogIdentity, language: String, timeout: TimeInterval) async throws -> CatalogDetails {
-        let response: DetailsResponse = try await tmdb.request(
+    func details(for identity: CatalogIdentity, language: String, connection: CatalogTMDBConnection) async throws -> CatalogDetails {
+        let response: DetailsResponse = try await request(
             path: "\(identity.kind.rawValue)/\(identity.tmdbID)",
             queryItems: [
                 URLQueryItem(name: "language", value: language),
                 URLQueryItem(name: "append_to_response", value: "credits,videos,similar,recommendations"),
                 URLQueryItem(name: "include_video_language", value: language.hasPrefix("ru") ? "ru,en" : "en")
-            ], timeout: timeout
+            ], connection: connection
         )
         guard let item = response.item.item(kind: identity.kind), item.id == identity else {
             throw MetadataServiceError.invalidResponse
@@ -86,28 +86,47 @@ struct TMDBCatalogService: Sendable {
         )
     }
 
-    private func discover(_ filter: CatalogFilter, kind: MediaKind, page: Int, language: String, timeout: TimeInterval) async throws -> CatalogPage {
+    private func discover(_ filter: CatalogFilter, kind: MediaKind, page: Int, language: String, connection: CatalogTMDBConnection) async throws -> CatalogPage {
         var parameters = ["sort_by": "popularity.desc"]
         if let genre = filter.genreID { parameters["with_genres"] = String(genre) }
         if let year = filter.year {
             parameters[kind == .movie ? "primary_release_year" : "first_air_date_year"] = String(year)
         }
         if let rating = filter.minimumRating { parameters["vote_average.gte"] = String(rating) }
-        return try await results("discover/\(kind.rawValue)", kind: kind, page: page, language: language, timeout: timeout, parameters: parameters)
+        return try await results("discover/\(kind.rawValue)", kind: kind, page: page, language: language, connection: connection, parameters: parameters)
     }
 
     private func results(
-        _ path: String, kind: MediaKind?, page: Int, language: String, timeout: TimeInterval, parameters: [String: String] = [:]
+        _ path: String, kind: MediaKind?, page: Int, language: String, connection: CatalogTMDBConnection, parameters: [String: String] = [:]
     ) async throws -> CatalogPage {
         var query = parameters
         query["page"] = String(page)
         query["language"] = language
         query["include_adult"] = "false"
-        let response: CatalogResponse = try await tmdb.request(
+        let response: CatalogResponse = try await request(
             path: path, queryItems: query.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) },
-            timeout: timeout
+            connection: connection
         )
         return try response.page(page, kind: kind)
+    }
+
+    private func request<Response: Decodable>(
+        path: String, queryItems: [URLQueryItem], connection: CatalogTMDBConnection
+    ) async throws -> Response {
+        if connection.route == .proxy {
+            guard let proxy = connection.proxy else { throw MetadataServiceError.invalidRequest }
+            return try await tmdb.request(path: path, queryItems: queryItems, timeout: connection.timeout, apiBaseURL: proxy)
+        }
+        do {
+            return try await tmdb.request(path: path, queryItems: queryItems, timeout: connection.timeout)
+        } catch {
+            try Task.checkCancellation()
+            guard connection.route == .auto, let proxy = connection.proxy,
+                  (error as? URLError)?.code != .cancelled else { throw error }
+            if let serviceError = error as? MetadataServiceError,
+               case .notConfigured = serviceError { throw error }
+            return try await tmdb.request(path: path, queryItems: queryItems, timeout: connection.timeout, apiBaseURL: proxy)
+        }
     }
 
     static func day(_ date: Date) -> String {

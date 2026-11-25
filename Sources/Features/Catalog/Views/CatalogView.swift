@@ -15,7 +15,9 @@ struct CatalogView: View {
     @State private var genreFilter = CatalogFilter()
     @State private var path = NavigationPath()
     @State private var repository = CatalogRepository()
-    private let connection = CatalogConnection()
+    @ObservedObject private var settings = CatalogSettingsStore.shared
+
+    private var connection: CatalogConnection { settings.connection }
 
     private var text: CatalogText { CatalogText(language: mainModel.language) }
 

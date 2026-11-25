@@ -24,7 +24,7 @@ struct CatalogFiltersView: View {
         .task(id: GenreRequest(kind: kind, locale: text.apiLanguage, connection: connection)) {
             loadedGenres = []
             guard connection.source != .cub, let kind else { return }
-            let results = try? await repository.genres(kind: kind, language: text.apiLanguage, timeout: connection.timeout)
+            let results = try? await repository.genres(kind: kind, language: text.apiLanguage, connection: connection.tmdb)
             if !Task.isCancelled { loadedGenres = results ?? [] }
         }
     }

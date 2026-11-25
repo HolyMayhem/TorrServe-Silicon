@@ -25,9 +25,6 @@ extension AppDelegate {
         mainWindowModel.path = initialExecutablePath()
         mainWindowModel.language = currentLanguage
         mainWindowModel.menuBarPreferences = menuBarPreferencesStore.load()
-        mainWindowModel.jackettEnabled = UserDefaults.standard.bool(
-            forKey: jackettSearchEnabledKey
-        )
         mainWindowModel.showsOfflineSection = UserDefaults.standard.bool(forKey: showsOfflineSectionKey)
         let metadataProviderSettings = metadataSettings.settings
         mainWindowModel.metadataSource = metadataProviderSettings.selectedSource
@@ -97,9 +94,6 @@ extension AppDelegate {
             self.ensureWindowForCommand()
             self.mainWindowModel.selectedSection = .search
             self.searchModel.showsSettings = true
-        }
-        mainWindowModel.onJackettEnabledChanged = { [weak self] enabled in
-            self?.setJackettEnabled(enabled)
         }
         mainWindowModel.onShowsOfflineSectionChanged = { [weak self] visible in
             self?.setShowsOfflineSection(visible)

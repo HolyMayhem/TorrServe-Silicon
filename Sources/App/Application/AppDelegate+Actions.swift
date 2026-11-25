@@ -519,14 +519,6 @@ extension AppDelegate {
         refreshSpeedDisplay()
     }
 
-    func setJackettEnabled(_ enabled: Bool) {
-        UserDefaults.standard.set(enabled, forKey: jackettSearchEnabledKey)
-
-        withAnimation(.spring(response: 0.30, dampingFraction: 0.86)) {
-            mainWindowModel.jackettEnabled = enabled
-        }
-    }
-
     func setShowsOfflineSection(_ visible: Bool) {
         UserDefaults.standard.set(visible, forKey: showsOfflineSectionKey)
         mainWindowModel.showsOfflineSection = visible
@@ -782,7 +774,6 @@ extension AppDelegate {
             showSpeedInMenuBarKey: true,
             hideDockIconKey: false,
             notificationsEnabledKey: false,
-            jackettSearchEnabledKey: true,
             showsOfflineSectionKey: false,
             autoUpdateTorrServerKey: false,
             speedDisplayUnitKey: SpeedDisplayUnit.automatic.rawValue

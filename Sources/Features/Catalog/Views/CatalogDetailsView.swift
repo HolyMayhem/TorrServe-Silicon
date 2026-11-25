@@ -36,10 +36,10 @@ struct CatalogDetailsView: View {
             .padding(20)
             .frame(maxWidth: .infinity)
         }
-        .task(id: DetailsRequest(language: text.apiLanguage, timeout: connection.timeout, retry: retry)) {
+        .task(id: DetailsRequest(language: text.apiLanguage, connection: connection.tmdb, retry: retry)) {
             failed = false
             do {
-                let result = try await repository.details(item.id, language: text.apiLanguage, timeout: connection.timeout)
+                let result = try await repository.details(item.id, language: text.apiLanguage, connection: connection.tmdb)
                 if !Task.isCancelled { details = result }
             } catch {
                 if !Task.isCancelled { failed = true }
@@ -188,7 +188,7 @@ struct CatalogDetailsView: View {
 
     private struct DetailsRequest: Hashable {
         let language: String
-        let timeout: TimeInterval
+        let connection: CatalogTMDBConnection
         let retry: Int
     }
 }

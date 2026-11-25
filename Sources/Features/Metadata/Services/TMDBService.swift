@@ -66,14 +66,15 @@ final class TMDBService: MetadataServicing, @unchecked Sendable {
     func request<Response: Decodable>(
         path: String,
         queryItems: [URLQueryItem],
-        timeout: TimeInterval = 12
+        timeout: TimeInterval = 12,
+        apiBaseURL: URL? = nil
     ) async throws -> Response {
         guard let configuration = configurationProvider.tmdbConfiguration() else {
             throw MetadataServiceError.notConfigured(.tmdb)
         }
 
         var components = URLComponents(
-            url: configuration.apiBaseURL.appendingPathComponent(path),
+            url: (apiBaseURL ?? configuration.apiBaseURL).appendingPathComponent(path),
             resolvingAgainstBaseURL: false
         )
         components?.queryItems = queryItems + [

@@ -2,9 +2,9 @@ import Foundation
 
 actor CatalogCache {
     enum Key: Hashable, Sendable {
-        case page(CatalogListing, Int, String, CatalogSource, CatalogConnection?)
-        case details(CatalogIdentity, String)
-        case genres(MediaKind, String)
+        case page(CatalogListing, Int, String, CatalogSource, CatalogConnection)
+        case details(CatalogIdentity, String, CatalogTMDBConnection)
+        case genres(MediaKind, String, CatalogTMDBConnection)
     }
 
     enum Value: Sendable {

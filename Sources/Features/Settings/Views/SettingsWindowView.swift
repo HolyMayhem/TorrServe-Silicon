@@ -8,6 +8,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
     case updates
     case downloads
     case metadata
+    case catalog
     case keyboard
     case developer
 
@@ -27,6 +28,8 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
             return language == .russian ? "Обновления" : "Updates"
         case .downloads:
             return language == .russian ? "Загрузки" : "Downloads"
+        case .catalog:
+            return language == .russian ? "Каталог" : "Catalog"
         case .metadata:
             return language == .russian ? "Метаданные" : "Metadata"
         case .keyboard:
@@ -72,6 +75,10 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
             return language == .russian
                 ? "Выберите папку для сохранения офлайн-загрузок."
                 : "Choose where offline downloads are stored."
+        case .catalog:
+            return language == .russian
+                ? "Выберите источник фильмов и сериалов и настройте подключение."
+                : "Choose a source for movies and TV shows and configure its connection."
         case .metadata:
             return language == .russian
                 ? "Выберите источники постеров и описаний и настройте ключи API."
@@ -95,6 +102,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .menuBar: return "menubar.rectangle"
         case .updates: return "arrow.triangle.2.circlepath"
         case .downloads: return "arrow.down.circle.fill"
+        case .catalog: return "rectangle.grid.2x2"
         case .metadata: return "film.stack.fill"
         case .keyboard: return "keyboard"
         case .developer: return "hammer.fill"
@@ -109,6 +117,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .menuBar: return .blue
         case .updates: return .orange
         case .downloads: return .cyan
+        case .catalog: return .teal
         case .metadata: return .indigo
         case .keyboard: return .gray
         case .developer: return .orange
