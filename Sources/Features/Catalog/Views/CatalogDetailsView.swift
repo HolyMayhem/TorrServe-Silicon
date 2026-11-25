@@ -36,8 +36,9 @@ struct CatalogDetailsView: View {
             .padding(20)
             .frame(maxWidth: .infinity)
         }
-        .task(id: DetailsRequest(language: text.apiLanguage, connection: connection.tmdb, retry: retry)) {
+        .task(id: DetailsRequest(language: text.apiLanguage, connection: connection.tmdb, retry: retry, identity: item.id)) {
             failed = false
+            details = nil
             do {
                 let result = try await repository.details(item.id, language: text.apiLanguage, connection: connection.tmdb)
                 if !Task.isCancelled { details = result }
@@ -88,7 +89,7 @@ struct CatalogDetailsView: View {
                 CatalogPoster(url: backdrop)
                     .overlay {
                         LinearGradient(
-                            colors: [SettingsVisualStyle.windowBackground.opacity(0.38), SettingsVisualStyle.windowBackground],
+                            colors: [Color(nsColor: .windowBackgroundColor).opacity(0.38), Color(nsColor: .windowBackgroundColor)],
                             startPoint: .topTrailing, endPoint: .bottomLeading
                         )
                     }
@@ -190,5 +191,6 @@ struct CatalogDetailsView: View {
         let language: String
         let connection: CatalogTMDBConnection
         let retry: Int
+        let identity: CatalogIdentity
     }
 }

@@ -92,6 +92,9 @@ struct CUBCatalogService: Sendable {
         query["page"] = String(page)
         var components = URLComponents(url: base, resolvingAgainstBaseURL: false)
         components?.queryItems = query.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) }
+        if let query = components?.percentEncodedQuery {
+            components?.percentEncodedQuery = query.replacingOccurrences(of: "+", with: "%2B")
+        }
         guard let url = components?.url else { throw MetadataServiceError.invalidRequest }
         var request = URLRequest(url: url, timeoutInterval: connection.timeout)
         request.setValue("application/json", forHTTPHeaderField: "Accept")

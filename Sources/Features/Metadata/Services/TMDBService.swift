@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 final class TMDBService: MetadataServicing, @unchecked Sendable {
     let provider = MetadataProvider.tmdb
@@ -80,6 +83,9 @@ final class TMDBService: MetadataServicing, @unchecked Sendable {
         components?.queryItems = queryItems + [
             URLQueryItem(name: "api_key", value: configuration.apiKey)
         ]
+        if let query = components?.percentEncodedQuery {
+            components?.percentEncodedQuery = query.replacingOccurrences(of: "+", with: "%2B")
+        }
         guard let url = components?.url else {
             throw MetadataServiceError.invalidRequest
         }

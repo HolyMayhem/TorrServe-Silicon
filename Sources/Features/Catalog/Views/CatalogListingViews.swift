@@ -5,7 +5,7 @@ struct CatalogListingGrid: View {
     let repository: CatalogRepository
     let text: CatalogText
     @StateObject private var model = CatalogListingModel()
-    @State private var pageRequest = 0
+    @State private var pageRequest: PageRequest?
 
     private let columns = [GridItem(.adaptive(minimum: 126, maximum: 190), spacing: 16, alignment: .top)]
 
@@ -40,18 +40,23 @@ struct CatalogListingGrid: View {
             .padding(20)
         }
         .task(id: request) { await model.start(request, repository: repository) }
-        .task(id: pageRequest) {
-            if pageRequest != 0 { await model.loadMore(repository) }
+        .task(id: pageRequest?.request == request ? pageRequest : nil) {
+            if pageRequest?.request == request { await model.loadMore(repository) }
         }
     }
 
     private func status(_ message: String?, button: String) -> some View {
         VStack(spacing: 8) {
             if let message { Text(message).foregroundStyle(.secondary) }
-            Button(button) { pageRequest += 1 }
+            Button(button) { pageRequest = PageRequest(request: request) }
         }
         .frame(maxWidth: .infinity)
     }
+    private struct PageRequest: Hashable {
+        let request: CatalogRequest
+        let id = UUID()
+    }
+
 }
 
 struct CatalogHomeView: View {

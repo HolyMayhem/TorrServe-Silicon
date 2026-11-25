@@ -37,6 +37,7 @@ struct CatalogView: View {
 
             ZStack {
                 catalog
+                    .environment(\.catalogImageMirror, connection.imageMirror)
                     .opacity(showsTorrentSearch ? 0 : 1)
                     .allowsHitTesting(!showsTorrentSearch)
                     .accessibilityHidden(showsTorrentSearch)

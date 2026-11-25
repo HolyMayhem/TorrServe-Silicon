@@ -1,0 +1,138 @@
+import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
+
+private struct CatalogTestFailure: Error {
+    let message: String
+}
+
+private func expect(_ value: Bool, _ message: String) throws {
+    if !value { throw CatalogTestFailure(message: message) }
+}
+
+private struct TestTMDBConfiguration: TMDBConfigurationProviding {
+    func tmdbConfiguration() -> TMDBConfiguration? {
+        TMDBConfiguration(apiKey: "fixture-key", apiBaseURL: URL(string: "https://tmdb.fixture/3")!)
+    }
+}
+
+private final class CatalogFixture: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        guard let url = request.url else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badURL))
+            return
+        }
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        let query = components?.queryItems ?? []
+        let path = url.path
+        let page = query.first { $0.name == "page" }?.value ?? "1"
+        let status: Int
+        let body: String
+        switch (url.host, path) {
+        case ("tmdb.fixture", "/3/movie/popular"):
+            status = query.contains(URLQueryItem(name: "api_key", value: "fixture-key")) ? 503 : 401
+            body = "{}"
+        case ("cub.fixture", "/catalog"), ("cub.fixture", "/catalog/"):
+            status = request.value(forHTTPHeaderField: "token") == "fixture-token" ? 200 : 401
+            body = """
+                {"total_pages":2,"results":[
+                  {"id":\(page),"title":"Фильм","original_title":"Movie","release_date":"2024-01-03",
+                   "genre_ids":[28],"vote_average":8.5,"poster_path":"/cover.jpg"},
+                  {"id":\(page),"title":"Duplicate"},{"id":100,"title":"Hidden","adult":true}
+                ]}
+                """
+        case ("cub.fixture", "/catalog/search/tv"):
+            status = query.contains(URLQueryItem(name: "query", value: "A+B")) &&
+                components?.percentEncodedQuery?.contains("A%2BB") == true ? 200 : 400
+            body = """
+                {"total_pages":1,"results":[{"id":1,"title":"Сериал","original_title":"Series",
+                  "release_date":"2024-08-05","vote_average":7,"genre_ids":[18]}]}
+                """
+        case ("tmdb.fixture", "/3/tv/1"):
+            status = 200
+            body = """
+                {"id":1,"name":"Сериал","original_name":"Series","first_air_date":"2024-08-05",
+                 "overview":"Synopsis","vote_average":9,"episode_run_time":[42],"genres":[{"id":18,"name":"Drama"}],
+                 "credits":{"cast":[{"name":"Actor","character":"Lead","profile_path":"/actor.jpg"}]},
+                 "videos":{"results":[{"site":"YouTube","type":"Trailer","key":"abcdefghijk"}]},
+                 "seasons":[{"id":3,"name":"Season 1","season_number":1,"episode_count":8}],
+                 "similar":{"total_pages":1,"results":[{"id":2,"name":"Related"}]}}
+                """
+        default:
+            status = 404
+            body = "{}"
+        }
+        let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil)!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(body.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+}
+
+@main
+struct CatalogChecks {
+    static func main() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [CatalogFixture.self]
+        let session = URLSession(configuration: configuration)
+        var repository = CatalogRepository()
+        repository.tmdb = TMDBCatalogService(tmdb: TMDBService(configurationProvider: TestTMDBConfiguration(), session: session))
+        repository.cub = CUBCatalogService(session: session)
+
+        let connection = CatalogConnection(
+            source: .auto, cubURL: URL(string: "https://cub.fixture/catalog")!, cubToken: "fixture-token"
+        )
+
+        let first = try await repository.page(.collection(.popularMovies), number: 1, language: "ru-RU", connection: connection)
+        try expect(first.source == .cub, "Auto should fall back after a TMDB failure")
+        try expect(first.page.items.count == 1, "Duplicate and adult items should be removed")
+        try expect(first.page.number == 1 && first.page.totalPages == 2, "CUB pagination should be preserved")
+        guard let movie = first.page.items.first else { throw CatalogTestFailure(message: "Missing movie") }
+        try expect(movie.id.kind == .movie && movie.id.tmdbID == 1, "CUB should preserve the movie TMDB ID")
+        try expect(movie.year == 2024 && movie.rating == 8.5 && movie.poster?.host == "image.tmdb.org", "Card fields should decode")
+
+        let next = try await repository.page(
+            .collection(.popularMovies), number: 2, language: "ru-RU", connection: connection, preferredSource: first.source
+        )
+        try expect(next.page.items.first?.id.tmdbID == 2, "The next page should stay with the chosen provider")
+        let restarted = try await repository.page(.collection(.popularMovies), number: 2, language: "ru-RU", connection: connection)
+        try expect(restarted.source == .cub && restarted.page.number == 1, "Switching providers should restart pagination")
+
+        var cub = connection
+        cub.source = .cub
+        let seriesPage = try await repository.page(
+            .search("A+B", CatalogFilter(kind: .tv, genreID: 18, year: 2024, minimumRating: 7)),
+            number: 1, language: "ru-RU", connection: cub
+        )
+        guard let series = seriesPage.page.items.first else { throw CatalogTestFailure(message: "Missing series") }
+        try expect(series.id != movie.id && series.id.tmdbID == movie.id.tmdbID, "Equal numeric IDs for different media types must remain distinct")
+        try expect(series.originalTitle == "Series" && series.year == 2024, "CUB TV aliases should normalize")
+        let filtered = try await repository.page(
+            .search("A+B", CatalogFilter(kind: .tv, year: 2023)), number: 1, language: "ru-RU", connection: cub
+        )
+        try expect(filtered.page.items.isEmpty, "Unsupported year filters should be applied locally")
+
+        let details = try await repository.details(series.id, language: "ru-RU", connection: cub.tmdb)
+        try expect(details.runtime == 42 && details.cast.first?.name == "Actor", "TMDB should supply runtime and cast")
+        try expect(details.seasons.first?.episodeCount == 8 && details.similar.first?.id.tmdbID == 2, "Seasons and similar titles should decode")
+        try expect(details.trailer?.host == "www.youtube.com", "A supported trailer should produce a link")
+        try expect(CatalogTorrentContext(item: series, details: details).queries == ["Сериал 2024", "Series 2024"],
+                   "Torrent searches should use localized and original title and year")
+        try expect(CatalogConnection.endpoint("https://user:secret@host.test") == nil &&
+                   CatalogConnection.endpoint("http://host.test") == nil, "Catalog endpoints must use HTTPS without credentials")
+        try expect(CatalogImageURL.make("/../poster.png", size: "w342") == nil, "Artwork must be a simple TMDB path")
+
+        let legacy = try JSONDecoder().decode(LibraryMetadata.self, from: Data(#"{"title":"Legacy","tmdbID":1}"#.utf8))
+        try expect(legacy.catalogIdentity == nil && legacy.metadataProvider == .tmdb, "Existing library metadata must remain readable")
+        let linked = LibraryMetadata(title: "Series", posterURL: "", summary: "", source: "TMDB", tmdbID: 1, catalogIdentity: series.id)
+        let reopened = try JSONDecoder().decode(LibraryMetadata.self, from: JSONEncoder().encode(linked))
+        try expect(reopened.catalogIdentity == series.id, "Library links must survive reloading")
+        print("Catalog checks passed")
+    }
+}

@@ -3,19 +3,47 @@ import SwiftUI
 struct CatalogPoster: View {
     let url: URL?
 
+    @Environment(\.catalogImageMirror) private var mirror
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var artwork: CatalogImageCache.Artwork?
+
     var body: some View {
         Color.primary.opacity(0.06)
             .overlay {
-                AsyncImage(url: url) { phase in
-                    if let image = phase.image {
-                        image.resizable().scaledToFill()
-                    } else {
-                        Image(systemName: "film").font(.title2).foregroundStyle(.tertiary)
-                    }
+                if let artwork {
+                    Image(decorative: artwork.image, scale: 1)
+                        .resizable()
+                        .scaledToFill()
+                        .transition(.opacity)
+                } else {
+                    Image(systemName: "film").font(.title2).foregroundStyle(.tertiary)
                 }
             }
             .clipped()
             .accessibilityHidden(true)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: artwork != nil)
+            .task(id: ImageRequest(url: url, mirror: mirror)) {
+                artwork = nil
+                guard let url else { return }
+                let result = try? await CatalogImageCache.shared.artwork(for: url, mirror: mirror)
+                if !Task.isCancelled { artwork = result }
+            }
+    }
+
+    private struct ImageRequest: Hashable {
+        let url: URL?
+        let mirror: URL?
+    }
+}
+
+private struct CatalogImageMirrorKey: EnvironmentKey {
+    static let defaultValue: URL? = nil
+}
+
+extension EnvironmentValues {
+    var catalogImageMirror: URL? {
+        get { self[CatalogImageMirrorKey.self] }
+        set { self[CatalogImageMirrorKey.self] = newValue }
     }
 }
 
