@@ -32,11 +32,23 @@ struct CatalogView: View {
             .padding(.vertical, 10)
             Divider()
 
-            if showsTorrentSearch {
-                SearchView(mainModel: mainModel, model: searchModel)
-            } else {
+            ZStack {
                 catalog
+                    .opacity(showsTorrentSearch ? 0 : 1)
+                    .allowsHitTesting(!showsTorrentSearch)
+                    .accessibilityHidden(showsTorrentSearch)
+
+                if showsTorrentSearch {
+                    SearchView(mainModel: mainModel, model: searchModel)
+                }
             }
+        }
+        .onChange(of: searchModel.showsSettings, initial: true) { _, presented in
+            if presented { showsTorrentSearch = true }
+        }
+        .onChange(of: showsTorrentSearch) { _, showing in
+            catalogSearchFocused = false
+            if !showing { searchModel.endCatalogSearch() }
         }
         .onChange(of: mainModel.searchFocusRevision) { _, _ in
             if !showsTorrentSearch {
@@ -81,7 +93,10 @@ struct CatalogView: View {
                 .navigationDestination(for: CatalogItem.self) { item in
                     VStack(spacing: 0) {
                         destinationHeader(item.title)
-                        CatalogDetailsView(item: item, repository: repository, connection: connection, text: text)
+                        CatalogDetailsView(item: item, repository: repository, connection: connection, text: text) { context in
+                            showsTorrentSearch = true
+                            searchModel.searchCatalogTorrents(context, language: mainModel.language)
+                        }
                     }
                 }
         }

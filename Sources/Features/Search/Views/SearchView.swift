@@ -43,6 +43,28 @@ struct SearchView: View {
     private var searchContent: some View {
         VStack(spacing: 0) {
             searchBar
+            if let context = model.catalogContext {
+                HStack {
+                    Label(context.details?.item.title ?? context.item.title, systemImage: "film")
+                        .lineLimit(1)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if context.queries.count > 1 {
+                        Menu(mainModel.language == .russian ? "Варианты запроса" : "Search suggestions") {
+                            ForEach(context.queries, id: \.self) { query in
+                                Button(query) {
+                                    model.query = query
+                                    model.search(language: mainModel.language)
+                                }
+                            }
+                        }
+                        .fixedSize()
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.bottom, 8)
+                .font(.caption)
+            }
             Divider()
             if model.hasSearched { sourceStatus }
 

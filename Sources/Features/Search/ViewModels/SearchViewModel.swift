@@ -10,6 +10,7 @@ final class SearchViewModel: ObservableObject {
     @Published var serverURL: String
     @Published var apiKey: String
     @Published var query = ""
+    @Published private(set) var catalogContext: CatalogTorrentContext?
     @Published private(set) var mode: TorrentSearchMode = .torrentSearch
     @Published private(set) var enabledProviders = Set(TorrentSearchProvider.allCases)
     @Published private(set) var hasSearched = false
@@ -46,6 +47,7 @@ final class SearchViewModel: ObservableObject {
     private var searchTask: Task<Void, Never>?
     private var searchRevision = 0
     private var activeSearchQuery: String?
+    private var directQuery = ""
 
     init(
         jackett: JackettClient = JackettClient(),
@@ -198,6 +200,21 @@ final class SearchViewModel: ObservableObject {
         }
     }
 
+    func searchCatalogTorrents(_ context: CatalogTorrentContext, language: AppLanguage) {
+        if catalogContext == nil { directQuery = query }
+        invalidateSearch()
+        catalogContext = context
+        query = context.queries.first ?? ""
+        search(language: language)
+    }
+
+    func endCatalogSearch() {
+        guard catalogContext != nil else { return }
+        invalidateSearch()
+        catalogContext = nil
+        query = directQuery
+    }
+
     func search(language: AppLanguage) {
         let value = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { return }
@@ -209,6 +226,8 @@ final class SearchViewModel: ObservableObject {
         let revision = searchRevision
         let providers = mode.usesTorrentSearch ? TorrentSearchProvider.allCases.filter(enabledProviders.contains) : []
         let jackettConfiguration = mode.usesJackett ? savedConfiguration : nil
+        let catalogQueries = catalogContext?.queries ?? []
+        let searchQueries = catalogQueries.first == value ? catalogQueries : [value]
         activeSearchQuery = value
         isSearching = true
         hasSearched = true
@@ -238,7 +257,10 @@ final class SearchViewModel: ObservableObject {
                     let client = self.torrentSearch
                     group.addTask {
                         do {
-                            return TorrentSearchSourceOutcome(name: provider.title, results: try await client.search(query: value, provider: provider), error: nil)
+                            let results = try await Self.firstMatchingQuery(searchQueries) { query in
+                                try await client.search(query: query, provider: provider)
+                            }
+                            return TorrentSearchSourceOutcome(name: provider.title, results: results, error: nil)
                         } catch {
                             return TorrentSearchSourceOutcome(name: provider.title, results: [], error: error.localizedDescription)
                         }
@@ -248,7 +270,10 @@ final class SearchViewModel: ObservableObject {
                     let client = self.jackett
                     group.addTask {
                         do {
-                            return TorrentSearchSourceOutcome(name: "Jackett", results: try await client.search(query: value, configuration: configuration), error: nil)
+                            let results = try await Self.firstMatchingQuery(searchQueries) { query in
+                                try await client.search(query: query, configuration: configuration)
+                            }
+                            return TorrentSearchSourceOutcome(name: "Jackett", results: results, error: nil)
                         } catch {
                             return TorrentSearchSourceOutcome(name: "Jackett", results: [], error: error.localizedDescription)
                         }
@@ -269,6 +294,17 @@ final class SearchViewModel: ObservableObject {
             guard !Task.isCancelled, self.searchRevision == revision else { return }
             self.connectionIsHealthy = self.successfulSourceCount > 0
         }
+    }
+
+    private nonisolated static func firstMatchingQuery(
+        _ queries: [String], search: (String) async throws -> [JackettSearchResult]
+    ) async throws -> [JackettSearchResult] {
+        for query in queries {
+            try Task.checkCancellation()
+            let results = try await search(query)
+            if !results.isEmpty { return results }
+        }
+        return []
     }
 
     func select(_ result: JackettSearchResult) {

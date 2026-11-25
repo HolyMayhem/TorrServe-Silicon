@@ -5,6 +5,7 @@ struct CatalogDetailsView: View {
     let repository: CatalogRepository
     let connection: CatalogConnection
     let text: CatalogText
+    let findTorrents: (CatalogTorrentContext) -> Void
     @State private var details: CatalogDetails?
     @State private var failed = false
     @State private var retry = 0
@@ -63,12 +64,21 @@ struct CatalogDetailsView: View {
                 if let genres = details?.genres, !genres.isEmpty {
                     Text(genres.map(\.name).joined(separator: " · ")).foregroundStyle(.secondary)
                 }
-                if let url = details?.trailer {
-                    Link(destination: url) {
-                        Label(text("Trailer", "Трейлер"), systemImage: "play.rectangle")
+                HStack(spacing: 12) {
+                    Button {
+                        findTorrents(CatalogTorrentContext(item: item, details: details))
+                    } label: {
+                        Label(text("Find Torrents", "Найти раздачи"), systemImage: "magnifyingglass")
                     }
-                    .padding(.top, 4)
+                    .buttonStyle(.borderedProminent)
+
+                    if let url = details?.trailer {
+                        Link(destination: url) {
+                            Label(text("Trailer", "Трейлер"), systemImage: "play.rectangle")
+                        }
+                    }
                 }
+                .padding(.top, 4)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
