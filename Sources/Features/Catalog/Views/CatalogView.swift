@@ -81,9 +81,7 @@ struct CatalogView: View {
                 .navigationDestination(for: CatalogItem.self) { item in
                     VStack(spacing: 0) {
                         destinationHeader(item.title)
-                        ScrollView {
-                            Text(item.overview).frame(maxWidth: .infinity, alignment: .leading).padding(20)
-                        }
+                        CatalogDetailsView(item: item, repository: repository, connection: connection, text: text)
                     }
                 }
         }
