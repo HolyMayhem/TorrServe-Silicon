@@ -20,7 +20,10 @@ final class SearchViewModel: ObservableObject {
     @Published private(set) var sourceErrors: [String: String] = [:]
     @Published private(set) var totalSourceCount = 0
     @Published private(set) var successfulSourceCount = 0
-    @Published var results: [JackettSearchResult] = []
+    @Published var results: [JackettSearchResult] = [] {
+        didSet { updateSortedResults() }
+    }
+    private(set) var sortedResults: [JackettSearchResult] = []
     @Published var selectedResultID: String?
     @Published private(set) var savedConfiguration: JackettConfiguration?
     @Published var isSearching = false
@@ -33,10 +36,18 @@ final class SearchViewModel: ObservableObject {
     @Published var showsSettings = false
     @Published var alert: AppAlert?
     @Published var sortField: SearchSortField = .seeders {
-        didSet { defaults.set(sortField.rawValue, forKey: "TorrentSearchSortField") }
+        didSet {
+            guard sortField != oldValue else { return }
+            defaults.set(sortField.rawValue, forKey: "TorrentSearchSortField")
+            updateSortedResults()
+        }
     }
     @Published var sortAscending = false {
-        didSet { defaults.set(sortAscending, forKey: "TorrentSearchSortAscending") }
+        didSet {
+            guard sortAscending != oldValue else { return }
+            defaults.set(sortAscending, forKey: "TorrentSearchSortAscending")
+            updateSortedResults()
+        }
     }
 
     var onTorrentAdded: ((String, CatalogTorrentContext?) -> Void)?
@@ -132,8 +143,8 @@ final class SearchViewModel: ObservableObject {
         return results.first { $0.id == selectedResultID }
     }
 
-    var sortedResults: [JackettSearchResult] {
-        results.sorted { left, right in
+    private func updateSortedResults() {
+        sortedResults = results.sorted { left, right in
             let leftValue = sortValue(for: left)
             let rightValue = sortValue(for: right)
 

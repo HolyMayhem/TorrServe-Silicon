@@ -45,7 +45,7 @@ enum AppSection: String, CaseIterable, Identifiable {
     var systemImage: String {
         switch self {
         case .library: return "film.stack"
-        case .search: return "rectangle.grid.2x2"
+        case .search: return "house"
         case .offline: return "arrow.down.circle"
         }
     }

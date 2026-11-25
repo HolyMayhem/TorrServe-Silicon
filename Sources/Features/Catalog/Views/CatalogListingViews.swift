@@ -4,18 +4,20 @@ struct CatalogListingGrid: View {
     let request: CatalogRequest
     let repository: CatalogRepository
     let text: CatalogText
+    let openItem: (CatalogItem) -> Void
     @StateObject private var model = CatalogListingModel()
     @State private var pageRequest: PageRequest?
 
     private let columns = [GridItem(.adaptive(minimum: 126, maximum: 190), spacing: 16, alignment: .top)]
 
     var body: some View {
-        ScrollView {
+        CatalogScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 LazyVGrid(columns: columns, alignment: .leading, spacing: 20) {
                     ForEach(model.items) { item in
-                        NavigationLink(value: item) { CatalogCard(item: item) }
+                        Button { openItem(item) } label: { CatalogCard(item: item) }
                             .buttonStyle(.plain)
+                            .accessibilityIdentifier("catalog-grid-item")
                     }
                     if model.loading && model.items.isEmpty {
                         ForEach(0..<10) { _ in CatalogSkeleton() }
@@ -64,12 +66,17 @@ struct CatalogHomeView: View {
     let connection: CatalogConnection
     let text: CatalogText
     let revision: Int
+    let openCollection: (CatalogCollection) -> Void
+    let openItem: (CatalogItem) -> Void
 
     var body: some View {
-        ScrollView {
+        CatalogScrollView {
             LazyVStack(alignment: .leading, spacing: 26) {
                 ForEach(CatalogCollection.allCases, id: \.self) { collection in
-                    CatalogShelf(collection: collection, repository: repository, connection: connection, text: text, revision: revision)
+                    CatalogShelf(
+                        collection: collection, repository: repository, connection: connection, text: text, revision: revision,
+                        openCollection: openCollection, openItem: openItem
+                    )
                 }
             }
             .padding(.vertical, 20)
@@ -83,6 +90,8 @@ private struct CatalogShelf: View {
     let connection: CatalogConnection
     let text: CatalogText
     let revision: Int
+    let openCollection: (CatalogCollection) -> Void
+    let openItem: (CatalogItem) -> Void
     @StateObject private var model = CatalogListingModel()
     @State private var retry = 0
 
@@ -91,18 +100,18 @@ private struct CatalogShelf: View {
             HStack {
                 Text(text.title(collection)).font(.title3.weight(.semibold))
                 Spacer()
-                NavigationLink(text("See All", "Смотреть все"), value: collection)
+                Button(text("See All", "Смотреть все")) { openCollection(collection) }
             }
             .padding(.horizontal, 20)
 
             if model.loading || !model.items.isEmpty {
-                ScrollView(.horizontal) {
+                CatalogScrollView(axis: .horizontal) {
                     LazyHStack(alignment: .top, spacing: 14) {
                         if model.items.isEmpty {
                             ForEach(0..<6) { _ in CatalogSkeleton().frame(width: 126) }
                         } else {
                             ForEach(Array(model.items.prefix(16))) { item in
-                                NavigationLink(value: item) { CatalogCard(item: item).frame(width: 126) }
+                                Button { openItem(item) } label: { CatalogCard(item: item).frame(width: 126) }
                                     .buttonStyle(.plain)
                             }
                         }

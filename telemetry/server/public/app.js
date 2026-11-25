@@ -60,13 +60,19 @@ function svgElement(tag, attributes = {}, text) {
   if (text !== undefined) element.textContent = text;
   return element;
 }
-function chart(rows) {
-  const width = 1000,
-    height = 250,
-    left = 40,
-    right = 12,
-    top = 16,
-    bottom = 32;
+const chartContainer = $("chart");
+let chartRows;
+let chartWidth = 0;
+
+function renderChart() {
+  if (!chartRows || !chartWidth) return;
+  const rows = chartRows;
+  const width = chartWidth;
+  const height = Math.min(192, Math.round(118 + width * 0.06));
+  const left = 42;
+  const right = 12;
+  const top = 12;
+  const bottom = 24;
   const max = Math.max(
     4,
     Math.ceil(Math.max(0, ...rows.map((r) => r.active)) / 4) * 4,
@@ -139,7 +145,19 @@ function chart(rows) {
     );
     svg.append(dot);
   });
-  $("chart").replaceChildren(svg);
+  chartContainer.replaceChildren(svg);
+}
+
+new ResizeObserver(([entry]) => {
+  const width = Math.round(entry.contentRect.width);
+  if (width === chartWidth) return;
+  chartWidth = width;
+  renderChart();
+}).observe(chartContainer);
+
+function chart(rows) {
+  chartRows = rows;
+  renderChart();
   $("daily-table").replaceChildren(
     ...rows.map((row) => {
       const tr = document.createElement("tr");

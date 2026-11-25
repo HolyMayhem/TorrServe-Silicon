@@ -102,7 +102,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .menuBar: return "menubar.rectangle"
         case .updates: return "arrow.triangle.2.circlepath"
         case .downloads: return "arrow.down.circle.fill"
-        case .catalog: return "rectangle.grid.2x2"
+        case .catalog: return "house.fill"
         case .metadata: return "film.stack.fill"
         case .keyboard: return "keyboard"
         case .developer: return "hammer.fill"

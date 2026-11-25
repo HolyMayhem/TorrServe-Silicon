@@ -1,3 +1,4 @@
+import Observation
 import SwiftUI
 
 private struct SearchResultsHeaderHeightKey: PreferenceKey {
@@ -8,6 +9,22 @@ private struct SearchResultsHeaderHeightKey: PreferenceKey {
     }
 }
 
+// Scroll geometry changes every frame. Only the indicator observes these values.
+@Observable private final class SearchResultsScrollState {
+    var metrics = AppScrollMetrics.zero
+    var isIndicatorVisible = false
+}
+
+private struct SearchResultsScrollIndicator: View {
+    let state: SearchResultsScrollState
+    let topInset: CGFloat
+
+    var body: some View {
+        AppScrollIndicator(metrics: state.metrics, topInset: topInset, bottomInset: 4,
+                           isVisible: state.isIndicatorVisible)
+    }
+}
+
 struct SearchView: View {
     @ObservedObject var mainModel: MainWindowModel
     @ObservedObject var model: SearchViewModel
@@ -15,8 +32,7 @@ struct SearchView: View {
     @FocusState private var searchFieldIsFocused: Bool
     @State private var showsSourceErrors = false
     @State private var resultsHeaderOverlayHeight: CGFloat = 40
-    @State private var resultsScrollMetrics = AppScrollMetrics.zero
-    @State private var resultsScrollIndicatorIsVisible = false
+    @State private var resultsScroll = SearchResultsScrollState()
 
     private let resultsScrollEdgeFadeHeight: CGFloat = 17
     private let resultsBottomFadeHeight: CGFloat = 40
@@ -202,11 +218,11 @@ struct SearchView: View {
                 .onScrollGeometryChange(for: AppScrollMetrics.self) { geometry in
                     AppScrollMetrics(geometry)
                 } action: { _, metrics in
-                    resultsScrollMetrics = metrics
+                    resultsScroll.metrics = metrics
                 }
                 .onScrollPhaseChange { _, phase in
                     withAnimation(.easeOut(duration: phase.isScrolling ? 0.08 : 0.24)) {
-                        resultsScrollIndicatorIsVisible = phase.isScrolling
+                        resultsScroll.isIndicatorVisible = phase.isScrolling
                     }
                 }
                 .mask {
@@ -217,12 +233,7 @@ struct SearchView: View {
                     )
                 }
                 .overlay {
-                    AppScrollIndicator(
-                        metrics: resultsScrollMetrics,
-                        topInset: resultsHeaderOverlayHeight,
-                        bottomInset: 4,
-                        isVisible: resultsScrollIndicatorIsVisible
-                    )
+                    SearchResultsScrollIndicator(state: resultsScroll, topInset: resultsHeaderOverlayHeight)
                 }
             }
 

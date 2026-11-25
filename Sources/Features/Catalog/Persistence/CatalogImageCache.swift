@@ -51,7 +51,7 @@ actor CatalogImageCache {
 
     private func load(_ url: URL, maxPixelSize: Int) async throws -> CGImage {
         let request = URLRequest(url: url, timeoutInterval: 10)
-        let data = try await MetadataHTTPTransport.data(for: request, session: session)
+        let data = try await MetadataHTTPTransport.data(for: request, session: session, allowsSecureDNS: true)
         try Task.checkCancellation()
         guard data.count <= 8 * 1024 * 1024,
               let source = CGImageSourceCreateWithData(data as CFData, nil),

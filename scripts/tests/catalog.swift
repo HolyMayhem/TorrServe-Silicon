@@ -78,6 +78,20 @@ private final class CatalogFixture: URLProtocol {
 @main
 struct CatalogChecks {
     static func main() async throws {
+        let tmdbRequest = URLRequest(url: URL(string: "https://api.themoviedb.org/3/movie/popular")!)
+        let posterRequest = URLRequest(url: URL(string: "https://image.tmdb.org/t/p/w342/poster.jpg")!)
+        let proxyRequest = URLRequest(url: URL(string: "https://proxy.fixture/3/movie/popular")!)
+        try expect(TMDBSecureDNS.canRetry(tmdbRequest, after: URLError(.cannotConnectToHost)),
+                   "A failed direct TMDB connection should try secure DNS")
+        try expect(TMDBSecureDNS.canRetry(posterRequest, after: URLError(.cannotFindHost)),
+                   "A failed TMDB poster lookup should try secure DNS")
+        try expect(!TMDBSecureDNS.canRetry(proxyRequest, after: URLError(.cannotFindHost)),
+                   "Configured third-party hosts must use their own DNS")
+        try expect(!TMDBSecureDNS.canRetry(tmdbRequest, after: URLError(.serverCertificateUntrusted)),
+                   "Secure DNS must not retry untrusted TLS")
+        try expect(!TMDBSecureDNS.canRetry(tmdbRequest, after: MetadataServiceError.httpStatus(401)),
+                   "Secure DNS must not retry API authentication failures")
+
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [CatalogFixture.self]
         let session = URLSession(configuration: configuration)

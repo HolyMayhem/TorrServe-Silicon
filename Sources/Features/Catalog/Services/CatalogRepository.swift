@@ -17,20 +17,9 @@ struct CatalogRepository: Sendable {
         let source: CatalogSource = (preferredSource ?? connection.source) == .cub ? .cub : .tmdb
         let key = CatalogCache.Key.page(listing, number, language, source, connection)
         do {
-            let result = try await load(
+            return try await load(
                 listing, number: number, language: language, source: source, connection: connection, key: key, refresh: refresh
             )
-            // Some CUB deployments do not publish future releases in their upcoming feed.
-            if connection.source == .cub, source == .cub, listing == .collection(.upcoming),
-               number == 1, result.page.items.isEmpty {
-                let tmdbKey = CatalogCache.Key.page(listing, 1, language, .tmdb, connection)
-                if let upcoming = try? await load(
-                    listing, number: 1, language: language, source: .tmdb, connection: connection,
-                    key: tmdbKey, refresh: refresh
-                ) { return upcoming }
-                try Task.checkCancellation()
-            }
-            return result
         } catch {
             try Task.checkCancellation()
             guard (error as? URLError)?.code != .cancelled else { throw error }

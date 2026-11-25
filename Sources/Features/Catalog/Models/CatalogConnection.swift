@@ -15,7 +15,7 @@ struct CatalogTMDBConnection: Hashable, Sendable {
 struct CatalogConnection: Hashable, Sendable {
     static let publicCUB = URL(string: "https://tmdb.cub.best/")!
 
-    var source: CatalogSource = .tmdb
+    var source: CatalogSource = .auto
     var cubURL: URL = Self.publicCUB
     var cubToken = ""
     var tmdb = CatalogTMDBConnection()

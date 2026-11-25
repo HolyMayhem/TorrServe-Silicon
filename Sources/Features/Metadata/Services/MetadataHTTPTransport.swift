@@ -6,14 +6,24 @@ import FoundationNetworking
 enum MetadataHTTPTransport {
     static func data(
         for request: URLRequest,
-        session: URLSession
+        session: URLSession,
+        allowsSecureDNS: Bool = false
     ) async throws -> Data {
-        let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw MetadataServiceError.invalidResponse
+        let data: Data
+        let status: Int
+        do {
+            let (body, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse else {
+                throw MetadataServiceError.invalidResponse
+            }
+            (data, status) = (body, http.statusCode)
+        } catch {
+            guard allowsSecureDNS, TMDBSecureDNS.canRetry(request, after: error) else { throw error }
+            try Task.checkCancellation()
+            (data, status) = try await TMDBSecureDNS.shared.data(for: request)
         }
-        guard (200...299).contains(http.statusCode) else {
-            throw MetadataServiceError.httpStatus(http.statusCode)
+        guard (200...299).contains(status) else {
+            throw MetadataServiceError.httpStatus(status)
         }
         return data
     }

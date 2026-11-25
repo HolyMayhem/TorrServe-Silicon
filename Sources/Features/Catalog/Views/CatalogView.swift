@@ -13,7 +13,7 @@ struct CatalogView: View {
     @State private var moviesFilter = CatalogFilter(kind: .movie)
     @State private var seriesFilter = CatalogFilter(kind: .tv)
     @State private var genreFilter = CatalogFilter()
-    @State private var path = NavigationPath()
+    @State private var pages: [Page] = []
     @State private var repository = CatalogRepository()
     @ObservedObject private var settings = CatalogSettingsStore.shared
 
@@ -21,26 +21,36 @@ struct CatalogView: View {
 
     private var text: CatalogText { CatalogText(language: mainModel.language) }
 
+    private var showsMoviePage: Bool {
+        guard !showsTorrentSearch, case let .item(item)? = pages.last?.destination else { return false }
+        return item.id.kind == .movie
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            Picker(text("Search mode", "Режим поиска"), selection: $showsTorrentSearch) {
-                Text(text("Catalog", "Каталог")).tag(false)
-                Text(text("Torrent Search", "Поиск раздач")).tag(true)
+            if !showsMoviePage {
+                SettingsPageHeader(
+                    title: AppSection.search.title(language: mainModel.language),
+                    message: AppSection.search.message(language: mainModel.language)
+                )
+                .zIndex(1)
+                Picker(text("Search mode", "Режим поиска"), selection: $showsTorrentSearch) {
+                    Text(text("Catalog", "Каталог")).tag(false)
+                    Text(text("Torrent Search", "Поиск раздач")).tag(true)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 10)
+                Divider()
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 10)
-            Divider()
 
             ZStack {
-                catalog
+                catalogPages
                     .environment(\.catalogImageMirror, connection.imageMirror)
-                    .opacity(showsTorrentSearch ? 0 : 1)
-                    .allowsHitTesting(!showsTorrentSearch)
-                    .accessibilityHidden(showsTorrentSearch)
+                    .modifier(CatalogPageVisibility(isVisible: !showsTorrentSearch))
 
                 if showsTorrentSearch {
                     SearchView(mainModel: mainModel, model: searchModel, libraryModel: libraryModel)
@@ -54,56 +64,95 @@ struct CatalogView: View {
             catalogSearchFocused = false
             if !showing { searchModel.endCatalogSearch() }
         }
+        .onChange(of: mainModel.selectedSection) { _, section in
+            if section != .search { catalogSearchFocused = false }
+        }
         .onChange(of: mainModel.searchFocusRevision) { _, _ in
-            if !showsTorrentSearch {
-                path = NavigationPath()
+            if mainModel.selectedSection == .search, !showsTorrentSearch {
+                pages.removeAll()
                 catalogSearchFocused = true
             }
         }
         .onChange(of: mainModel.catalogRefreshRevision) { _, _ in
-            if showsTorrentSearch {
+            if mainModel.selectedSection == .search, showsTorrentSearch {
                 searchModel.search(language: mainModel.language)
             }
         }
     }
 
-    private var catalog: some View {
-        NavigationStack(path: $path) {
-            VStack(spacing: 0) {
-                searchBar
-                if catalogQuery.isEmpty {
-                    categories
-                    category
-                } else {
-                    CatalogFiltersView(filter: $searchFilter, repository: repository, connection: connection, text: text)
-                    grid(.search(catalogQuery, searchFilter))
-                }
+    private var catalogPages: some View {
+        // Retain earlier pages so going back restores their scroll positions and loaded results.
+        ZStack {
+            catalogRoot.modifier(CatalogPageVisibility(isVisible: pages.isEmpty))
+            ForEach(pages) { page in
+                destination(page.destination)
+                    .modifier(CatalogPageVisibility(isVisible: page.id == pages.last?.id))
             }
-                .task(id: searchInput) {
-                    let query = searchInput.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !query.isEmpty {
-                        do { try await Task.sleep(for: .milliseconds(300)) }
-                        catch { return }
-                    }
-                    guard !Task.isCancelled else { return }
-                    catalogQuery = query
-                }
-                .navigationDestination(for: CatalogCollection.self) { collection in
-                    VStack(spacing: 0) {
-                        destinationHeader(text.title(collection))
-                        grid(.collection(collection))
-                    }
-                }
-                .navigationDestination(for: CatalogItem.self) { item in
-                    VStack(spacing: 0) {
-                        destinationHeader(item.title)
-                        CatalogDetailsView(item: item, repository: repository, connection: connection, text: text) { context in
-                            showsTorrentSearch = true
-                            searchModel.searchCatalogTorrents(context, language: mainModel.language)
-                        }
-                    }
-                }
         }
+    }
+
+    private var catalogRoot: some View {
+        VStack(spacing: 0) {
+            searchBar
+            if catalogQuery.isEmpty {
+                categories
+                category
+            } else {
+                CatalogFiltersView(filter: $searchFilter, repository: repository, connection: connection, text: text)
+                grid(.search(catalogQuery, searchFilter))
+            }
+        }
+        .task(id: searchInput) {
+            let query = searchInput.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !query.isEmpty {
+                do { try await Task.sleep(for: .milliseconds(300)) }
+                catch { return }
+            }
+            guard !Task.isCancelled else { return }
+            catalogQuery = query
+        }
+    }
+
+    @ViewBuilder
+    private func destination(_ destination: Page.Destination) -> some View {
+        switch destination {
+        case .collection(let collection):
+            VStack(spacing: 0) {
+                destinationHeader(text.title(collection))
+                grid(.collection(collection))
+            }
+        case .item(let item):
+            VStack(spacing: 0) {
+                if item.id.kind != .movie { destinationHeader(item.title) }
+                CatalogDetailsView(
+                    item: item, repository: repository, connection: connection, text: text,
+                    openItem: openItem, goBack: goBack,
+                    findTorrents: { context in
+                        showsTorrentSearch = true
+                        searchModel.searchCatalogTorrents(context, language: mainModel.language)
+                    }
+                )
+            }
+        }
+    }
+
+    private struct Page: Identifiable {
+        enum Destination {
+            case collection(CatalogCollection)
+            case item(CatalogItem)
+        }
+
+        let id = UUID()
+        let destination: Destination
+    }
+
+    private func openItem(_ item: CatalogItem) {
+        catalogSearchFocused = false
+        pages.append(Page(destination: .item(item)))
+    }
+
+    private func goBack() {
+        if !pages.isEmpty { pages.removeLast() }
     }
 
     private var searchBar: some View {
@@ -151,7 +200,14 @@ struct CatalogView: View {
     private var category: some View {
         switch section {
         case .home:
-            CatalogHomeView(repository: repository, connection: connection, text: text, revision: mainModel.catalogRefreshRevision)
+            CatalogHomeView(
+                repository: repository, connection: connection, text: text, revision: mainModel.catalogRefreshRevision,
+                openCollection: { collection in
+                    catalogSearchFocused = false
+                    pages.append(Page(destination: .collection(collection)))
+                },
+                openItem: openItem
+            )
         case .movies:
             browse($moviesFilter, kind: .movie)
         case .series:
@@ -171,15 +227,13 @@ struct CatalogView: View {
     private func grid(_ listing: CatalogListing) -> some View {
         CatalogListingGrid(
             request: CatalogRequest(listing: listing, language: text.apiLanguage, connection: connection, revision: mainModel.catalogRefreshRevision),
-            repository: repository, text: text
+            repository: repository, text: text, openItem: openItem
         )
     }
 
     private func destinationHeader(_ title: String) -> some View {
         HStack(spacing: 12) {
-            Button {
-                if !path.isEmpty { path.removeLast() }
-            } label: {
+            Button(action: goBack) {
                 Label(text("Back", "Назад"), systemImage: "chevron.left")
             }
             Text(title).font(.headline).lineLimit(1)
@@ -187,5 +241,17 @@ struct CatalogView: View {
         }
         .padding(.horizontal, 20)
         .padding(.top, 12)
+    }
+}
+
+private struct CatalogPageVisibility: ViewModifier {
+    let isVisible: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(isVisible ? 1 : 0)
+            .allowsHitTesting(isVisible)
+            .disabled(!isVisible)
+            .accessibilityHidden(!isVisible)
     }
 }

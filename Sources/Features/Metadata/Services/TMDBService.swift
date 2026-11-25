@@ -95,7 +95,9 @@ final class TMDBService: MetadataServicing, @unchecked Sendable {
         request.timeoutInterval = timeout
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
-        let data = try await MetadataHTTPTransport.data(for: request, session: session)
+        let data = try await MetadataHTTPTransport.data(
+            for: request, session: session, allowsSecureDNS: apiBaseURL == nil && session === URLSession.shared
+        )
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         return try MetadataHTTPTransport.decode(Response.self, from: data, using: decoder)

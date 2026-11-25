@@ -26,7 +26,7 @@ final class CatalogSettingsStore: ObservableObject {
             timeout: defaults.object(forKey: Key.timeout) == nil ? 12 : min(30, max(5, defaults.double(forKey: Key.timeout)))
         )
         connection = CatalogConnection(
-            source: defaults.string(forKey: Key.source).flatMap(CatalogSource.init(rawValue:)) ?? .tmdb,
+            source: defaults.string(forKey: Key.source).flatMap(CatalogSource.init(rawValue:)) ?? CatalogConnection().source,
             cubURL: defaults.string(forKey: Key.cubURL).flatMap(CatalogConnection.endpoint) ?? CatalogConnection.publicCUB,
             cubToken: CatalogCUBCredential.read(),
             tmdb: configuration,

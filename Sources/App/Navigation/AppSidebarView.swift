@@ -83,6 +83,7 @@ struct AppSidebarView: View {
         }
         .buttonStyle(SidebarRowButtonStyle(isSelected: selection == section))
         .accessibilityAddTraits(selection == section ? .isSelected : [])
+        .accessibilityIdentifier("sidebar-\(section.rawValue)")
     }
 
     private var expandedSettingsButton: some View {
