@@ -20,6 +20,7 @@ struct LibraryMetadata: Codable, Equatable {
     let season: Int?
     let episode: Int?
     let metadataLanguage: String?
+    let catalogIdentity: CatalogIdentity?
 
     init(
         title: String,
@@ -40,7 +41,8 @@ struct LibraryMetadata: Codable, Equatable {
         localizedTitle: String = "",
         season: Int? = nil,
         episode: Int? = nil,
-        metadataLanguage: String? = nil
+        metadataLanguage: String? = nil,
+        catalogIdentity: CatalogIdentity? = nil
     ) {
         self.title = title
         self.posterURL = posterURL
@@ -61,6 +63,7 @@ struct LibraryMetadata: Codable, Equatable {
         self.season = season
         self.episode = episode
         self.metadataLanguage = metadataLanguage
+        self.catalogIdentity = catalogIdentity
     }
 
     var displayTitle: String {
@@ -94,7 +97,8 @@ struct LibraryMetadata: Codable, Equatable {
             localizedTitle: metadata.localizedTitle,
             season: resolved.parsedName.season,
             episode: resolved.parsedName.episode,
-            metadataLanguage: language
+            metadataLanguage: language,
+            catalogIdentity: catalogIdentity
         )
     }
 
@@ -118,6 +122,7 @@ struct LibraryMetadata: Codable, Equatable {
         case season
         case episode
         case metadataLanguage
+        case catalogIdentity
     }
 
     init(from decoder: Decoder) throws {
@@ -151,6 +156,7 @@ struct LibraryMetadata: Codable, Equatable {
         season = try container.decodeIfPresent(Int.self, forKey: .season)
         episode = try container.decodeIfPresent(Int.self, forKey: .episode)
         metadataLanguage = try container.decodeIfPresent(String.self, forKey: .metadataLanguage)
+        catalogIdentity = try container.decodeIfPresent(CatalogIdentity.self, forKey: .catalogIdentity)
     }
 }
 

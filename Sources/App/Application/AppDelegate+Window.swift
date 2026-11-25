@@ -203,8 +203,10 @@ extension AppDelegate {
         mainWindowModel.onChooseServerCacheFolder = { [weak self] in
             self?.chooseServerCacheFolder()
         }
-        searchModel.onTorrentAdded = { [weak self] hash in
-            self?.libraryModel.refresh(selectingHash: hash)
+        searchModel.onTorrentAdded = { [weak self] hash, context in
+            guard let self else { return }
+            if let context { self.libraryModel.linkCatalogMetadata(context, to: hash) }
+            self.libraryModel.refresh(selectingHash: hash)
         }
 
         let hostingView = NSHostingView(

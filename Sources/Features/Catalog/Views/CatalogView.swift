@@ -3,6 +3,7 @@ import SwiftUI
 struct CatalogView: View {
     @ObservedObject var mainModel: MainWindowModel
     @ObservedObject var searchModel: SearchViewModel
+    @ObservedObject var libraryModel: LibraryViewModel
     @State private var showsTorrentSearch = false
     @FocusState private var catalogSearchFocused: Bool
     @State private var searchInput = ""
@@ -39,7 +40,7 @@ struct CatalogView: View {
                     .accessibilityHidden(showsTorrentSearch)
 
                 if showsTorrentSearch {
-                    SearchView(mainModel: mainModel, model: searchModel)
+                    SearchView(mainModel: mainModel, model: searchModel, libraryModel: libraryModel)
                 }
             }
         }

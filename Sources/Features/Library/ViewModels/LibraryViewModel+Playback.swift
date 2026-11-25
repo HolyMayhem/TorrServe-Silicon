@@ -40,7 +40,24 @@ extension LibraryViewModel {
         using choice: ExternalPlayerChoice,
         language: AppLanguage
     ) {
-        guard let streamURL = api.streamURL(torrent: torrent, file: file) else { return }
+        do {
+            try launchPlayback(torrent: torrent, file: file, using: choice)
+        } catch {
+            alert = AppAlert(
+                title: language == .russian ? "Не удалось открыть плеер" : "Could not open player",
+                message: error.localizedDescription
+            )
+        }
+    }
+
+    func launchPlayback(
+        torrent: NativeTorrent,
+        file: NativeTorrentFile,
+        using choice: ExternalPlayerChoice
+    ) throws {
+        guard let streamURL = api.streamURL(torrent: torrent, file: file) else {
+            throw URLError(.badURL)
+        }
 
         let playbackURL = offlineDownloadManager.completedDestination(
             sourceURL: streamURL,
@@ -56,20 +73,11 @@ extension LibraryViewModel {
             }
         }
 
-        do {
-            try ExternalPlayerLauncher.open(
-                playbackURL,
-                using: choice,
-                customPlayerPath: customPlayerPath
-            )
-        } catch {
-            alert = AppAlert(
-                title: language == .russian
-                    ? "Не удалось открыть плеер"
-                    : "Could not open player",
-                message: error.localizedDescription
-            )
-        }
+        try ExternalPlayerLauncher.open(
+            playbackURL,
+            using: choice,
+            customPlayerPath: customPlayerPath
+        )
     }
 
     func setPlayer(

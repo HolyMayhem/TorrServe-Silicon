@@ -83,7 +83,7 @@ struct ApplicationRootView: View {
                 offlineDownloadManager: libraryModel.offlineDownloadManager
             )
         case .search:
-            CatalogView(mainModel: mainModel, searchModel: searchModel)
+            CatalogView(mainModel: mainModel, searchModel: searchModel, libraryModel: libraryModel)
         case .offline:
             OfflineDownloadsView(
                 manager: libraryModel.offlineDownloadManager,

@@ -11,6 +11,8 @@ final class SearchViewModel: ObservableObject {
     @Published var apiKey: String
     @Published var query = ""
     @Published private(set) var catalogContext: CatalogTorrentContext?
+    @Published var linkCatalogMetadata = true
+    @Published var playbackTorrent: NativeTorrent?
     @Published private(set) var mode: TorrentSearchMode = .torrentSearch
     @Published private(set) var enabledProviders = Set(TorrentSearchProvider.allCases)
     @Published private(set) var hasSearched = false
@@ -37,7 +39,7 @@ final class SearchViewModel: ObservableObject {
         didSet { defaults.set(sortAscending, forKey: "TorrentSearchSortAscending") }
     }
 
-    var onTorrentAdded: ((String) -> Void)?
+    var onTorrentAdded: ((String, CatalogTorrentContext?) -> Void)?
 
     private let torrentSearch: any TorrentSearchServing
     private let jackett: JackettClient
@@ -48,6 +50,7 @@ final class SearchViewModel: ObservableObject {
     private var searchRevision = 0
     private var activeSearchQuery: String?
     private var directQuery = ""
+    private var addedHashes: [String: String] = [:]
 
     init(
         jackett: JackettClient = JackettClient(),
@@ -204,6 +207,7 @@ final class SearchViewModel: ObservableObject {
         if catalogContext == nil { directQuery = query }
         invalidateSearch()
         catalogContext = context
+        linkCatalogMetadata = true
         query = context.queries.first ?? ""
         search(language: language)
     }
@@ -318,7 +322,8 @@ final class SearchViewModel: ObservableObject {
     func add(
         _ result: JackettSearchResult,
         language: AppLanguage,
-        serverIsRunning: Bool
+        serverIsRunning: Bool,
+        watch: Bool = false
     ) {
         guard serverIsRunning else {
             alert = AppAlert(
@@ -329,12 +334,19 @@ final class SearchViewModel: ObservableObject {
         }
         guard addingResultID == nil else { return }
 
+        let context = linkCatalogMetadata ? catalogContext : nil
         addingResultID = result.id
         Task {
             defer { addingResultID = nil }
             do {
+                if watch, let hash = addedHashes[result.id],
+                   let existing = try? await torrServer.torrent(hash: hash) {
+                    onTorrentAdded?(hash, context)
+                    playbackTorrent = existing
+                    return
+                }
                 let payload = try await jackett.download(result)
-                let poster = result.posterURL?.absoluteString ?? ""
+                let poster = (context?.details?.item.poster ?? context?.item.poster ?? result.posterURL)?.absoluteString ?? ""
                 let category = result.torrServerCategory
                 let torrent: NativeTorrent
 
@@ -363,7 +375,15 @@ final class SearchViewModel: ObservableObject {
 
                 let hash = torrent.hash.isEmpty ? result.infoHash : torrent.hash
                 addedResultIDs.insert(result.id)
-                onTorrentAdded?(hash)
+                if !hash.isEmpty { addedHashes[result.id] = hash }
+                onTorrentAdded?(hash, context)
+                if watch {
+                    if torrent.hash.isEmpty, !hash.isEmpty {
+                        playbackTorrent = try await torrServer.torrent(hash: hash)
+                    } else {
+                        playbackTorrent = torrent
+                    }
+                }
             } catch {
                 alert = AppAlert(
                     title: SearchTexts(language: language).couldNotAdd,

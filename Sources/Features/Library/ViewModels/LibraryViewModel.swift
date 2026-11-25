@@ -205,6 +205,41 @@ final class LibraryViewModel: ObservableObject {
         metadataByHash[torrent.hash.lowercased()]
     }
 
+    func linkCatalogMetadata(_ context: CatalogTorrentContext, to torrentHash: String) {
+        let hash = torrentHash.lowercased()
+        guard !hash.isEmpty, metadataByHash[hash]?.catalogIdentity == nil else { return }
+        let item = context.details?.item ?? context.item
+        let provider = MetadataProvider.tmdb
+        let id = String(item.id.tmdbID)
+        let metadata = LibraryMetadata(
+            title: item.title,
+            posterURL: (item.poster ?? context.item.poster)?.absoluteString ?? "",
+            summary: item.overview.isEmpty ? context.item.overview : item.overview,
+            source: provider.displayName,
+            sourceURL: provider.sourceURL(id: id, kind: item.id.kind)?.absoluteString,
+            tmdbID: item.id.tmdbID,
+            metadataProvider: provider,
+            metadataProviderID: id,
+            mediaKind: item.id.kind,
+            backdropURL: (item.backdrop ?? context.item.backdrop)?.absoluteString ?? "",
+            genres: context.details?.genres.map(\.name) ?? [],
+            runtimeMinutes: context.details?.runtime,
+            releaseDate: item.date ?? context.item.date,
+            rating: item.rating,
+            originalTitle: item.originalTitle,
+            localizedTitle: item.title,
+            season: metadataByHash[hash]?.season,
+            episode: metadataByHash[hash]?.episode,
+            metadataLanguage: metadataLanguageCode(for: provider),
+            catalogIdentity: item.id
+        )
+        metadataStore.save(metadata, for: hash)
+        metadataByHash[hash] = metadata
+        metadataResolutionTasks[hash]?.cancel()
+        metadataRefreshHashes.remove(hash)
+        metadataRetryAfter[hash] = nil
+    }
+
     func setMetadataLanguage(_ language: AppLanguage) {
         guard metadataLanguage != language else { return }
         metadataLanguage = language
@@ -452,8 +487,13 @@ final class LibraryViewModel: ObservableObject {
         let aniListEnabled = aniListMetadataEnabled
         guard aniListEnabled || !providers.isEmpty else { return }
         let hash = torrent.hash.lowercased()
-        guard !hash.isEmpty else { return }
-        guard metadataResolutionTasks[hash] == nil else { return }
+        guard !hash.isEmpty, metadataResolutionTasks[hash] == nil else { return }
+        if let metadata = metadataByHash[hash], let identity = metadata.catalogIdentity {
+            if forceRefresh || metadata.metadataLanguage != metadataLanguageCode(for: .tmdb) {
+                resolveLinkedMetadata(metadata, identity: identity, hash: hash, torrent: torrent)
+            }
+            return
+        }
         if !forceRefresh,
            let retryDate = metadataRetryAfter[hash],
            retryDate > Date() {
@@ -521,6 +561,41 @@ final class LibraryViewModel: ObservableObject {
                 metadataRetryAfter[hash] = Date().addingTimeInterval(60 * 15)
             } else {
                 metadataRetryAfter[hash] = Date().addingTimeInterval(60 * 60 * 24)
+            }
+        }
+    }
+
+    private func resolveLinkedMetadata(
+        _ existing: LibraryMetadata, identity: CatalogIdentity, hash: String, torrent: NativeTorrent
+    ) {
+        if let retry = metadataRetryAfter[hash], retry > Date() { return }
+        let language = metadataLanguageCode(for: .tmdb)
+        let revision = metadataConfigurationRevision
+        resolvingMetadataHashes.insert(hash)
+        metadataResolutionTasks[hash] = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                if self.metadataConfigurationRevision == revision {
+                    self.resolvingMetadataHashes.remove(hash)
+                    self.metadataResolutionTasks[hash] = nil
+                }
+            }
+            do {
+                let media = try await TMDBService().details(
+                    id: String(identity.tmdbID), kind: identity.kind, language: language
+                )
+                guard !Task.isCancelled, self.metadataConfigurationRevision == revision else { return }
+                let parsedName = MediaNameParser().parse(torrent.name ?? torrent.displayTitle)
+                let metadata = existing.merging(
+                    resolved: ResolvedMediaMetadata(parsedName: parsedName, metadata: media), language: language
+                )
+                self.metadataStore.save(metadata, for: hash)
+                self.metadataByHash[hash] = metadata
+                self.metadataRefreshHashes.remove(hash)
+                self.metadataRetryAfter[hash] = nil
+            } catch {
+                guard !Task.isCancelled, self.metadataConfigurationRevision == revision else { return }
+                self.metadataRetryAfter[hash] = Date().addingTimeInterval(120)
             }
         }
     }

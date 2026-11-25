@@ -11,6 +11,7 @@ private struct SearchResultsHeaderHeightKey: PreferenceKey {
 struct SearchView: View {
     @ObservedObject var mainModel: MainWindowModel
     @ObservedObject var model: SearchViewModel
+    @ObservedObject var libraryModel: LibraryViewModel
     @FocusState private var searchFieldIsFocused: Bool
     @State private var showsSourceErrors = false
     @State private var resultsHeaderOverlayHeight: CGFloat = 40
@@ -31,6 +32,9 @@ struct SearchView: View {
         .sheet(isPresented: $model.showsSettings) {
             SearchSourcesSettingsView(model: model, language: mainModel.language)
         }
+        .sheet(item: $model.playbackTorrent) { torrent in
+            CatalogPlaybackSheet(torrent: torrent, library: libraryModel, text: CatalogText(language: mainModel.language))
+        }
         .alert(item: $model.alert) { alert in
             Alert(
                 title: Text(alert.title),
@@ -49,6 +53,11 @@ struct SearchView: View {
                         .lineLimit(1)
                         .foregroundStyle(.secondary)
                     Spacer()
+                    Toggle(
+                        mainModel.language == .russian ? "Связать с карточкой каталога" : "Link to catalog title",
+                        isOn: $model.linkCatalogMetadata
+                    )
+                    .toggleStyle(.checkbox)
                     if context.queries.count > 1 {
                         Menu(mainModel.language == .russian ? "Варианты запроса" : "Search suggestions") {
                             ForEach(context.queries, id: \.self) { query in
