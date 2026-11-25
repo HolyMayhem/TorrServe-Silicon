@@ -65,7 +65,7 @@ struct CUBCatalogService: Sendable {
     private func filtered(
         _ filter: CatalogFilter, page: Int, connection: CatalogConnection, parameters: [String: String]
     ) async throws -> CatalogPage {
-        if let kind = filter.kind {
+        if let kind = filter.effectiveKind {
             return try await results(kind: kind, page: page, connection: connection, parameters: parameters)
                 .filtered(by: filter)
         }

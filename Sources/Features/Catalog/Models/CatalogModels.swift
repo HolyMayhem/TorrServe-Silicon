@@ -45,6 +45,15 @@ struct CatalogFilter: Hashable, Sendable {
     var year: Int? = nil
     var minimumRating: Int? = nil
 
+    var effectiveKind: MediaKind? {
+        if let kind { return kind }
+        guard let genreID else { return nil }
+        let compatible = MediaKind.allCases.filter { kind in
+            CatalogGenre.defaults(for: kind, russian: false).contains { $0.id == genreID }
+        }
+        return compatible.count == 1 ? compatible.first : nil
+    }
+
     func includes(_ item: CatalogItem) -> Bool {
         (kind == nil || item.id.kind == kind)
             && (genreID.map { item.genreIDs.contains($0) } ?? true)

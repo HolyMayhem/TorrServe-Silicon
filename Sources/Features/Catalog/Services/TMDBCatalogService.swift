@@ -34,7 +34,7 @@ struct TMDBCatalogService: Sendable {
             }
             return try await results(path, kind: kind, page: page, language: language, timeout: timeout, parameters: parameters)
         case .discover(let filter):
-            if let kind = filter.kind {
+            if let kind = filter.effectiveKind {
                 return try await discover(filter, kind: kind, page: page, language: language, timeout: timeout)
             }
             async let movies = discover(filter, kind: .movie, page: page, language: language, timeout: timeout)
