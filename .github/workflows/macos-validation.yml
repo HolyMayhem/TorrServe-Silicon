@@ -98,6 +98,7 @@ jobs:
           if-no-files-found: ignore
 
   menu-bar-macos-26:
+    if: ${{ inputs.build_runner != 'macos-26' }}
     runs-on: macos-26
     timeout-minutes: 15
     steps:
