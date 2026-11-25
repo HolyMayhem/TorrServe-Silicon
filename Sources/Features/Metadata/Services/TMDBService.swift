@@ -63,7 +63,7 @@ final class TMDBService: MetadataServicing, @unchecked Sendable {
         }
     }
 
-    private func request<Response: Decodable>(
+    func request<Response: Decodable>(
         path: String,
         queryItems: [URLQueryItem]
     ) async throws -> Response {
