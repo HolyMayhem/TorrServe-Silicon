@@ -20,7 +20,7 @@ struct CatalogIdentity: Hashable, Codable, Sendable {
     let tmdbID: Int
 }
 
-struct CatalogItem: Identifiable, Equatable, Codable, Sendable {
+struct CatalogItem: Identifiable, Hashable, Codable, Sendable {
     let id: CatalogIdentity
     let title: String
     let originalTitle: String

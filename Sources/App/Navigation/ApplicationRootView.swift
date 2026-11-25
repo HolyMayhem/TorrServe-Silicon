@@ -60,11 +60,6 @@ struct ApplicationRootView: View {
                 language: mainModel.language
             )
         }
-        .onChange(of: mainModel.jackettEnabled) { _, enabled in
-            if !enabled, mainModel.selectedSection == .search {
-                mainModel.selectedSection = .library
-            }
-        }
         .onChange(of: mainModel.selectedSection) { _, section in
             mainModel.onSectionChanged?(section)
         }
@@ -88,10 +83,7 @@ struct ApplicationRootView: View {
                 offlineDownloadManager: libraryModel.offlineDownloadManager
             )
         case .search:
-            SearchView(
-                mainModel: mainModel,
-                model: searchModel
-            )
+            CatalogView(mainModel: mainModel, searchModel: searchModel)
         case .offline:
             OfflineDownloadsView(
                 manager: libraryModel.offlineDownloadManager,

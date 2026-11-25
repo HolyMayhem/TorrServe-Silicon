@@ -52,7 +52,7 @@ extension AppDelegate {
     }
 
     @objc func showSearchFromMenu(_ sender: Any?) {
-        guard mainWindowModel.jackettEnabled, window?.attachedSheet == nil else { return }
+        guard window?.attachedSheet == nil else { return }
         ensureWindowForCommand()
         mainWindowModel.selectedSection = .search
     }
@@ -91,7 +91,7 @@ extension AppDelegate {
         case #selector(showLibraryList(_:)), #selector(showLibraryPosters(_:)), #selector(showLibraryCards(_:)):
             return libraryCommandsAvailable
         case #selector(showSearchFromMenu(_:)):
-            return mainWindowModel.jackettEnabled && window?.attachedSheet == nil
+            return window?.attachedSheet == nil
         case #selector(addTorrentFromMenu(_:)), #selector(addMagnetFromMenu(_:)):
             return mainWindowModel.canStop && !libraryModel.isAdding && window?.attachedSheet == nil
         default: return true

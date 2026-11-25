@@ -12,7 +12,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .library:
             return language == .russian ? "Библиотека" : "Library"
         case .search:
-            return language == .russian ? "Поиск" : "Search"
+            return language == .russian ? "Каталог" : "Catalog"
         case .offline:
             return language == .russian ? "Офлайн" : "Offline"
         }
@@ -33,8 +33,8 @@ enum AppSection: String, CaseIterable, Identifiable {
                 : "Manage your library, playback, and offline downloads."
         case .search:
             return language == .russian
-                ? "Находите раздачи через TorrentSearch и Jackett и добавляйте их в библиотеку."
-                : "Search TorrentSearch and Jackett and add releases to your library."
+                ? "Фильмы, сериалы и поиск раздач."
+                : "Browse movies and TV shows and find torrents."
         case .offline:
             return language == .russian
                 ? "Сохранённые фильмы и серии для просмотра без интернета."
@@ -45,7 +45,7 @@ enum AppSection: String, CaseIterable, Identifiable {
     var systemImage: String {
         switch self {
         case .library: return "film.stack"
-        case .search: return "magnifyingglass"
+        case .search: return "rectangle.grid.2x2"
         case .offline: return "arrow.down.circle"
         }
     }

@@ -82,7 +82,7 @@ enum AppKeyboardShortcut: String, CaseIterable, Identifiable {
         case .focusSearch: return ru ? "Поиск на текущей странице" : "Search Current Page"
         case .refresh: return ru ? "Обновить текущую страницу" : "Refresh Current Page"
         case .library: return ru ? "Медиатека" : "Library"
-        case .search: return ru ? "Поиск торрентов" : "Torrent Search"
+        case .search: return ru ? "Каталог" : "Catalog"
         case .selectAll: return ru ? "Выделить все видимые фильмы" : "Select All Visible Items"
         case .deselectAll: return ru ? "Снять выделение" : "Deselect All"
         case .copyStream: return ru ? "Скопировать ссылку на трансляцию" : "Copy Stream URL"

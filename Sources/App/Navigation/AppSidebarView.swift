@@ -7,7 +7,7 @@ struct AppSidebarView: View {
     @Binding var selection: AppSection?
 
     private var primarySections: [AppSection] {
-        var sections: [AppSection] = mainModel.jackettEnabled ? [.search, .library] : [.library]
+        var sections: [AppSection] = [.search, .library]
         if mainModel.showsOfflineSection { sections.append(.offline) }
         return sections
     }

@@ -225,9 +225,21 @@ extension AppDelegate {
         window.standardWindowButton(.zoomButton)?.isEnabled = false
     }
 
-    func resizeWindow(for _: AppSection) {
-        window.styleMask.remove(.resizable)
-        window.standardWindowButton(.zoomButton)?.isEnabled = false
+    func resizeWindow(for section: AppSection) {
+        if section == .search {
+            window.styleMask.insert(.resizable)
+            window.contentMinSize = NSSize(width: 980, height: 560)
+            window.contentMaxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+            window.standardWindowButton(.zoomButton)?.isEnabled = true
+        } else {
+            window.styleMask.remove(.resizable)
+            window.contentMinSize = serverContentSize
+            window.contentMaxSize = serverContentSize
+            if window.contentRect(forFrameRect: window.frame).size != serverContentSize {
+                window.setContentSize(serverContentSize)
+            }
+            window.standardWindowButton(.zoomButton)?.isEnabled = false
+        }
     }
 
     @objc func showSettingsWindow(_ sender: Any?) {
