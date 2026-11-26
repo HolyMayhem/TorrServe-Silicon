@@ -159,46 +159,34 @@ struct SearchResultDetail: View {
                     .foregroundStyle(.orange)
             }
 
+            if result.detailsURL != nil {
+                Button(texts.openSource) { model.openDetails(for: result) }
+                    .buttonStyle(.link)
+            }
+
             HStack {
-                if result.detailsURL != nil {
-                    Button(texts.openSource) {
-                        model.openDetails(for: result)
-                    }
-                    .buttonStyle(.bordered)
-                }
-
                 Spacer()
-
                 Button {
-                    model.add(
-                        result,
-                        language: language,
-                        serverIsRunning: serverIsRunning
-                    )
+                    model.add(result, language: language, serverIsRunning: serverIsRunning)
                 } label: {
                     if model.addingResultID == result.id {
-                        HStack {
-                            ProgressView()
-                                .controlSize(.small)
-                            Text(texts.adding)
-                        }
+                        ProgressView().controlSize(.small)
                     } else if model.addedResultIDs.contains(result.id) {
                         Label(texts.added, systemImage: "checkmark")
                     } else {
                         Label(texts.addToLibrary, systemImage: "plus")
                     }
                 }
+                .buttonStyle(.bordered)
+                .disabled(model.addingResultID != nil || model.addedResultIDs.contains(result.id) || !serverIsRunning)
+
+                Button {
+                    model.add(result, language: language, serverIsRunning: serverIsRunning, watch: true)
+                } label: {
+                    Label(language == .russian ? "Смотреть" : "Watch", systemImage: "play.fill")
+                }
                 .buttonStyle(.borderedProminent)
-                .tint(
-                    model.addedResultIDs.contains(result.id)
-                        ? Color.green
-                        : Color.accentColor
-                )
-                .disabled(
-                    model.addingResultID != nil
-                        || model.addedResultIDs.contains(result.id)
-                        || !serverIsRunning
-                )
+                .disabled(model.addingResultID != nil || !serverIsRunning)
             }
         }
     }

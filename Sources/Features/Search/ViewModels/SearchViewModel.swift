@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import Foundation
 
 private let jackettServerURLKey = "JackettServerURL"
@@ -10,6 +11,9 @@ final class SearchViewModel: ObservableObject {
     @Published var serverURL: String
     @Published var apiKey: String
     @Published var query = ""
+    @Published private(set) var catalogContext: CatalogTorrentContext?
+    @Published var linkCatalogMetadata = true
+    @Published var playbackTorrent: NativeTorrent?
     @Published private(set) var mode: TorrentSearchMode = .torrentSearch
     @Published private(set) var enabledProviders = Set(TorrentSearchProvider.allCases)
     @Published private(set) var hasSearched = false
@@ -17,7 +21,10 @@ final class SearchViewModel: ObservableObject {
     @Published private(set) var sourceErrors: [String: String] = [:]
     @Published private(set) var totalSourceCount = 0
     @Published private(set) var successfulSourceCount = 0
-    @Published var results: [JackettSearchResult] = []
+    @Published var results: [JackettSearchResult] = [] {
+        didSet { updateSortedResults() }
+    }
+    private(set) var sortedResults: [JackettSearchResult] = []
     @Published var selectedResultID: String?
     @Published private(set) var savedConfiguration: JackettConfiguration?
     @Published var isSearching = false
@@ -30,13 +37,21 @@ final class SearchViewModel: ObservableObject {
     @Published var showsSettings = false
     @Published var alert: AppAlert?
     @Published var sortField: SearchSortField = .seeders {
-        didSet { defaults.set(sortField.rawValue, forKey: "TorrentSearchSortField") }
+        didSet {
+            guard sortField != oldValue else { return }
+            defaults.set(sortField.rawValue, forKey: "TorrentSearchSortField")
+            updateSortedResults()
+        }
     }
     @Published var sortAscending = false {
-        didSet { defaults.set(sortAscending, forKey: "TorrentSearchSortAscending") }
+        didSet {
+            guard sortAscending != oldValue else { return }
+            defaults.set(sortAscending, forKey: "TorrentSearchSortAscending")
+            updateSortedResults()
+        }
     }
 
-    var onTorrentAdded: ((String) -> Void)?
+    var onTorrentAdded: ((String, CatalogTorrentContext?) -> Void)?
 
     private let torrentSearch: any TorrentSearchServing
     private let jackett: JackettClient
@@ -46,6 +61,8 @@ final class SearchViewModel: ObservableObject {
     private var searchTask: Task<Void, Never>?
     private var searchRevision = 0
     private var activeSearchQuery: String?
+    private var directQuery = ""
+    private var addedHashes: [String: String] = [:]
 
     init(
         jackett: JackettClient = JackettClient(),
@@ -127,8 +144,8 @@ final class SearchViewModel: ObservableObject {
         return results.first { $0.id == selectedResultID }
     }
 
-    var sortedResults: [JackettSearchResult] {
-        results.sorted { left, right in
+    private func updateSortedResults() {
+        sortedResults = results.sorted { left, right in
             let leftValue = sortValue(for: left)
             let rightValue = sortValue(for: right)
 
@@ -198,6 +215,22 @@ final class SearchViewModel: ObservableObject {
         }
     }
 
+    func searchCatalogTorrents(_ context: CatalogTorrentContext, language: AppLanguage) {
+        if catalogContext == nil { directQuery = query }
+        invalidateSearch()
+        catalogContext = context
+        linkCatalogMetadata = true
+        query = context.queries.first ?? ""
+        search(language: language)
+    }
+
+    func endCatalogSearch() {
+        guard catalogContext != nil else { return }
+        invalidateSearch()
+        catalogContext = nil
+        query = directQuery
+    }
+
     func search(language: AppLanguage) {
         let value = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { return }
@@ -209,6 +242,8 @@ final class SearchViewModel: ObservableObject {
         let revision = searchRevision
         let providers = mode.usesTorrentSearch ? TorrentSearchProvider.allCases.filter(enabledProviders.contains) : []
         let jackettConfiguration = mode.usesJackett ? savedConfiguration : nil
+        let catalogQueries = catalogContext?.queries ?? []
+        let searchQueries = catalogQueries.first == value ? catalogQueries : [value]
         activeSearchQuery = value
         isSearching = true
         hasSearched = true
@@ -238,7 +273,10 @@ final class SearchViewModel: ObservableObject {
                     let client = self.torrentSearch
                     group.addTask {
                         do {
-                            return TorrentSearchSourceOutcome(name: provider.title, results: try await client.search(query: value, provider: provider), error: nil)
+                            let results = try await Self.firstMatchingQuery(searchQueries) { query in
+                                try await client.search(query: query, provider: provider)
+                            }
+                            return TorrentSearchSourceOutcome(name: provider.title, results: results, error: nil)
                         } catch {
                             return TorrentSearchSourceOutcome(name: provider.title, results: [], error: error.localizedDescription)
                         }
@@ -248,7 +286,10 @@ final class SearchViewModel: ObservableObject {
                     let client = self.jackett
                     group.addTask {
                         do {
-                            return TorrentSearchSourceOutcome(name: "Jackett", results: try await client.search(query: value, configuration: configuration), error: nil)
+                            let results = try await Self.firstMatchingQuery(searchQueries) { query in
+                                try await client.search(query: query, configuration: configuration)
+                            }
+                            return TorrentSearchSourceOutcome(name: "Jackett", results: results, error: nil)
                         } catch {
                             return TorrentSearchSourceOutcome(name: "Jackett", results: [], error: error.localizedDescription)
                         }
@@ -271,6 +312,17 @@ final class SearchViewModel: ObservableObject {
         }
     }
 
+    private nonisolated static func firstMatchingQuery(
+        _ queries: [String], search: (String) async throws -> [JackettSearchResult]
+    ) async throws -> [JackettSearchResult] {
+        for query in queries {
+            try Task.checkCancellation()
+            let results = try await search(query)
+            if !results.isEmpty { return results }
+        }
+        return []
+    }
+
     func select(_ result: JackettSearchResult) {
         selectedResultID = result.id
     }
@@ -282,7 +334,8 @@ final class SearchViewModel: ObservableObject {
     func add(
         _ result: JackettSearchResult,
         language: AppLanguage,
-        serverIsRunning: Bool
+        serverIsRunning: Bool,
+        watch: Bool = false
     ) {
         guard serverIsRunning else {
             alert = AppAlert(
@@ -293,12 +346,33 @@ final class SearchViewModel: ObservableObject {
         }
         guard addingResultID == nil else { return }
 
+        let context = linkCatalogMetadata ? catalogContext : nil
+        let configuration = savedConfiguration
+        let source = result.preferredLinkSource.rawValue
         addingResultID = result.id
         Task {
             defer { addingResultID = nil }
+            var link = result.magnetURL != nil ? "magnet" : result.downloadURL == nil ? "missing" : "download"
+            TorrentAddDiagnostics.event(stage: "link", source: source, link: link)
             do {
-                let payload = try await jackett.download(result)
-                let poster = result.posterURL?.absoluteString ?? ""
+                if watch, let hash = addedHashes[result.id] {
+                    do {
+                        let existing = try await torrServer.torrent(hash: hash)
+                        onTorrentAdded?(hash, context)
+                        playbackTorrent = existing
+                        TorrentAddDiagnostics.event(stage: "reused", source: source, link: link)
+                        return
+                    } catch is DecodingError {
+                        throw TorrentAddError.unexpectedResponse
+                    } catch {
+                        // The torrent may have been removed since it was added from this search.
+                        try Task.checkCancellation()
+                    }
+                }
+                let payload = try await jackett.download(result, configuration: configuration)
+                link = payload.kind
+                TorrentAddDiagnostics.event(stage: "transfer", source: source, link: link)
+                let poster = (context?.details?.item.poster ?? context?.item.poster ?? result.posterURL)?.absoluteString ?? ""
                 let category = result.torrServerCategory
                 let torrent: NativeTorrent
 
@@ -320,18 +394,35 @@ final class SearchViewModel: ObservableObject {
                         category: category
                     )
                     guard let value = values.first else {
-                        throw AppError("TorrServer did not return the added torrent.")
+                        throw TorrentAddError.noAddedTorrent
                     }
                     torrent = value
                 }
 
                 let hash = torrent.hash.isEmpty ? result.infoHash : torrent.hash
                 addedResultIDs.insert(result.id)
-                onTorrentAdded?(hash)
+                if !hash.isEmpty { addedHashes[result.id] = hash }
+                onTorrentAdded?(hash, context)
+                TorrentAddDiagnostics.event(stage: "added", source: source, link: link)
+                if watch {
+                    if torrent.hash.isEmpty, !hash.isEmpty {
+                        do {
+                            playbackTorrent = try await torrServer.torrent(hash: hash)
+                        } catch is DecodingError {
+                            throw TorrentAddError.unexpectedResponse
+                        }
+                    } else {
+                        playbackTorrent = torrent
+                    }
+                }
+            } catch is CancellationError {
+                return
             } catch {
+                let error = error as? TorrentAddError ?? .transferNetwork((error as NSError).code)
+                TorrentAddDiagnostics.failure(error, source: source, link: link)
                 alert = AppAlert(
                     title: SearchTexts(language: language).couldNotAdd,
-                    message: error.localizedDescription
+                    message: error.message(language: language, source: source)
                 )
             }
         }

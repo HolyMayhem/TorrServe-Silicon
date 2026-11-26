@@ -139,7 +139,9 @@ enum TorrentSearchIdentity {
                 size: best.size > 0 ? best.size : other.size, seeders: max(old.seeders, result.seeders),
                 peers: max(old.peers, result.peers), categories: Array(Set(old.categories + result.categories)).sorted(),
                 publishedAt: best.publishedAt ?? other.publishedAt, infoHash: hash ?? best.infoHash,
-                year: best.year.isEmpty ? other.year : best.year
+                year: best.year.isEmpty ? other.year : best.year,
+                downloadSource: best.downloadURL == nil ? other.downloadSource : best.downloadSource,
+                magnetSource: best.magnetURL == nil ? other.magnetSource : best.magnetSource
             )
         }
         return values

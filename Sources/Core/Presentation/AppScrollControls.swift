@@ -39,30 +39,25 @@ struct AppScrollContentMask: View {
 }
 
 struct AppScrollMetrics: Equatable {
-    static let zero = AppScrollMetrics(
-        contentOffsetY: 0,
-        contentHeight: 0,
-        containerHeight: 0
-    )
+    static let zero = AppScrollMetrics()
 
-    let contentOffsetY: CGFloat
-    let contentHeight: CGFloat
-    let containerHeight: CGFloat
+    var offset: CGFloat = 0
+    var contentLength: CGFloat = 0
+    var containerLength: CGFloat = 0
 
-    init(
-        contentOffsetY: CGFloat,
-        contentHeight: CGFloat,
-        containerHeight: CGFloat
-    ) {
-        self.contentOffsetY = contentOffsetY
-        self.contentHeight = contentHeight
-        self.containerHeight = containerHeight
-    }
+    init() {}
 
-    init(_ geometry: ScrollGeometry) {
-        contentOffsetY = geometry.contentOffset.y
-        contentHeight = geometry.contentSize.height
-        containerHeight = geometry.containerSize.height
+    init(_ geometry: ScrollGeometry, axis: Axis = .vertical) {
+        switch axis {
+        case .vertical:
+            offset = geometry.contentOffset.y
+            contentLength = geometry.contentSize.height
+            containerLength = geometry.containerSize.height
+        case .horizontal:
+            offset = geometry.contentOffset.x
+            contentLength = geometry.contentSize.width
+            containerLength = geometry.containerSize.width
+        }
     }
 }
 
@@ -71,29 +66,27 @@ struct AppScrollIndicator: View {
     let topInset: CGFloat
     let bottomInset: CGFloat
     let isVisible: Bool
+    var axis: Axis = .vertical
 
     var body: some View {
         GeometryReader { proxy in
-            let trackHeight = max(0, proxy.size.height - topInset - bottomInset)
-            let contentHeight = max(metrics.contentHeight, 1)
-            let viewportRatio = min(1, metrics.containerHeight / contentHeight)
-            let thumbHeight = min(trackHeight, max(28, trackHeight * viewportRatio))
-            let maximumOffset = max(1, metrics.contentHeight - metrics.containerHeight)
-            let progress = min(1, max(0, metrics.contentOffsetY / maximumOffset))
-            let thumbTravel = max(0, trackHeight - thumbHeight)
+            let vertical = axis == .vertical
+            let length = vertical ? proxy.size.height : proxy.size.width
+            let trackLength = max(0, length - topInset - bottomInset)
+            let viewportRatio = min(1, metrics.containerLength / max(metrics.contentLength, 1))
+            let thumbLength = min(trackLength, max(28, trackLength * viewportRatio))
+            let maximumOffset = max(1, metrics.contentLength - metrics.containerLength)
+            let progress = min(1, max(0, metrics.offset / maximumOffset))
+            let center = topInset + thumbLength / 2 + (trackLength - thumbLength) * progress
 
             Capsule()
                 .fill(Color.secondary.opacity(0.72))
-                .frame(width: 3, height: thumbHeight)
+                .frame(width: vertical ? 3 : thumbLength, height: vertical ? thumbLength : 3)
                 .position(
-                    x: proxy.size.width - 4,
-                    y: topInset + thumbHeight / 2 + thumbTravel * progress
+                    x: vertical ? proxy.size.width - 4 : center,
+                    y: vertical ? center : proxy.size.height - 4
                 )
-                .opacity(
-                    isVisible && metrics.contentHeight > metrics.containerHeight
-                        ? 1
-                        : 0
-                )
+                .opacity(isVisible && metrics.contentLength > metrics.containerLength ? 1 : 0)
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
@@ -101,9 +94,11 @@ struct AppScrollIndicator: View {
 }
 
 struct AppNativeScrollIndicatorHider: NSViewRepresentable {
-    static func removeReservedVerticalScrollerSpace(from scrollView: NSScrollView) {
+    var axis: Axis = .vertical
+
+    private static func hideScroller(_ axis: Axis, in scrollView: NSScrollView) {
         // With the macOS legacy scroller style, AppKit reserves a full-width
-        // trailing gutter before SwiftUI hides the native indicator. Switching
+        // gutter before SwiftUI hides the native indicator. Switching
         // to overlay first guarantees that no content width is consumed. Keep
         // this operation idempotent because SwiftUI may restore the native
         // scroller after replacing or relaying out its internal NSScrollView.
@@ -117,13 +112,15 @@ struct AppNativeScrollIndicatorHider: NSViewRepresentable {
             scrollView.autohidesScrollers = true
             needsRetile = true
         }
-        if scrollView.hasVerticalScroller {
-            scrollView.hasVerticalScroller = false
+        let hasScroller = axis == .vertical ? \.hasVerticalScroller : \NSScrollView.hasHorizontalScroller
+        let scroller = axis == .vertical ? \.verticalScroller : \NSScrollView.horizontalScroller
+        if scrollView[keyPath: hasScroller] {
+            scrollView[keyPath: hasScroller] = false
             needsRetile = true
         }
-        if let verticalScroller = scrollView.verticalScroller {
-            verticalScroller.removeFromSuperview()
-            scrollView.verticalScroller = nil
+        if let nativeScroller = scrollView[keyPath: scroller] {
+            nativeScroller.removeFromSuperview()
+            scrollView[keyPath: scroller] = nil
             needsRetile = true
         }
 
@@ -134,15 +131,18 @@ struct AppNativeScrollIndicatorHider: NSViewRepresentable {
 
     func makeNSView(context: Context) -> LocatorView {
         let view = LocatorView()
+        view.axis = axis
         view.scheduleUpdates()
         return view
     }
 
     func updateNSView(_ nsView: LocatorView, context: Context) {
+        nsView.axis = axis
         nsView.scheduleUpdates()
     }
 
     final class LocatorView: NSView {
+        var axis: Axis = .vertical
         private var windowUpdateObserver: NSObjectProtocol?
         private var updateIsScheduled = false
 
@@ -212,8 +212,7 @@ struct AppNativeScrollIndicatorHider: NSViewRepresentable {
             // the window by coordinates: animated SwiftUI transitions may keep
             // the outgoing and incoming scroll views alive at the same frame.
             guard let enclosingScrollView else { return }
-            AppNativeScrollIndicatorHider
-                .removeReservedVerticalScrollerSpace(from: enclosingScrollView)
+            AppNativeScrollIndicatorHider.hideScroller(axis, in: enclosingScrollView)
         }
     }
 }

@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 final class TMDBService: MetadataServicing, @unchecked Sendable {
     let provider = MetadataProvider.tmdb
@@ -63,31 +66,38 @@ final class TMDBService: MetadataServicing, @unchecked Sendable {
         }
     }
 
-    private func request<Response: Decodable>(
+    func request<Response: Decodable>(
         path: String,
-        queryItems: [URLQueryItem]
+        queryItems: [URLQueryItem],
+        timeout: TimeInterval = 12,
+        apiBaseURL: URL? = nil
     ) async throws -> Response {
         guard let configuration = configurationProvider.tmdbConfiguration() else {
             throw MetadataServiceError.notConfigured(.tmdb)
         }
 
         var components = URLComponents(
-            url: configuration.apiBaseURL.appendingPathComponent(path),
+            url: (apiBaseURL ?? configuration.apiBaseURL).appendingPathComponent(path),
             resolvingAgainstBaseURL: false
         )
         components?.queryItems = queryItems + [
             URLQueryItem(name: "api_key", value: configuration.apiKey)
         ]
+        if let query = components?.percentEncodedQuery {
+            components?.percentEncodedQuery = query.replacingOccurrences(of: "+", with: "%2B")
+        }
         guard let url = components?.url else {
             throw MetadataServiceError.invalidRequest
         }
 
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
-        request.timeoutInterval = 12
+        request.timeoutInterval = timeout
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
-        let data = try await MetadataHTTPTransport.data(for: request, session: session)
+        let data = try await MetadataHTTPTransport.data(
+            for: request, session: session, allowsSecureDNS: apiBaseURL == nil && session === URLSession.shared
+        )
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         return try MetadataHTTPTransport.decode(Response.self, from: data, using: decoder)

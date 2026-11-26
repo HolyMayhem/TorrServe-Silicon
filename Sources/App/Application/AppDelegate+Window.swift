@@ -25,9 +25,6 @@ extension AppDelegate {
         mainWindowModel.path = initialExecutablePath()
         mainWindowModel.language = currentLanguage
         mainWindowModel.menuBarPreferences = menuBarPreferencesStore.load()
-        mainWindowModel.jackettEnabled = UserDefaults.standard.bool(
-            forKey: jackettSearchEnabledKey
-        )
         mainWindowModel.showsOfflineSection = UserDefaults.standard.bool(forKey: showsOfflineSectionKey)
         let metadataProviderSettings = metadataSettings.settings
         mainWindowModel.metadataSource = metadataProviderSettings.selectedSource
@@ -97,9 +94,6 @@ extension AppDelegate {
             self.ensureWindowForCommand()
             self.mainWindowModel.selectedSection = .search
             self.searchModel.showsSettings = true
-        }
-        mainWindowModel.onJackettEnabledChanged = { [weak self] enabled in
-            self?.setJackettEnabled(enabled)
         }
         mainWindowModel.onShowsOfflineSectionChanged = { [weak self] visible in
             self?.setShowsOfflineSection(visible)
@@ -203,8 +197,10 @@ extension AppDelegate {
         mainWindowModel.onChooseServerCacheFolder = { [weak self] in
             self?.chooseServerCacheFolder()
         }
-        searchModel.onTorrentAdded = { [weak self] hash in
-            self?.libraryModel.refresh(selectingHash: hash)
+        searchModel.onTorrentAdded = { [weak self] hash, context in
+            guard let self else { return }
+            if let context { self.libraryModel.linkCatalogMetadata(context, to: hash) }
+            self.libraryModel.refresh(selectingHash: hash)
         }
 
         let hostingView = NSHostingView(
@@ -225,9 +221,21 @@ extension AppDelegate {
         window.standardWindowButton(.zoomButton)?.isEnabled = false
     }
 
-    func resizeWindow(for _: AppSection) {
-        window.styleMask.remove(.resizable)
-        window.standardWindowButton(.zoomButton)?.isEnabled = false
+    func resizeWindow(for section: AppSection) {
+        if section == .search {
+            window.styleMask.insert(.resizable)
+            window.contentMinSize = NSSize(width: 980, height: 560)
+            window.contentMaxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+            window.standardWindowButton(.zoomButton)?.isEnabled = true
+        } else {
+            window.styleMask.remove(.resizable)
+            window.contentMinSize = serverContentSize
+            window.contentMaxSize = serverContentSize
+            if window.contentRect(forFrameRect: window.frame).size != serverContentSize {
+                window.setContentSize(serverContentSize)
+            }
+            window.standardWindowButton(.zoomButton)?.isEnabled = false
+        }
     }
 
     @objc func showSettingsWindow(_ sender: Any?) {

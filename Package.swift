@@ -11,16 +11,22 @@ var packageTargets: [Target] = [
         name: "TorrServerManager",
         dependencies: [
             .product(name: "Sparkle", package: "Sparkle"),
-            "Telemetry"
+            "Telemetry",
+            "TMDBHTTPS"
         ],
         path: "Sources",
-        exclude: ["Telemetry"],
+        exclude: ["Telemetry", "TMDBHTTPS"],
         linkerSettings: [
             .unsafeFlags([
                 "-Xlinker", "-rpath",
                 "-Xlinker", "@executable_path/../Frameworks"
             ])
         ]
+    ),
+    .target(
+        name: "TMDBHTTPS",
+        path: "Sources/TMDBHTTPS",
+        linkerSettings: [.linkedLibrary("curl")]
     ),
     .target(name: "Telemetry", path: "Sources/Telemetry"),
     .testTarget(name: "TelemetryTests", dependencies: ["Telemetry"], path: "Tests/TelemetryTests")

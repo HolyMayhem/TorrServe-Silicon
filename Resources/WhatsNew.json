@@ -1,8 +1,9 @@
 {
   "schemaVersion": 1,
-  "id": "interface-refresh-2026",
-  "enabled": false,
-  "build": 41,
+  "id": "media-catalog-2.10",
+  "enabled": true,
+  "showOnFreshInstall": true,
+  "build": 43,
   "detailsURL": "https://github.com/HolyMayhem/TorrServe-Silicon/releases",
   "localizations": {
     "ru": {
@@ -11,29 +12,19 @@
       "detailsTitle": "Полный список изменений",
       "features": [
         {
-          "symbol": "sidebar.left",
-          "title": "Обновлённый интерфейс",
-          "body": "Боковая панель в стиле macOS, обновлённая медиатека и нативное поле поиска."
+          "symbol": "film",
+          "title": "Каталог фильмов и сериалов",
+          "body": "Смотрите подборки, ищите по названию или жанру и переходите к раздачам прямо из карточки."
         },
         {
-          "symbol": "magnifyingglass",
-          "title": "Настройки легко найти",
-          "body": "Поиск находит нужный параметр и плавно прокручивает к нему."
+          "symbol": "arrow.triangle.2.circlepath",
+          "title": "Автоматическое подключение",
+          "body": "В режиме «Авто» каталог пробует CUB, если TMDB недоступен. Если оба источника недоступны, приложение показывает причину."
         },
         {
-          "symbol": "bell.badge",
-          "title": "Настройки уведомлений",
-          "body": "Проверяйте разрешение macOS и отправляйте тестовые уведомления прямо из настроек."
-        },
-        {
-          "symbol": "menubar.rectangle",
-          "title": "Обновлённое меню TorrServe",
-          "body": "Полупрозрачное оформление и управление сервером прямо из строки меню."
-        },
-        {
-          "symbol": "arrow.down.circle",
-          "title": "Офлайн стал удобнее",
-          "body": "Улучшили работу с торрент-файлами. Фильмы и сериалы собраны в карточки."
+          "symbol": "wrench.and.screwdriver",
+          "title": "Улучшения поиска раздач",
+          "body": "Прокрутка длинных списков стала плавнее. Исправили скачивание и добавление раздач из Jackett."
         }
       ]
     },
@@ -43,29 +34,19 @@
       "detailsTitle": "Full release notes",
       "features": [
         {
-          "symbol": "sidebar.left",
-          "title": "A refreshed interface",
-          "body": "A macOS-style sidebar, a refreshed library, and a native search field."
+          "symbol": "film",
+          "title": "Movie and TV catalog",
+          "body": "Explore collections, search by title or genre, and find torrents right from the details page."
         },
         {
-          "symbol": "magnifyingglass",
-          "title": "Find settings faster",
-          "body": "Search finds individual settings and smoothly scrolls to them."
+          "symbol": "arrow.triangle.2.circlepath",
+          "title": "Automatic connection",
+          "body": "In Auto mode, the catalog tries CUB when TMDB is unavailable. If both sources fail, the app shows why."
         },
         {
-          "symbol": "bell.badge",
-          "title": "Notification settings",
-          "body": "Check macOS authorization and send test notifications directly from Settings."
-        },
-        {
-          "symbol": "menubar.rectangle",
-          "title": "A refreshed TorrServe menu",
-          "body": "A translucent design with server controls right in the menu bar."
-        },
-        {
-          "symbol": "arrow.down.circle",
-          "title": "A better offline library",
-          "body": "Better torrent handling. Offline movies and series are grouped into cards."
+          "symbol": "wrench.and.screwdriver",
+          "title": "Torrent search improvements",
+          "body": "Long result lists scroll more smoothly. Fixed downloading and adding torrents from Jackett."
         }
       ]
     }

@@ -17,7 +17,6 @@ let showSpeedInMenuBarKey = "ShowSpeedInMenuBar"
 let hideDockIconKey = "HideDockIcon"
 let languageKey = "AppLanguage"
 let speedDisplayUnitKey = "SpeedDisplayUnit"
-let jackettSearchEnabledKey = "JackettSearchEnabled"
 let showsOfflineSectionKey = "ShowsOfflineSection"
 let productionBundleIdentifier = "com.holymayhem.torrserver"
 let legacyBundleIdentifier = "local.codex.torrserver-manager"
@@ -45,7 +44,6 @@ func migrateLegacyPreferencesIfNeeded() {
             notificationsEnabledKey,
             languageKey,
             speedDisplayUnitKey,
-            jackettSearchEnabledKey,
             "JackettServerURL",
             "JackettAPIKey",
             "LibraryPreferredPlayer",

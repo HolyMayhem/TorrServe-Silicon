@@ -249,9 +249,6 @@ extension AppDelegate {
             )
         }
         mainWindowModel.notificationPreferences = AppNotificationPreferences.load()
-        mainWindowModel.jackettEnabled = UserDefaults.standard.bool(
-            forKey: jackettSearchEnabledKey
-        )
         mainWindowModel.showsOfflineSection = UserDefaults.standard.bool(forKey: showsOfflineSectionKey)
         mainWindowModel.speedUnit = currentSpeedDisplayUnit
 

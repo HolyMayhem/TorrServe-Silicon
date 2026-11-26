@@ -103,6 +103,8 @@ struct SettingsView: View {
             appUpdatesSection
         case .downloads:
             offlineDownloadsSection
+        case .catalog:
+            CatalogSettingsView(text: CatalogText(language: model.language))
         case .metadata:
             metadataSection
             if model.metadataSource != .disabled {
@@ -582,15 +584,8 @@ struct SettingsView: View {
                     ? "TorrentSearch работает без отдельного сервера. Jackett можно подключить отдельно или использовать вместе с ним."
                     : "TorrentSearch needs no separate server. Connect Jackett as an alternative or search both together."
             ) {
-                toggleRow(
-                    model.language == .russian ? "Показывать раздел поиска" : "Show Search",
-                    keyPath: \.jackettEnabled,
-                    callback: model.onJackettEnabledChanged
-                )
-                Divider()
                 settingRow(model.language == .russian ? "TorrentSearch и Jackett" : "TorrentSearch & Jackett") {
                     Button(model.language == .russian ? "Настроить источники…" : "Configure Sources…") { model.onConfigureSearch?() }
-                        .disabled(!model.jackettEnabled)
                 }
             }
         }

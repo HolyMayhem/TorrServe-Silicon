@@ -6,6 +6,14 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      build_runner:
+        description: macOS runner for the application build
+        type: choice
+        options:
+          - macos-15
+          - macos-26
+        default: macos-15
 
 permissions:
   contents: read
@@ -16,7 +24,7 @@ concurrency:
 
 jobs:
   build-and-check:
-    runs-on: macos-15
+    runs-on: ${{ inputs.build_runner || 'macos-15' }}
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v5
@@ -43,6 +51,12 @@ jobs:
           xcrun --sdk macosx --show-sdk-version
       - name: Build application
         run: swift build -c debug
+      - name: Jackett and TorrServer addition checks
+        if: ${{ !cancelled() }}
+        run: ./scripts/verify-torrent-add.sh
+      - name: Media catalog checks
+        if: ${{ !cancelled() }}
+        run: ./scripts/verify-catalog.sh
       - name: Settings search checks
         if: ${{ !cancelled() }}
         run: ./scripts/verify-settings-search.sh
@@ -67,7 +81,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: menu-bar-native-previews-macos-15
+          name: menu-bar-native-previews-${{ inputs.build_runner || 'macos-15' }}
           path: .build/menu-bar-snapshots/*.png
           if-no-files-found: ignore
       - name: What’s New content and history checks
@@ -82,11 +96,12 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: whats-new-native-previews
+          name: whats-new-native-previews-${{ inputs.build_runner || 'macos-15' }}
           path: .build/whats-new-snapshots/*.png
           if-no-files-found: ignore
 
   menu-bar-macos-26:
+    if: ${{ inputs.build_runner != 'macos-26' }}
     runs-on: macos-26
     timeout-minutes: 15
     steps:

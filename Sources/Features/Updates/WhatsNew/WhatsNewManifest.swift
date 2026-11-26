@@ -16,6 +16,7 @@ struct WhatsNewManifest: Decodable, Equatable {
     let schemaVersion: Int
     let id: String
     let enabled: Bool
+    let showOnFreshInstall: Bool?
     let build: Int
     let detailsURL: URL?
     let localizations: [String: Content]
@@ -88,8 +89,9 @@ struct WhatsNewHistory {
             return false
         }
         let isUpgrade = previousBuild.map { currentBuild > $0 } ?? hadPreviousInstallation
+        let isEligibleFreshInstall = previousBuild == nil && !hadPreviousInstallation && manifest.showOnFreshInstall == true
         let isPendingRelaunch = previousBuild == currentBuild && pendingID == manifest.id
-        guard isUpgrade || isPendingRelaunch else {
+        guard isUpgrade || isEligibleFreshInstall || isPendingRelaunch else {
             defaults.removeObject(forKey: pendingKey)
             return false
         }

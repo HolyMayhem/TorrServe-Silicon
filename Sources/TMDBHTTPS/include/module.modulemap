@@ -1,0 +1,4 @@
+module TMDBHTTPS {
+    header "TMDBHTTPS.h"
+    export *
+}

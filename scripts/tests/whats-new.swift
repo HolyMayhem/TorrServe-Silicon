@@ -6,9 +6,12 @@ func expect(_ condition: @autoclosure () -> Bool, _ message: String) {
     guard condition() else { fatalError(message) }
 }
 let original = try JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[1]))) as! [String: Any]
-func makeManifest(build: Int = 42, id: String = "release-42", enabled: Bool = true) throws -> WhatsNewManifest {
+func makeManifest(
+    build: Int = 42, id: String = "release-42", enabled: Bool = true, showOnFreshInstall: Bool? = nil
+) throws -> WhatsNewManifest {
     var value = original
     value["build"] = build; value["id"] = id; value["enabled"] = enabled
+    value["showOnFreshInstall"] = showOnFreshInstall
     return try WhatsNewManifest.load(data: JSONSerialization.data(withJSONObject: value))
 }
 func rejects(_ value: [String: Any]) -> Bool {
@@ -39,6 +42,8 @@ invalid = original; invalid["build"] = 0
 expect(rejects(invalid), "Reject non-positive builds")
 invalid = original; invalid["enabled"] = "true"
 expect(rejects(invalid), "Reject string flags")
+invalid = original; invalid["showOnFreshInstall"] = 1
+expect(rejects(invalid), "Reject non-boolean fresh-install setting")
 invalid = original; invalid["localizations"] = [:]
 expect(rejects(invalid), "Require fallback content")
 var translations = original["localizations"] as! [String: Any]
@@ -52,6 +57,15 @@ expect(!rejects(invalid), "Details link is optional")
 let fresh = WhatsNewHistory(defaults: makeDefaults())
 expect(!fresh.prepareLaunch(currentBuild: 42, manifest: announcement, hadPreviousInstallation: false), "No announcement on a fresh install")
 expect(!fresh.prepareLaunch(currentBuild: 42, manifest: announcement, hadPreviousInstallation: false), "No fresh-install announcement on the second launch either")
+let freshRelease = try makeManifest(build: 43, id: "catalog", showOnFreshInstall: true)
+let cleanInstall = WhatsNewHistory(defaults: makeDefaults())
+expect(cleanInstall.prepareLaunch(currentBuild: 43, manifest: freshRelease, hadPreviousInstallation: false), "Eligible release announces on a clean install")
+expect(cleanInstall.prepareLaunch(currentBuild: 43, manifest: freshRelease, hadPreviousInstallation: true), "Reopen until the new user continues")
+cleanInstall.acknowledge(freshRelease.id)
+expect(!cleanInstall.prepareLaunch(currentBuild: 43, manifest: freshRelease, hadPreviousInstallation: true), "Acknowledged first-install announcement is not repeated")
+let downgrade = WhatsNewHistory(defaults: makeDefaults())
+_ = downgrade.prepareLaunch(currentBuild: 44, manifest: nil, hadPreviousInstallation: false)
+expect(!downgrade.prepareLaunch(currentBuild: 43, manifest: freshRelease, hadPreviousInstallation: true), "Fresh-install option does not enable downgrade announcements")
 let defaults = makeDefaults()
 let history = WhatsNewHistory(defaults: defaults)
 expect(!history.prepareLaunch(currentBuild: 41, manifest: nil, hadPreviousInstallation: false), "Record the baseline without an announcement")
