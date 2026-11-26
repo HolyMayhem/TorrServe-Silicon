@@ -128,6 +128,10 @@ final class JackettClient: Sendable {
             do {
                 let transport = canAuthorize ? session : externalSession
                 (data, response) = try await transport.data(for: request)
+            } catch let error as URLError where error.code == .noPermissionsToReadFile {
+                // CFNetwork can reject a redirect to file: before exposing the HTTP response.
+                // The original request is always HTTP(S).
+                throw TorrentAddError.unsafeRedirect
             } catch {
                 try Task.checkCancellation()
                 throw TorrentAddError.downloadNetwork((error as NSError).code)

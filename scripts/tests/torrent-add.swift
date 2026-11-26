@@ -19,16 +19,16 @@ private func check(_ condition: Bool, _ label: String) throws {
 }
 
 private func expectError(
-    _ stage: String, _ category: String, code: Int = 0,
+    _ stage: String, _ category: String, code: Int = 0, context: String = "Request",
     _ action: () async throws -> Void
 ) async throws {
     do {
         try await action()
-        throw TestFailure("Expected \(stage)/\(category)")
+        throw TestFailure("\(context) expected \(stage)/\(category)")
     } catch let error as TorrentAddError {
         let actual = error.diagnostic
         try check(actual.stage == stage && actual.category == category && actual.code == code,
-                  "Expected \(stage)/\(category)/\(code), got \(actual)")
+                  "\(context) expected \(stage)/\(category)/\(code), got \(actual)")
     }
 }
 
@@ -189,7 +189,7 @@ private enum Checks {
             _ = try await client.download(release(origin + "/missing-location"), configuration: configuration)
         }
         for path in ["/cross-key", "/cross-token?token=session-secret", "/cross-chain?token=session-secret", "/cross-userinfo", "/unsafe"] {
-            try await expectError("redirect", "credentials_or_scheme") {
+            try await expectError("redirect", "credentials_or_scheme", context: path) {
                 _ = try await client.download(release(origin + path), configuration: configuration)
             }
         }
