@@ -6,6 +6,36 @@
         <description>Stable TorrServe Silicon application updates.</description>
         <language>en</language>
         <item>
+            <title>2.10.0</title>
+            <pubDate>Thu, 26 Nov 2026 23:10:01 +0000</pubDate>
+            <link>https://github.com/HolyMayhem/TorrServe-Silicon/releases/tag/v2.10</link>
+            <sparkle:version>43</sparkle:version>
+            <sparkle:shortVersionString>2.10.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[# TorrServe Silicon 2.10
+
+## Movie and TV Catalog
+
+- Browse trending titles, new releases, popular movies and series, and top-rated picks.
+- Search by title or browse by genre, with filters for year and rating. More results load automatically as you scroll.
+- Open a movie or series to see its synopsis, cast, trailer, and seasons where available. Start a torrent search directly from the title’s page.
+- In Auto mode, the catalog switches to CUB when TMDB is unavailable. If neither source responds, the app explains the problem and offers a retry.
+
+## Improvements and Fixes
+
+- The catalog remembers where you left off when you switch to the library and back.
+- Improved scrolling through long torrent search results.
+- Fixed Jackett download redirects and improved validation and error messages when adding torrents to TorrServer.
+- The What’s New window appears after updating or finishing first-time setup.
+
+## System Requirements
+
+macOS 15 or later on a Mac with Apple Silicon.
+]]></description>
+            <enclosure url="https://github.com/HolyMayhem/TorrServe-Silicon/releases/download/v2.10/TorrServer-2.10.0-macOS-arm64.dmg" length="19417478" type="application/octet-stream" sparkle:edSignature="RInHKWjjJkmrwA7HRVg/tkicaHsJZknI4LhzNBkHbCcNyTvY1Nko8gHhJPIisj2Tni7MiMym6DJCdqH1GpTNDA=="/>
+        </item>
+        <item>
             <title>2.9.0</title>
             <pubDate>Fri, 30 Oct 2026 21:12:11 +0000</pubDate>
             <link>https://github.com/HolyMayhem/TorrServe-Silicon/releases</link>
