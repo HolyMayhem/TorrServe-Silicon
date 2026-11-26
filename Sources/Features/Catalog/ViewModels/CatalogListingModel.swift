@@ -11,7 +11,7 @@ struct CatalogRequest: Hashable, Sendable {
 final class CatalogListingModel: ObservableObject {
     @Published private(set) var items: [CatalogItem] = []
     @Published private(set) var loading = false
-    @Published private(set) var failed = false
+    @Published private(set) var failure: CatalogLoadFailure?
     @Published private(set) var hasMore = false
 
     private var request: CatalogRequest?
@@ -19,7 +19,11 @@ final class CatalogListingModel: ObservableObject {
     private var source: CatalogSource?
     private var generation = UUID()
 
-    func start(_ request: CatalogRequest, repository: CatalogRepository) async {
+    func start(_ request: CatalogRequest, repository: CatalogRepository, retrying: Bool = false) async {
+        if self.request == request, retrying {
+            await loadMore(repository, for: request)
+            return
+        }
         if self.request == request, nextPage > 1 { return }
         let refresh = self.request.map { $0.revision != request.revision } ?? (request.revision != 0)
         self.request = request
@@ -31,8 +35,8 @@ final class CatalogListingModel: ObservableObject {
         await load(repository, refresh: refresh)
     }
 
-    func loadMore(_ repository: CatalogRepository) async {
-        guard !loading, failed || hasMore else { return }
+    func loadMore(_ repository: CatalogRepository, for request: CatalogRequest) async {
+        guard self.request == request, !loading, failure != nil || hasMore else { return }
         await load(repository)
     }
 
@@ -40,7 +44,7 @@ final class CatalogListingModel: ObservableObject {
         guard let request else { return }
         let currentGeneration = generation
         loading = true
-        failed = false
+        failure = nil
         defer { if generation == currentGeneration { loading = false } }
 
         do {
@@ -62,8 +66,11 @@ final class CatalogListingModel: ObservableObject {
                 if !additions.isEmpty || !hasMore { return }
             }
         } catch {
-            guard !Task.isCancelled, generation == currentGeneration else { return }
-            failed = true
+            guard !Task.isCancelled, !(error is CancellationError), (error as? URLError)?.code != .cancelled,
+                  generation == currentGeneration else { return }
+            failure = error as? CatalogLoadFailure ?? CatalogLoadFailure(
+                attempts: [.init(source: source ?? (request.connection.source == .cub ? .cub : .tmdb), reason: .init(error))]
+            )
         }
     }
 }

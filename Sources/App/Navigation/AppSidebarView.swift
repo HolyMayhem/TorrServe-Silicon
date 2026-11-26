@@ -28,10 +28,7 @@ struct AppSidebarView: View {
 
     private var expandedSidebar: some View {
         VStack(spacing: 0) {
-            Text("TorrServe")
-                .font(.system(size: 20, weight: .semibold))
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+            NewYearSidebarTitle(forcePreview: mainModel.previewsNewYearEffect)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 18)
                 .padding(.top, 18)

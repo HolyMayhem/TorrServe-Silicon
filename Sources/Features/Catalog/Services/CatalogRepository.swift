@@ -15,36 +15,47 @@ struct CatalogRepository: Sendable {
         connection: CatalogConnection, preferredSource: CatalogSource? = nil, refresh: Bool = false
     ) async throws -> CatalogBrowsePage {
         let source: CatalogSource = (preferredSource ?? connection.source) == .cub ? .cub : .tmdb
-        let key = CatalogCache.Key.page(listing, number, language, source, connection)
+        var cacheConnection = connection
+        cacheConnection.tmdb.simulatesOutage = false
+        cacheConnection.simulatesCUBOutage = false
+        let sourceUnavailable = source == .cub ? connection.simulatesCUBOutage : connection.tmdb.simulatesOutage
+        let key = CatalogCache.Key.page(listing, number, language, source, cacheConnection)
         do {
+            if sourceUnavailable { throw CatalogLoadFailure.Reason.simulated }
             return try await load(
                 listing, number: number, language: language, source: source, connection: connection, key: key, refresh: refresh
             )
         } catch {
             try Task.checkCancellation()
             guard (error as? URLError)?.code != .cancelled else { throw error }
-            if source == .tmdb, connection.source == .auto {
+            var attempts = [CatalogLoadFailure.Attempt(source: source, reason: .init(error))]
+            if source == .tmdb, connection.source == .auto, !connection.simulatesCUBOutage {
                 // The providers have different page boundaries. Start at CUB's first page.
-                let fallbackKey = CatalogCache.Key.page(listing, 1, language, .cub, connection)
+                let fallbackKey = CatalogCache.Key.page(listing, 1, language, .cub, cacheConnection)
                 do {
                     return try await load(
                         listing, number: 1, language: language, source: .cub, connection: connection, key: fallbackKey, refresh: refresh
                     )
                 } catch {
                     try Task.checkCancellation()
+                    guard (error as? URLError)?.code != .cancelled else { throw error }
                     if case .page(let page) = await cache.value(for: fallbackKey, allowingStale: true) {
                         return CatalogBrowsePage(page: page, source: .cub)
                     }
+                    attempts.append(.init(source: .cub, reason: .init(error)))
                 }
+            } else if source == .tmdb, connection.source == .auto {
+                attempts.append(.init(source: .cub, reason: .simulated))
             }
-            if case .page(let page) = await cache.value(for: key, allowingStale: true) {
+            if !sourceUnavailable, case .page(let page) = await cache.value(for: key, allowingStale: true) {
                 return CatalogBrowsePage(page: page, source: source)
             }
-            throw error
+            throw CatalogLoadFailure(attempts: attempts)
         }
     }
 
     func details(_ identity: CatalogIdentity, language: String, connection: CatalogTMDBConnection) async throws -> CatalogDetails {
+        if connection.simulatesOutage { throw URLError(.notConnectedToInternet) }
         let key = CatalogCache.Key.details(identity, language, connection)
         if case .details(let result) = await cache.value(for: key) { return result }
         do {
@@ -60,6 +71,7 @@ struct CatalogRepository: Sendable {
     }
 
     func genres(kind: MediaKind, language: String, connection: CatalogTMDBConnection) async throws -> [CatalogGenre] {
+        if connection.simulatesOutage { throw URLError(.notConnectedToInternet) }
         let key = CatalogCache.Key.genres(kind, language, connection)
         if case .genres(let values) = await cache.value(for: key) { return values }
         let values = try await tmdb.genres(kind: kind, language: language, connection: connection)

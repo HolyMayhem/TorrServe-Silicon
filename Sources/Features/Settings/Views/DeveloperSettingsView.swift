@@ -71,9 +71,42 @@ struct DeveloperSettingsView: View {
                 .searchableSetting(isRussian ? "Предпросмотр «Что нового»" : "What’s New preview")
             }
 
+            ServerSettingsGroup(title: isRussian ? "Новогодняя пасхалка" : "New Year Easter egg") {
+                let title = isRussian ? "Принудительно включить перелив" : "Force the New Year shimmer"
+                HStack {
+                    Text(title)
+                    Spacer()
+                    Toggle(title, isOn: $model.previewsNewYearEffect)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .accessibilityIdentifier("developer-new-year-preview")
+                }
+                .padding(.vertical, 12)
+                .searchableSetting(title)
+            }
+
             OfflineDownloadsPreviewControls(model: model, preview: model.offlineDownloadsPreview)
 
             MatrixDowngradeSettingsView(model: model)
+
+            ServerSettingsGroup(
+                title: isRussian ? "Доступность каталога" : "Catalog availability",
+                footer: isRussian
+                    ? "Включите один или оба переключателя, чтобы проверить работу каталога при сбое. После перезапуска имитация сбрасывается."
+                    : "Enable one or both switches to test how the catalog handles an outage. Simulation resets on restart."
+            ) {
+                let tmdbTitle = isRussian ? "Имитировать недоступность TMDB" : "Simulate TMDB outage"
+                let cubTitle = isRussian ? "Имитировать недоступность CUB" : "Simulate CUB outage"
+                Toggle(tmdbTitle, isOn: $model.simulatesCatalogTMDBOutage)
+                    .toggleStyle(.switch)
+                    .padding(.vertical, 12)
+                    .searchableSetting(tmdbTitle)
+                Divider()
+                Toggle(cubTitle, isOn: $model.simulatesCatalogCUBOutage)
+                    .toggleStyle(.switch)
+                    .padding(.vertical, 12)
+                    .searchableSetting(cubTitle)
+            }
 
             ServerSettingsGroup(title: isRussian ? "Системные уведомления" : "System notifications") {
                 NotificationSettingsStatusView(model: model)

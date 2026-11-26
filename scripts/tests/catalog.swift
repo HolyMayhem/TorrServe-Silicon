@@ -36,6 +36,15 @@ private final class CatalogFixture: URLProtocol {
         case ("tmdb.fixture", "/3/movie/popular"):
             status = query.contains(URLQueryItem(name: "api_key", value: "fixture-key")) ? 503 : 401
             body = "{}"
+        case ("tmdb.fixture", "/3/movie/top_rated"):
+            status = 200
+            body = #"{"page":1,"total_pages":1,"results":[{"id":7,"title":"Rated Movie"}]}"#
+        case ("tmdb.fixture", "/3/tv/top_rated"):
+            status = 200
+            body = #"{"page":1,"total_pages":1,"results":[{"id":8,"name":"Rated Show"}]}"#
+        case ("tmdb.fixture", "/3/genre/tv/list"):
+            status = 200
+            body = #"{"genres":[{"id":18,"name":"Drama"}]}"#
         case ("cub.fixture", "/catalog"), ("cub.fixture", "/catalog/"):
             status = request.value(forHTTPHeaderField: "token") == "fixture-token" ? 200 : 401
             body = """
@@ -138,6 +147,8 @@ struct CatalogChecks {
         try expect(details.trailer?.host == "www.youtube.com", "A supported trailer should produce a link")
         try expect(CatalogTorrentContext(item: series, details: details).queries == ["Сериал 2024", "Series 2024"],
                    "Torrent searches should use localized and original title and year")
+        try await checkOutageSimulation(repository: repository, connection: connection, series: series.id)
+        try checkFailureReasons()
         try expect(CatalogConnection.endpoint("https://user:secret@host.test") == nil &&
                    CatalogConnection.endpoint("http://host.test") == nil, "Catalog endpoints must use HTTPS without credentials")
         try expect(CatalogImageURL.make("/../poster.png", size: "w342") == nil, "Artwork must be a simple TMDB path")
@@ -148,5 +159,104 @@ struct CatalogChecks {
         let reopened = try JSONDecoder().decode(LibraryMetadata.self, from: JSONEncoder().encode(linked))
         try expect(reopened.catalogIdentity == series.id, "Library links must survive reloading")
         print("Catalog checks passed")
+    }
+
+    private static func checkOutageSimulation(
+        repository: CatalogRepository, connection: CatalogConnection, series: CatalogIdentity
+    ) async throws {
+        let rated = CatalogListing.collection(.topRated)
+        let popular = CatalogListing.collection(.popularMovies)
+        let language = "ru-RU"
+        let healthy = try await repository.page(rated, number: 1, language: language, connection: connection)
+        try expect(healthy.source == .tmdb, "Auto should prefer TMDB when both sources work")
+        let genres = try await repository.genres(kind: .tv, language: language, connection: connection.tmdb)
+        try expect(genres.first?.id == 18, "TMDB genres should be cached before simulation")
+
+        var simulated = connection
+        simulated.tmdb.simulatesOutage = true
+        let fallback = try await repository.page(rated, number: 1, language: language, connection: simulated)
+        try expect(fallback.source == .cub, "A cached TMDB page must not hide a simulated TMDB outage")
+        try await expectOffline {
+            _ = try await repository.details(series, language: language, connection: simulated.tmdb)
+        }
+        try await expectOffline {
+            _ = try await repository.genres(kind: .tv, language: language, connection: simulated.tmdb)
+        }
+        simulated.source = .tmdb
+        try await expectFailure([.init(source: .tmdb, reason: .simulated)]) {
+            _ = try await repository.page(rated, number: 1, language: language, connection: simulated)
+        }
+
+        simulated = connection
+        simulated.simulatesCUBOutage = true
+        let tmdbOnly = try await repository.page(rated, number: 1, language: language, connection: simulated)
+        try expect(tmdbOnly.source == .tmdb, "TMDB should stay available during a CUB outage")
+        try await expectFailure([.init(source: .tmdb, reason: .serviceError(503)), .init(source: .cub, reason: .simulated)]) {
+            _ = try await repository.page(popular, number: 1, language: language, connection: simulated)
+        }
+        simulated.source = .cub
+        try await expectFailure([.init(source: .cub, reason: .simulated)]) {
+            _ = try await repository.page(popular, number: 1, language: language, connection: simulated)
+        }
+
+        simulated.source = .auto
+        simulated.tmdb.simulatesOutage = true
+        try await expectFailure([.init(source: .tmdb, reason: .simulated), .init(source: .cub, reason: .simulated)]) {
+            _ = try await repository.page(rated, number: 1, language: language, connection: simulated)
+        }
+        let recovered = try await repository.page(rated, number: 1, language: language, connection: connection)
+        try expect(recovered.source == .tmdb, "Disabling simulation should restore the real catalog")
+
+        var invalidToken = connection
+        invalidToken.cubToken = "rejected-token"
+        try await expectFailure([.init(source: .tmdb, reason: .serviceError(503)), .init(source: .cub, reason: .accessDenied(401))]) {
+            _ = try await repository.page(popular, number: 1, language: language, connection: invalidToken)
+        }
+    }
+
+    private static func expectFailure(
+        _ attempts: [CatalogLoadFailure.Attempt],
+        _ request: () async throws -> Void
+    ) async throws {
+        do {
+            try await request()
+            throw CatalogTestFailure(message: "Expected a catalog load failure")
+        } catch let failure as CatalogLoadFailure {
+            try expect(failure.attempts == attempts, "Expected \(attempts), got \(failure.attempts)")
+        }
+    }
+
+    private static func checkFailureReasons() throws {
+        let cases: [(Error, CatalogLoadFailure.Reason)] = [
+            (URLError(.notConnectedToInternet), .offline),
+            (URLError(.cannotFindHost), .dns),
+            (URLError(.dnsLookupFailed), .dns),
+            (URLError(.cannotConnectToHost), .connection),
+            (URLError(.networkConnectionLost), .connection),
+            (URLError(.timedOut), .timeout),
+            (URLError(.serverCertificateUntrusted), .secureConnection),
+            (URLError(.badURL), .invalidRequest),
+            (URLError(.dataNotAllowed), .otherNetworkError(URLError.Code.dataNotAllowed.rawValue)),
+            (MetadataServiceError.notConfigured(.tmdb), .missingKey),
+            (MetadataServiceError.invalidRequest, .invalidRequest),
+            (MetadataServiceError.httpStatus(403), .accessDenied(403)),
+            (MetadataServiceError.httpStatus(451), .accessDenied(451)),
+            (MetadataServiceError.httpStatus(429), .rateLimited),
+            (MetadataServiceError.httpStatus(502), .serviceError(502)),
+            (MetadataServiceError.httpStatus(302), .unexpectedHTTPStatus(302)),
+            (MetadataServiceError.decodingFailed, .invalidResponse),
+            (MetadataServiceError.api("raw response contents"), .invalidResponse),
+            (CatalogTestFailure(message: "unexpected error"), .unknown)
+        ]
+        for (error, reason) in cases {
+            try expect(CatalogLoadFailure.Reason(error) == reason, "Wrong diagnosis for \(error)")
+        }
+    }
+
+    private static func expectOffline(_ request: () async throws -> Void) async throws {
+        do {
+            try await request()
+            throw CatalogTestFailure(message: "Expected a simulated provider outage")
+        } catch let error as URLError where error.code == .notConnectedToInternet {}
     }
 }

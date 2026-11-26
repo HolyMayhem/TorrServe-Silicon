@@ -124,6 +124,26 @@ struct WhatsNewUIChecks {
         expect(reopened.presentedWindow == nil, "An acknowledged announcement does not reopen")
         expect(reopened.preview(languageCode: "en", relativeTo: parent), "Developer preview still works after acknowledgement")
         reopened.continuePresentation()
+
+        let freshSuite = "TorrServeWhatsNewUITests.Fresh.\(UUID().uuidString)"
+        let freshDefaults = UserDefaults(suiteName: freshSuite)!
+        defer { freshDefaults.removePersistentDomain(forName: freshSuite) }
+        json["showOnFreshInstall"] = true
+        try JSONSerialization.data(withJSONObject: json).write(to: resource)
+        let fresh = WhatsNewWindowController(defaults: freshDefaults, resourceURL: resource, hadPreviousInstallation: false)
+        fresh.prepareLaunch(currentBuild: 43, appVersion: "2.10.0")
+        let playerSetup = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 180), styleMask: [.titled], backing: .buffered, defer: false
+        )
+        parent.beginSheet(playerSetup)
+        fresh.observePresentationOpportunities(parent: parent) { "en" }
+        pump(0.25)
+        expect(fresh.presentedWindow == nil, "A clean-install announcement waits behind first-run setup")
+        parent.endSheet(playerSetup)
+        wait("The clean-install announcement opens after setup") { fresh.presentedWindow?.isVisible == true }
+        checkCompleteLayout(fresh.presentedWindow!)
+        fresh.continuePresentation()
+
         print("Native What’s New UI: \(checks) checks passed")
     }
 }

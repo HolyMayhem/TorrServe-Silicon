@@ -6,9 +6,7 @@ struct CatalogDetailsView: View {
     let connection: CatalogConnection
     let text: CatalogText
     let openItem: (CatalogItem) -> Void
-    let goBack: () -> Void
     let findTorrents: (CatalogTorrentContext) -> Void
-    @Environment(\.settingsSidebarIsVisible) private var isSidebarVisible
     @State private var details: CatalogDetails?
     @State private var failed = false
     @State private var retry = 0
@@ -17,10 +15,7 @@ struct CatalogDetailsView: View {
     private var overview: String { displayItem.overview.isEmpty ? item.overview : displayItem.overview }
 
     var body: some View {
-        Group {
-            if item.id.kind == .movie { moviePage } else { seriesPage }
-        }
-        .task(id: DetailsRequest(language: text.apiLanguage, connection: connection.tmdb, retry: retry, identity: item.id)) {
+        detailPage.task(id: DetailsRequest(language: text.apiLanguage, connection: connection.tmdb, retry: retry, identity: item.id)) {
             failed = false
             details = nil
             do {
@@ -32,17 +27,17 @@ struct CatalogDetailsView: View {
         }
     }
 
-    private var moviePage: some View {
+    private var detailPage: some View {
         GeometryReader { geometry in
             CatalogScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    movieHero(height: min(400, max(340, geometry.size.width * 0.44)))
+                    detailHero(height: min(400, max(340, geometry.size.width * 0.44)))
 
                     VStack(alignment: .leading, spacing: 28) {
-                        if !overview.isEmpty { movieOverview }
+                        if !overview.isEmpty { detailOverview }
                         if details == nil { detailsStatus }
                         if let details {
-                            if !details.cast.isEmpty { movieCast(details.cast) }
+                            if !details.cast.isEmpty { detailCast(details.cast) }
                             if !details.seasons.isEmpty { seasons(details.seasons) }
                             if !details.similar.isEmpty { similar(details.similar) }
                         }
@@ -61,24 +56,9 @@ struct CatalogDetailsView: View {
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
         }
-        .overlay(alignment: .topLeading) {
-            Button(action: goBack) {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 15, weight: .semibold))
-                    .frame(width: 24, height: 24)
-            }
-            .controlSize(.large)
-            .buttonBorderShape(.circle)
-            .liquidGlassControl()
-            .accessibilityLabel(text("Back", "Назад"))
-            .help(text("Back", "Назад"))
-            .accessibilityIdentifier("catalog-movie-back")
-            .padding(.leading, isSidebarVisible ? 28 : SettingsScreenLayout.collapsedHeaderLeadingPadding)
-            .padding(.top, 8)
-        }
     }
 
-    private func movieHero(height: CGFloat) -> some View {
+    private func detailHero(height: CGFloat) -> some View {
         HStack(alignment: .bottom, spacing: 24) {
             CatalogPoster(url: displayItem.poster ?? item.poster)
                 .frame(width: 140, height: 210)
@@ -88,7 +68,7 @@ struct CatalogDetailsView: View {
             VStack(alignment: .leading, spacing: 7) {
                 Text(displayItem.title)
                     .font(.system(size: 36, weight: .semibold))
-                    .foregroundStyle(MoviePalette.foreground)
+                    .foregroundStyle(CatalogDetailsPalette.foreground)
                     .lineLimit(2)
                     .minimumScaleFactor(0.8)
                     .textSelection(.enabled)
@@ -97,25 +77,25 @@ struct CatalogDetailsView: View {
                 if !displayItem.originalTitle.isEmpty, displayItem.originalTitle != displayItem.title {
                     Text(displayItem.originalTitle)
                         .font(.system(size: 16))
-                        .foregroundStyle(MoviePalette.secondary)
+                        .foregroundStyle(CatalogDetailsPalette.secondary)
                         .lineLimit(2)
                         .textSelection(.enabled)
                 }
 
                 Text(facts.joined(separator: "  •  "))
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(MoviePalette.foreground.opacity(0.84))
+                    .foregroundStyle(CatalogDetailsPalette.foreground.opacity(0.84))
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
 
                 if let genres = details?.genres, !genres.isEmpty {
                     Text(genres.map(\.name).joined(separator: " · "))
                         .font(.system(size: 13))
-                        .foregroundStyle(MoviePalette.secondary)
+                        .foregroundStyle(CatalogDetailsPalette.secondary)
                         .lineLimit(2)
                 }
 
-                movieActions.padding(.top, 9)
+                detailActions.padding(.top, 9)
             }
             .frame(maxWidth: 680, alignment: .leading)
         }
@@ -156,30 +136,30 @@ struct CatalogDetailsView: View {
         }
     }
 
-    private var movieActions: some View {
+    private var detailActions: some View {
         HStack(spacing: 11) {
             Button {
                 findTorrents(CatalogTorrentContext(item: item, details: details))
             } label: {
                 Label(text("Find Torrents", "Найти раздачи"), systemImage: "magnifyingglass")
             }
-            .buttonStyle(MovieActionStyle(minimumWidth: 158))
+            .buttonStyle(CatalogDetailsActionStyle(minimumWidth: 158))
             .accessibilityIdentifier("catalog-find-torrents")
 
             if let url = details?.trailer {
                 Link(destination: url) {
                     Label(text("Trailer", "Трейлер"), systemImage: "play.fill")
                 }
-                .buttonStyle(MovieActionStyle(minimumWidth: 112))
+                .buttonStyle(CatalogDetailsActionStyle(minimumWidth: 112))
                 .accessibilityIdentifier("catalog-movie-trailer")
             }
         }
         .fixedSize(horizontal: true, vertical: false)
     }
 
-    private var movieOverview: some View {
+    private var detailOverview: some View {
         VStack(alignment: .leading, spacing: 10) {
-            movieHeading(text("Overview", "Описание"))
+            detailHeading(text("Overview", "Описание"))
             Text(overview)
                 .font(.system(size: 15))
                 .foregroundStyle(.primary)
@@ -190,9 +170,9 @@ struct CatalogDetailsView: View {
         .frame(maxWidth: 740, alignment: .leading)
     }
 
-    private func movieCast(_ cast: [CatalogCastMember]) -> some View {
+    private func detailCast(_ cast: [CatalogCastMember]) -> some View {
         VStack(alignment: .leading, spacing: 16) {
-            movieHeading(text("Cast", "Актёрский состав"))
+            detailHeading(text("Cast", "Актёрский состав"))
             CatalogScrollView(axis: .horizontal) {
                 HStack(alignment: .top, spacing: 22) {
                     ForEach(Array(cast.enumerated()), id: \.offset) { _, member in
@@ -225,90 +205,11 @@ struct CatalogDetailsView: View {
         }
     }
 
-    private func movieHeading(_ title: String) -> some View {
+    private func detailHeading(_ title: String) -> some View {
         Text(title)
             .font(.system(size: 21, weight: .semibold))
             .foregroundStyle(.primary)
             .accessibilityAddTraits(.isHeader)
-    }
-
-    private var seriesPage: some View {
-        CatalogScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                hero
-
-                if details == nil {
-                    detailsStatus
-                }
-
-                if !overview.isEmpty {
-                    Text(overview).textSelection(.enabled)
-                }
-
-                if let details {
-                    if !details.cast.isEmpty { cast(details.cast) }
-                    if !details.seasons.isEmpty { seasons(details.seasons) }
-                    if !details.similar.isEmpty { similar(details.similar) }
-                }
-            }
-            .frame(maxWidth: 1080, alignment: .leading)
-            .padding(20)
-            .frame(maxWidth: .infinity)
-        }
-    }
-
-    private var hero: some View {
-        HStack(alignment: .bottom, spacing: 18) {
-            CatalogPoster(url: displayItem.poster ?? item.poster)
-                .frame(width: 132, height: 198)
-                .clipShape(.rect(cornerRadius: 8))
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text(displayItem.title).font(.largeTitle.weight(.semibold))
-                    .textSelection(.enabled)
-                if !displayItem.originalTitle.isEmpty, displayItem.originalTitle != displayItem.title {
-                    Text(displayItem.originalTitle).font(.title3).foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                }
-                Text(facts.joined(separator: "  •  ")).foregroundStyle(.secondary)
-                if let genres = details?.genres, !genres.isEmpty {
-                    Text(genres.map(\.name).joined(separator: " · ")).foregroundStyle(.secondary)
-                }
-                HStack(spacing: 12) {
-                    Button {
-                        findTorrents(CatalogTorrentContext(item: item, details: details))
-                    } label: {
-                        Label(text("Find Torrents", "Найти раздачи"), systemImage: "magnifyingglass")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .accessibilityIdentifier("catalog-find-torrents")
-
-                    if let url = details?.trailer {
-                        Link(destination: url) {
-                            Label(text("Trailer", "Трейлер"), systemImage: "play.rectangle")
-                        }
-                    }
-                }
-                .padding(.top, 4)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(16)
-        .background {
-            if let backdrop = displayItem.backdrop ?? item.backdrop {
-                CatalogPoster(url: backdrop)
-                    .overlay {
-                        LinearGradient(
-                            colors: [Color(nsColor: .windowBackgroundColor).opacity(0.38), Color(nsColor: .windowBackgroundColor)],
-                            startPoint: .topTrailing, endPoint: .bottomLeading
-                        )
-                    }
-                    .opacity(0.45)
-            } else {
-                Color.primary.opacity(0.03)
-            }
-        }
-        .clipShape(.rect(cornerRadius: 12))
     }
 
     private var facts: [String] {
@@ -342,30 +243,9 @@ struct CatalogDetailsView: View {
         }
     }
 
-    private func cast(_ cast: [CatalogCastMember]) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(text("Cast", "Актёрский состав")).font(.title3.weight(.semibold))
-            CatalogScrollView(axis: .horizontal) {
-                LazyHStack(alignment: .top, spacing: 14) {
-                    ForEach(Array(cast.enumerated()), id: \.offset) { _, member in
-                        VStack(alignment: .leading, spacing: 4) {
-                            CatalogPoster(url: member.portrait).frame(width: 80, height: 104)
-                                .clipShape(.rect(cornerRadius: 8))
-                            Text(member.name).font(.callout.weight(.medium)).lineLimit(2)
-                            if let character = member.character, !character.isEmpty {
-                                Text(character).font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                            }
-                        }
-                        .frame(width: 94, alignment: .leading)
-                    }
-                }
-            }
-        }
-    }
-
     private func seasons(_ seasons: [CatalogSeason]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(text("Seasons", "Сезоны")).font(.title3.weight(.semibold))
+            detailHeading(text("Seasons", "Сезоны"))
             ForEach(seasons) { season in
                 HStack {
                     Text(season.name)
@@ -385,7 +265,7 @@ struct CatalogDetailsView: View {
 
     private func similar(_ items: [CatalogItem]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(text("Similar Titles", "Похожие произведения")).font(.title3.weight(.semibold))
+            detailHeading(text("Similar Titles", "Похожие произведения"))
             CatalogScrollView(axis: .horizontal) {
                 LazyHStack(alignment: .top, spacing: 14) {
                     ForEach(items) { item in
@@ -405,20 +285,20 @@ struct CatalogDetailsView: View {
     }
 }
 
-private enum MoviePalette {
+private enum CatalogDetailsPalette {
     static let foreground = Color(red: 245 / 255, green: 245 / 255, blue: 247 / 255)
     static let secondary = Color(red: 161 / 255, green: 161 / 255, blue: 170 / 255)
     static let buttonText = Color(red: 23 / 255, green: 23 / 255, blue: 23 / 255)
 }
 
-private struct MovieActionStyle: ButtonStyle {
+private struct CatalogDetailsActionStyle: ButtonStyle {
     let minimumWidth: CGFloat
     @State private var isHovered = false
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(MoviePalette.buttonText)
+            .foregroundStyle(CatalogDetailsPalette.buttonText)
             .padding(.horizontal, 17)
             .frame(minWidth: minimumWidth)
             .frame(height: 42)

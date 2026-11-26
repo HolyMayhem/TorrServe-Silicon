@@ -115,7 +115,18 @@ final class MainWindowModel: ObservableObject {
     @Published var notificationPreferences = AppNotificationPreferences.defaults
     @Published var notificationSystemState = NotificationSystemState()
     @Published var lastNotificationResult: NotificationDeliveryResult?
-    @Published var developerMenuEnabled = false
+    @Published var developerMenuEnabled = false {
+        didSet {
+            if !developerMenuEnabled {
+                simulatesCatalogTMDBOutage = false
+                simulatesCatalogCUBOutage = false
+                previewsNewYearEffect = false
+            }
+        }
+    }
+    @Published var simulatesCatalogTMDBOutage = false
+    @Published var simulatesCatalogCUBOutage = false
+    @Published var previewsNewYearEffect = false
     @Published var canPreviewWhatsNew = false
     @Published var whatsNewPreviewError: String?
     @Published var olderMatrixReleases: [TorrServerDowngradeRelease] = []

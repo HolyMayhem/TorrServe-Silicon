@@ -10,6 +10,7 @@ struct CatalogTMDBConnection: Hashable, Sendable {
     var route: CatalogTMDBRoute = .direct
     var proxy: URL?
     var timeout = 12.0
+    var simulatesOutage = false
 }
 
 struct CatalogConnection: Hashable, Sendable {
@@ -20,6 +21,7 @@ struct CatalogConnection: Hashable, Sendable {
     var cubToken = ""
     var tmdb = CatalogTMDBConnection()
     var imageMirror: URL?
+    var simulatesCUBOutage = false
 
     var timeout: TimeInterval { tmdb.timeout }
 

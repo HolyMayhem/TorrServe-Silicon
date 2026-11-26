@@ -7,10 +7,11 @@ struct CatalogScrollView<Content: View>: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var metrics = AppScrollMetrics.zero
     @State private var showsIndicator = false
-    private let fadeLength: CGFloat = 18
+    private var fadeLength: CGFloat { axis == .vertical ? 42 : 18 }
 
     private var leadingFade: Double {
-        Double(min(1, max(0, metrics.offset) / fadeLength))
+        let activationDistance = axis == .vertical ? 16.0 : fadeLength
+        return Double(min(1, max(0, metrics.offset) / activationDistance))
     }
 
     private var trailingFade: Double {
@@ -40,21 +41,35 @@ struct CatalogScrollView<Content: View>: View {
             GeometryReader { proxy in
                 let length = axis == .vertical ? proxy.size.height : proxy.size.width
                 let edge = min(0.5, fadeLength / max(1, length))
-                LinearGradient(
-                    stops: [
-                        .init(color: .black.opacity(1 - leadingFade), location: 0),
-                        .init(color: .black, location: edge),
-                        .init(color: .black, location: 1 - edge),
-                        .init(color: .black.opacity(1 - trailingFade), location: 1)
-                    ],
-                    startPoint: axis == .vertical ? .top : .leading,
-                    endPoint: axis == .vertical ? .bottom : .trailing
-                )
+                if axis == .vertical {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .black.opacity(1 - leadingFade), location: 0),
+                            .init(color: .black.opacity(1 - leadingFade * 0.92), location: edge * 0.18),
+                            .init(color: .black.opacity(1 - leadingFade * 0.52), location: edge * 0.48),
+                            .init(color: .black.opacity(1 - leadingFade * 0.12), location: edge * 0.77),
+                            .init(color: .black, location: edge),
+                            .init(color: .black, location: 1)
+                        ],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                } else {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .black.opacity(1 - leadingFade), location: 0),
+                            .init(color: .black, location: edge),
+                            .init(color: .black, location: 1 - edge),
+                            .init(color: .black.opacity(1 - trailingFade), location: 1)
+                        ],
+                        startPoint: .leading, endPoint: .trailing
+                    )
+                }
             }
         }
-        .overlay(alignment: axis == .vertical ? .top : .leading) {
-            edgeBlur(from: axis == .vertical ? .top : .leading,
-                     to: axis == .vertical ? .bottom : .trailing, opacity: leadingFade)
+        .overlay(alignment: .leading) {
+            if axis == .horizontal {
+                edgeBlur(from: .leading, to: .trailing, opacity: leadingFade)
+            }
         }
         .overlay(alignment: .trailing) {
             if axis == .horizontal {
@@ -69,7 +84,7 @@ struct CatalogScrollView<Content: View>: View {
     private func edgeBlur(from edge: UnitPoint, to interior: UnitPoint, opacity: Double) -> some View {
         Rectangle()
             .fill(.ultraThinMaterial)
-            .frame(width: axis == .horizontal ? fadeLength : nil, height: axis == .vertical ? fadeLength : nil)
+            .frame(width: fadeLength)
             .mask {
                 LinearGradient(colors: [.black, .clear], startPoint: edge, endPoint: interior)
             }

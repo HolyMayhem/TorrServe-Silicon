@@ -16,34 +16,31 @@ struct CatalogView: View {
     @State private var pages: [Page] = []
     @State private var repository = CatalogRepository()
     @ObservedObject private var settings = CatalogSettingsStore.shared
+    @Environment(\.settingsSidebarIsVisible) private var isSidebarVisible
 
-    private var connection: CatalogConnection { settings.connection }
+    private var connection: CatalogConnection {
+        var connection = settings.connection
+        connection.tmdb.simulatesOutage = mainModel.simulatesCatalogTMDBOutage
+        connection.simulatesCUBOutage = mainModel.simulatesCatalogCUBOutage
+        return connection
+    }
 
     private var text: CatalogText { CatalogText(language: mainModel.language) }
 
-    private var showsMoviePage: Bool {
-        guard !showsTorrentSearch, case let .item(item)? = pages.last?.destination else { return false }
-        return item.id.kind == .movie
+    private var showsDetails: Bool {
+        guard !showsTorrentSearch, case .item? = pages.last?.destination else { return false }
+        return true
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            if !showsMoviePage {
+            if !showsDetails {
                 SettingsPageHeader(
                     title: AppSection.search.title(language: mainModel.language),
                     message: AppSection.search.message(language: mainModel.language)
                 )
                 .zIndex(1)
-                Picker(text("Search mode", "Режим поиска"), selection: $showsTorrentSearch) {
-                    Text(text("Catalog", "Каталог")).tag(false)
-                    Text(text("Torrent Search", "Поиск раздач")).tag(true)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 10)
+                navigationControls
                 Divider()
             }
 
@@ -54,6 +51,23 @@ struct CatalogView: View {
 
                 if showsTorrentSearch {
                     SearchView(mainModel: mainModel, model: searchModel, libraryModel: libraryModel)
+                }
+            }
+        }
+        .toolbar {
+            if mainModel.selectedSection == .search, showsDetails {
+                if #available(macOS 26.0, *) {
+                    ToolbarItem(placement: .navigation) {
+                        detailsBackButton
+                            .controlSize(.large)
+                            .buttonBorderShape(.circle)
+                            .liquidGlassControl()
+                            // The expanded split view already adds 8 pt between the toolbar items.
+                            .padding(.leading, isSidebarVisible ? 4 : 12)
+                    }
+                    .sharedBackgroundVisibility(.hidden)
+                } else {
+                    ToolbarItem(placement: .navigation) { detailsBackButton }
                 }
             }
         }
@@ -95,7 +109,6 @@ struct CatalogView: View {
         VStack(spacing: 0) {
             searchBar
             if catalogQuery.isEmpty {
-                categories
                 category
             } else {
                 CatalogFiltersView(filter: $searchFilter, repository: repository, connection: connection, text: text)
@@ -122,17 +135,14 @@ struct CatalogView: View {
                 grid(.collection(collection))
             }
         case .item(let item):
-            VStack(spacing: 0) {
-                if item.id.kind != .movie { destinationHeader(item.title) }
-                CatalogDetailsView(
-                    item: item, repository: repository, connection: connection, text: text,
-                    openItem: openItem, goBack: goBack,
-                    findTorrents: { context in
-                        showsTorrentSearch = true
-                        searchModel.searchCatalogTorrents(context, language: mainModel.language)
-                    }
-                )
-            }
+            CatalogDetailsView(
+                item: item, repository: repository, connection: connection, text: text,
+                openItem: openItem,
+                findTorrents: { context in
+                    showsTorrentSearch = true
+                    searchModel.searchCatalogTorrents(context, language: mainModel.language)
+                }
+            )
         }
     }
 
@@ -153,6 +163,17 @@ struct CatalogView: View {
 
     private func goBack() {
         if !pages.isEmpty { pages.removeLast() }
+    }
+
+    private var detailsBackButton: some View {
+        Button(action: goBack) {
+            Image(systemName: "chevron.left")
+                .font(.system(size: 15, weight: .semibold))
+                .frame(width: 24, height: 24)
+        }
+        .accessibilityLabel(text("Back", "Назад"))
+        .help(text("Back", "Назад"))
+        .accessibilityIdentifier("catalog-details-back")
     }
 
     private var searchBar: some View {
@@ -179,19 +200,38 @@ struct CatalogView: View {
         .padding(.top, 12)
     }
 
-    private var categories: some View {
-        Picker(text("Category", "Раздел"), selection: $section) {
-            Text(text("Home", "Главная")).tag(Section.home)
-            Text(text("Movies", "Фильмы")).tag(Section.movies)
-            Text(text("TV Shows", "Сериалы")).tag(Section.series)
-            Text(text("Genres", "Жанры")).tag(Section.genres)
+    private var navigationControls: some View {
+        HStack(spacing: 16) {
+            CatalogSegmentedControl(
+                title: text("Search mode", "Режим поиска"),
+                selection: $showsTorrentSearch,
+                options: [(false, text("Catalog", "Каталог")), (true, text("Torrent Search", "Поиск раздач"))]
+            )
+            .fixedSize()
+
+            if !showsTorrentSearch, pages.isEmpty, catalogQuery.isEmpty {
+                Rectangle()
+                    .fill(.separator)
+                    .frame(width: 1, height: 18)
+                    .accessibilityHidden(true)
+                categories
+            }
         }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .fixedSize()
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 20)
-        .padding(.top, 10)
+        .padding(.vertical, 10)
+    }
+
+    private var categories: some View {
+        CatalogSegmentedControl(
+            title: text("Category", "Раздел"),
+            selection: $section,
+            options: [
+                (.home, text("Home", "Главная")), (.movies, text("Movies", "Фильмы")),
+                (.series, text("TV Shows", "Сериалы")), (.genres, text("Genres", "Жанры"))
+            ]
+        )
+        .fixedSize()
     }
 
     private enum Section { case home, movies, series, genres }

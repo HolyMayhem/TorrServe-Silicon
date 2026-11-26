@@ -5,12 +5,34 @@ struct CatalogListingGrid: View {
     let repository: CatalogRepository
     let text: CatalogText
     let openItem: (CatalogItem) -> Void
+    @Environment(\.isEnabled) private var isEnabled
     @StateObject private var model = CatalogListingModel()
     @State private var pageRequest: PageRequest?
 
     private let columns = [GridItem(.adaptive(minimum: 126, maximum: 190), spacing: 16, alignment: .top)]
 
+    private var activePageRequest: PageRequest? {
+        isEnabled && pageRequest?.request == request ? pageRequest : nil
+    }
+
     var body: some View {
+        Group {
+            if let failure = model.failure, model.items.isEmpty {
+                CatalogUnavailableView(attempts: failure.attempts, text: text, retry: requestNextPage)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                results
+            }
+        }
+        .task(id: request) { await model.start(request, repository: repository) }
+        .task(id: activePageRequest) {
+            guard let page = activePageRequest else { return }
+            await model.loadMore(repository, for: page.request)
+            if pageRequest == page { pageRequest = nil }
+        }
+    }
+
+    private var results: some View {
         CatalogScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 LazyVGrid(columns: columns, alignment: .leading, spacing: 20) {
@@ -24,33 +46,42 @@ struct CatalogListingGrid: View {
                     }
                 }
 
-                if model.loading && !model.items.isEmpty {
-                    ProgressView().controlSize(.small).frame(maxWidth: .infinity)
-                } else if model.failed {
-                    status(text("Catalog unavailable", "Каталог недоступен"), button: text("Retry", "Повторить"))
+                if model.loading && (model.hasMore || !model.items.isEmpty) {
+                    ProgressView()
+                        .controlSize(.small)
+                        .frame(maxWidth: .infinity, minHeight: 24)
+                } else if model.failure != nil {
+                    retryFooter
                 } else if !model.loading {
-                    if model.items.isEmpty {
+                    if model.hasMore {
+                        // After a page arrives, the footer's visibility is evaluated at its new position.
+                        Color.clear
+                            .frame(height: 24)
+                            .accessibilityHidden(true)
+                            .onScrollVisibilityChange(threshold: 0.5) { visible in
+                                if visible { requestNextPage() }
+                            }
+                            .id(isEnabled)
+                    } else if model.items.isEmpty {
                         Text(text("No results on the loaded pages", "На загруженных страницах ничего не найдено"))
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity)
-                    }
-                    if model.hasMore {
-                        status(nil, button: text("Load more", "Загрузить ещё"))
                     }
                 }
             }
             .padding(20)
         }
-        .task(id: request) { await model.start(request, repository: repository) }
-        .task(id: pageRequest?.request == request ? pageRequest : nil) {
-            if pageRequest?.request == request { await model.loadMore(repository) }
-        }
     }
 
-    private func status(_ message: String?, button: String) -> some View {
+    private func requestNextPage() {
+        guard isEnabled, pageRequest?.request != request else { return }
+        pageRequest = PageRequest(request: request)
+    }
+
+    private var retryFooter: some View {
         VStack(spacing: 8) {
-            if let message { Text(message).foregroundStyle(.secondary) }
-            Button(button) { pageRequest = PageRequest(request: request) }
+            Text(text("Couldn’t load more results", "Не удалось загрузить ещё")).foregroundStyle(.secondary)
+            Button(text("Retry", "Повторить"), action: requestNextPage)
         }
         .frame(maxWidth: .infinity)
     }
@@ -68,30 +99,64 @@ struct CatalogHomeView: View {
     let revision: Int
     let openCollection: (CatalogCollection) -> Void
     let openItem: (CatalogItem) -> Void
+    @State private var failures: [CatalogCollection: ShelfFailure] = [:]
+    @State private var retryRevision = 0
 
     var body: some View {
-        CatalogScrollView {
-            LazyVStack(alignment: .leading, spacing: 26) {
-                ForEach(CatalogCollection.allCases, id: \.self) { collection in
-                    CatalogShelf(
-                        collection: collection, repository: repository, connection: connection, text: text, revision: revision,
-                        openCollection: openCollection, openItem: openItem
-                    )
-                }
+        if let attempts = outageAttempts {
+            CatalogUnavailableView(attempts: attempts, text: text) {
+                failures.removeAll()
+                retryRevision += 1
             }
-            .padding(.vertical, 20)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            CatalogScrollView {
+                // Start the six requests even if the window is too short to show every shelf.
+                VStack(alignment: .leading, spacing: 26) {
+                    ForEach(CatalogCollection.allCases, id: \.self) { collection in
+                        let request = request(for: collection)
+                        CatalogShelf(
+                            collection: collection, request: request, repository: repository, text: text,
+                            openCollection: openCollection, openItem: openItem
+                        ) { failure in
+                            failures[collection] = failure.map { ShelfFailure(request: request, failure: $0) }
+                        }
+                    }
+                }
+                .padding(.vertical, 20)
+            }
         }
+    }
+
+    private func request(for collection: CatalogCollection) -> CatalogRequest {
+        CatalogRequest(listing: .collection(collection), language: text.apiLanguage,
+                       connection: connection, revision: revision + retryRevision)
+    }
+
+    private var outageAttempts: [CatalogLoadFailure.Attempt]? {
+        var attempts: [CatalogLoadFailure.Attempt] = []
+        var seen = Set<CatalogLoadFailure.Attempt>()
+        for collection in CatalogCollection.allCases {
+            guard let result = failures[collection], result.request == request(for: collection) else { return nil }
+            attempts += result.failure.attempts.filter { seen.insert($0).inserted }
+        }
+        return attempts
+    }
+
+    private struct ShelfFailure {
+        let request: CatalogRequest
+        let failure: CatalogLoadFailure
     }
 }
 
 private struct CatalogShelf: View {
     let collection: CatalogCollection
+    let request: CatalogRequest
     let repository: CatalogRepository
-    let connection: CatalogConnection
     let text: CatalogText
-    let revision: Int
     let openCollection: (CatalogCollection) -> Void
     let openItem: (CatalogItem) -> Void
+    let reportFailure: (CatalogLoadFailure?) -> Void
     @StateObject private var model = CatalogListingModel()
     @State private var retry = 0
 
@@ -120,21 +185,24 @@ private struct CatalogShelf: View {
                 }
             } else {
                 HStack {
-                    Text(model.failed ? text("Collection unavailable", "Подборка недоступна") : text("No results", "Нет результатов"))
+                    Text(model.failure != nil ? text("Collection unavailable", "Подборка недоступна") : text("No results", "Нет результатов"))
                         .foregroundStyle(.secondary)
-                    if model.failed {
+                    if model.failure != nil {
                         Button(text("Retry", "Повторить")) { retry += 1 }
                     }
                 }
                 .padding(.horizontal, 20)
             }
         }
-        .task(id: CatalogRequest(listing: .collection(collection), language: text.apiLanguage, connection: connection, revision: revision)) {
-            await model.start(CatalogRequest(listing: .collection(collection), language: text.apiLanguage, connection: connection, revision: revision),
-                              repository: repository)
+        .task(id: RetryRequest(request: request, revision: retry)) {
+            reportFailure(nil)
+            await model.start(request, repository: repository, retrying: retry != 0)
+            if !Task.isCancelled { reportFailure(model.items.isEmpty ? model.failure : nil) }
         }
-        .task(id: retry) {
-            if retry != 0 { await model.loadMore(repository) }
-        }
+    }
+
+    private struct RetryRequest: Hashable {
+        let request: CatalogRequest
+        let revision: Int
     }
 }

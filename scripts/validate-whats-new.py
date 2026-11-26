@@ -15,6 +15,7 @@ def validate(manifest_path, info_path):
     assert type(data["schemaVersion"]) is int and data["schemaVersion"] == 1, "schemaVersion must be 1"
     assert isinstance(data["id"], str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,119}", data["id"]), "invalid id"
     assert type(data["enabled"]) is bool, "enabled must be true or false"
+    assert type(data.get("showOnFreshInstall", False)) is bool, "showOnFreshInstall must be true or false"
     assert type(data["build"]) is int and data["build"] > 0, "build must be a positive integer"
     if data["enabled"]:
         assert str(data["build"]) == info["CFBundleVersion"], "enabled announcement build must match CFBundleVersion"
