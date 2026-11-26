@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 protocol TorrServerServing {
     func listTorrents() async throws -> [NativeTorrent]
@@ -106,15 +109,18 @@ final class NativeTorrServerAPI: TorrServerServing {
         poster: String = "",
         category: String = ""
     ) async throws -> NativeTorrent {
-        let data = try await postTorrents([
+        let data = try await post(path: "torrents", body: [
             "action": "add",
             "link": magnet,
             "title": title,
             "poster": poster,
             "category": category,
             "save_to_db": true
-        ])
-        return try decoder.decode(NativeTorrent.self, from: data)
+        ], additionLink: "magnet")
+        guard let torrent = try addedTorrents(from: data).first else {
+            throw TorrentAddError.noAddedTorrent
+        }
+        return torrent
     }
 
     func removeTorrent(hash: String) async throws {
@@ -165,10 +171,9 @@ final class NativeTorrServerAPI: TorrServerServing {
     }
 
     func uploadTorrent(at fileURL: URL) async throws -> [NativeTorrent] {
-        try await uploadTorrent(
-            data: Data(contentsOf: fileURL),
-            filename: fileURL.lastPathComponent
-        )
+        let data = try Data(contentsOf: fileURL)
+        try TorrentFileValidator.validate(data)
+        return try await uploadTorrent(data: data, filename: fileURL.lastPathComponent)
     }
 
     func uploadTorrent(
@@ -208,14 +213,23 @@ final class NativeTorrServerAPI: TorrServerServing {
         body.append("--\(boundary)--\r\n")
         request.httpBody = body
 
-        let data = try await perform(request)
-        if let values = try? decoder.decode([NativeTorrent].self, from: data) {
-            return values
+        let data = try await perform(request, additionLink: "torrent")
+        return try addedTorrents(from: data)
+    }
+
+    private func addedTorrents(from data: Data) throws -> [NativeTorrent] {
+        let values: [NativeTorrent]?
+        do {
+            values = try JSONDecoder().decode(TorrServerAddResponse.self, from: data).torrents
+        } catch is DecodingError {
+            throw TorrentAddError.unexpectedResponse
         }
-        if let value = try? decoder.decode(NativeTorrent.self, from: data) {
-            return [value]
+        // TorrServer can send JSON null when none of the uploaded files were added.
+        guard let values, !values.isEmpty else { throw TorrentAddError.noAddedTorrent }
+        guard values.allSatisfy({ !$0.hash.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) else {
+            throw TorrentAddError.unexpectedResponse
         }
-        return []
+        return values
     }
 
     func updateMetadata(
@@ -271,18 +285,34 @@ final class NativeTorrServerAPI: TorrServerServing {
     private func post(
         path: String,
         body: [String: Any],
-        timeout: TimeInterval = 15
+        timeout: TimeInterval = 15,
+        additionLink: String? = nil
     ) async throws -> Data {
         var request = URLRequest(url: baseURL.appendingPathComponent(path))
         request.httpMethod = "POST"
         request.timeoutInterval = timeout
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        return try await perform(request)
+        return try await perform(request, additionLink: additionLink)
     }
 
-    private func perform(_ request: URLRequest) async throws -> Data {
-        let (data, response) = try await session.data(for: request)
+    private func perform(_ request: URLRequest, additionLink: String? = nil) async throws -> Data {
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch {
+            guard additionLink != nil else { throw error }
+            try Task.checkCancellation()
+            throw TorrentAddError.transferNetwork((error as NSError).code)
+        }
+
+        if let additionLink {
+            guard let http = response as? HTTPURLResponse else { throw TorrentAddError.unexpectedResponse }
+            TorrentAddDiagnostics.event(stage: "transfer", source: "TorrServer", link: additionLink, status: http.statusCode)
+            guard 200..<300 ~= http.statusCode else { throw TorrentAddError.transferHTTP(http.statusCode) }
+            return data
+        }
         guard
             let httpResponse = response as? HTTPURLResponse,
             200..<300 ~= httpResponse.statusCode
@@ -297,6 +327,32 @@ final class NativeTorrServerAPI: TorrServerServing {
             )
         }
         return data
+    }
+}
+
+private struct TorrServerAddResponse: Decodable {
+    let torrents: [NativeTorrent]?
+
+    init(from decoder: Decoder) throws {
+        let value = try decoder.singleValueContainer()
+        if value.decodeNil() {
+            torrents = nil
+            return
+        }
+        // Detect the shape independently so a malformed array element remains a decoding error.
+        let array: UnkeyedDecodingContainer
+        do {
+            array = try decoder.unkeyedContainer()
+        } catch DecodingError.typeMismatch {
+            torrents = [try value.decode(NativeTorrent.self)]
+            return
+        }
+        var items = array
+        var results: [NativeTorrent] = []
+        while !items.isAtEnd {
+            results.append(try items.decode(NativeTorrent.self))
+        }
+        torrents = results
     }
 }
 

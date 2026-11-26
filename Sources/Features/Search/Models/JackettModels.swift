@@ -25,6 +25,11 @@ struct JackettConfiguration: Equatable, Sendable {
     }
 }
 
+enum TorrentSearchLinkSource: String, Sendable {
+    case jackett = "Jackett"
+    case torrentSearch = "TorrentSearch"
+}
+
 struct JackettSearchResult: Identifiable, Equatable, Sendable {
     var id: String
     let title: String
@@ -41,6 +46,12 @@ struct JackettSearchResult: Identifiable, Equatable, Sendable {
     let publishedAt: Date?
     let infoHash: String
     let year: String
+    var downloadSource: TorrentSearchLinkSource = .torrentSearch
+    var magnetSource: TorrentSearchLinkSource = .torrentSearch
+
+    var preferredLinkSource: TorrentSearchLinkSource {
+        magnetURL == nil ? downloadSource : magnetSource
+    }
 
     var bestDownloadURL: URL? {
         magnetURL ?? downloadURL
@@ -57,7 +68,14 @@ struct JackettSearchResult: Identifiable, Equatable, Sendable {
     }
 }
 
-enum JackettDownloadPayload {
+enum JackettDownloadPayload: Sendable {
     case magnet(String)
     case torrent(data: Data, filename: String)
+
+    var kind: String {
+        switch self {
+        case .magnet: return "magnet"
+        case .torrent: return "torrent"
+        }
+    }
 }

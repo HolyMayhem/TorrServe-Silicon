@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationXML)
+import FoundationXML
+#endif
 
 /// Response mappings ported from TorrentSearch providers; MIT attribution is bundled.
 enum TorrentSearchResponseParser {

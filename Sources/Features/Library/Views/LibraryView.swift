@@ -596,7 +596,7 @@ struct LibraryView: View {
                 }
 
                 DispatchQueue.main.async {
-                    model.addTorrentFiles([url])
+                    model.addTorrentFiles([url], language: mainModel.language)
                 }
             }
         }

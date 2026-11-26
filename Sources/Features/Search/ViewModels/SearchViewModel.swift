@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import Foundation
 
 private let jackettServerURLKey = "JackettServerURL"
@@ -346,17 +347,31 @@ final class SearchViewModel: ObservableObject {
         guard addingResultID == nil else { return }
 
         let context = linkCatalogMetadata ? catalogContext : nil
+        let configuration = savedConfiguration
+        let source = result.preferredLinkSource.rawValue
         addingResultID = result.id
         Task {
             defer { addingResultID = nil }
+            var link = result.magnetURL != nil ? "magnet" : result.downloadURL == nil ? "missing" : "download"
+            TorrentAddDiagnostics.event(stage: "link", source: source, link: link)
             do {
-                if watch, let hash = addedHashes[result.id],
-                   let existing = try? await torrServer.torrent(hash: hash) {
-                    onTorrentAdded?(hash, context)
-                    playbackTorrent = existing
-                    return
+                if watch, let hash = addedHashes[result.id] {
+                    do {
+                        let existing = try await torrServer.torrent(hash: hash)
+                        onTorrentAdded?(hash, context)
+                        playbackTorrent = existing
+                        TorrentAddDiagnostics.event(stage: "reused", source: source, link: link)
+                        return
+                    } catch is DecodingError {
+                        throw TorrentAddError.unexpectedResponse
+                    } catch {
+                        // The torrent may have been removed since it was added from this search.
+                        try Task.checkCancellation()
+                    }
                 }
-                let payload = try await jackett.download(result)
+                let payload = try await jackett.download(result, configuration: configuration)
+                link = payload.kind
+                TorrentAddDiagnostics.event(stage: "transfer", source: source, link: link)
                 let poster = (context?.details?.item.poster ?? context?.item.poster ?? result.posterURL)?.absoluteString ?? ""
                 let category = result.torrServerCategory
                 let torrent: NativeTorrent
@@ -379,7 +394,7 @@ final class SearchViewModel: ObservableObject {
                         category: category
                     )
                     guard let value = values.first else {
-                        throw AppError("TorrServer did not return the added torrent.")
+                        throw TorrentAddError.noAddedTorrent
                     }
                     torrent = value
                 }
@@ -388,17 +403,26 @@ final class SearchViewModel: ObservableObject {
                 addedResultIDs.insert(result.id)
                 if !hash.isEmpty { addedHashes[result.id] = hash }
                 onTorrentAdded?(hash, context)
+                TorrentAddDiagnostics.event(stage: "added", source: source, link: link)
                 if watch {
                     if torrent.hash.isEmpty, !hash.isEmpty {
-                        playbackTorrent = try await torrServer.torrent(hash: hash)
+                        do {
+                            playbackTorrent = try await torrServer.torrent(hash: hash)
+                        } catch is DecodingError {
+                            throw TorrentAddError.unexpectedResponse
+                        }
                     } else {
                         playbackTorrent = torrent
                     }
                 }
+            } catch is CancellationError {
+                return
             } catch {
+                let error = error as? TorrentAddError ?? .transferNetwork((error as NSError).code)
+                TorrentAddDiagnostics.failure(error, source: source, link: link)
                 alert = AppAlert(
                     title: SearchTexts(language: language).couldNotAdd,
-                    message: error.localizedDescription
+                    message: error.message(language: language, source: source)
                 )
             }
         }

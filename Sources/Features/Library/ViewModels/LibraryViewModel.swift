@@ -296,14 +296,17 @@ final class LibraryViewModel: ObservableObject {
                 magnetInput = ""
                 selectedTorrentID = torrent.id
                 selectedTorrentIDs = [torrent.id]
+                TorrentAddDiagnostics.event(stage: "added", source: "manual", link: "magnet")
                 try await refreshImmediately(selectingHash: torrent.hash)
+            } catch let error as TorrentAddError {
+                showAddError(error, language: language, link: "magnet")
             } catch {
                 showError(error)
             }
         }
     }
 
-    func addTorrentFiles(_ urls: [URL]) {
+    func addTorrentFiles(_ urls: [URL], language: AppLanguage) {
         guard !urls.isEmpty else { return }
         isAdding = true
 
@@ -313,11 +316,14 @@ final class LibraryViewModel: ObservableObject {
                 var addedHash: String?
                 for url in urls where url.pathExtension.lowercased() == "torrent" {
                     let added = try await api.uploadTorrent(at: url)
+                    TorrentAddDiagnostics.event(stage: "added", source: "manual", link: "torrent")
                     if addedHash == nil {
                         addedHash = added.first?.hash
                     }
                 }
                 try await refreshImmediately(selectingHash: addedHash)
+            } catch let error as TorrentAddError {
+                showAddError(error, language: language, link: "torrent")
             } catch {
                 showError(error)
             }
@@ -337,8 +343,13 @@ final class LibraryViewModel: ObservableObject {
         }
 
         if panel.runModal() == .OK {
-            addTorrentFiles(panel.urls)
+            addTorrentFiles(panel.urls, language: language)
         }
+    }
+
+    private func showAddError(_ error: TorrentAddError, language: AppLanguage, link: String) {
+        TorrentAddDiagnostics.failure(error, source: "manual", link: link)
+        alert = AppAlert(title: "TorrServer", message: error.message(language: language))
     }
 
     func removeSelected() {

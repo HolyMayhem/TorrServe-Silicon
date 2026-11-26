@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationXML)
+import FoundationXML
+#endif
 
 final class JackettTorznabParser: NSObject, XMLParserDelegate {
     private struct Draft {
@@ -152,8 +155,8 @@ final class JackettTorznabParser: NSObject, XMLParserDelegate {
     }
 
     private static func result(from value: Draft) -> JackettSearchResult {
-        let linkURL = URL(string: value.enclosure.isEmpty ? value.link : value.enclosure)
-        let directMagnet = URL(string: value.magnet)
+        let linkURL = url(value.enclosure) ?? url(value.link)
+        let directMagnet = url(value.magnet).flatMap { $0.scheme?.lowercased() == "magnet" ? $0 : nil }
         let downloadURL: URL?
         let magnetURL: URL?
 
@@ -182,8 +185,15 @@ final class JackettTorznabParser: NSObject, XMLParserDelegate {
             categories: Array(Set(value.categories)),
             publishedAt: value.publishedAt,
             infoHash: value.infoHash,
-            year: value.year
+            year: value.year,
+            downloadSource: .jackett,
+            magnetSource: .jackett
         )
+    }
+
+    private static func url(_ value: String) -> URL? {
+        let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : URL(string: value)
     }
 
     private static func parseDate(_ value: String) -> Date? {
