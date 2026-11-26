@@ -51,6 +51,9 @@ jobs:
           xcrun --sdk macosx --show-sdk-version
       - name: Build application
         run: swift build -c debug
+      - name: Jackett and TorrServer addition checks
+        if: ${{ !cancelled() }}
+        run: ./scripts/verify-torrent-add.sh
       - name: Media catalog checks
         if: ${{ !cancelled() }}
         run: ./scripts/verify-catalog.sh
