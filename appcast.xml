@@ -6,6 +6,35 @@
         <description>Stable TorrServe Silicon application updates.</description>
         <language>en</language>
         <item>
+            <title>2.10.1</title>
+            <pubDate>Fri, 27 Nov 2026 09:15:43 +0000</pubDate>
+            <link>https://github.com/HolyMayhem/TorrServe-Silicon/releases/tag/v2.10.1</link>
+            <sparkle:version>44</sparkle:version>
+            <sparkle:shortVersionString>2.10.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[# TorrServe Silicon 2.10.1
+
+## TorrServer Connection
+
+- Fixed a connection issue introduced in 2.10. The app now bundles MatriX.147.1, restoring access to the torrent library and server settings.
+- Fixed **Download ARM** so it selects a compatible MatriX release when the latest upstream release is Silo.
+- The app now connects to a compatible MatriX server already running on port 8090. If an incompatible server is using the port, the app reports the conflict.
+
+## Improvements and Fixes
+
+- Added local diagnostics for connection errors, ARM downloads, and server startup. The log is limited in size and excludes magnet links, tokens, and personal data.
+- Verified that updates from 2.9.0 and 2.10.0 preserve your MatriX library and app settings. Torrents added through the Silo WebUI remain in Silo’s separate library.
+
+Fixes #3.
+
+## System Requirements
+
+macOS 15 or later on a Mac with Apple Silicon.
+]]></description>
+            <enclosure url="https://github.com/HolyMayhem/TorrServe-Silicon/releases/download/v2.10.1/TorrServer-2.10.1-macOS-arm64.dmg" length="30051302" type="application/octet-stream" sparkle:edSignature="xMHlrpK9OBLcX/ewBSwEOaq7A+PtkOV0/D27giSpnHpCA07Y8r/3Z7okgD1NwH+RExLMlRF288NjqrWd/fn1Dw=="/>
+        </item>
+        <item>
             <title>2.10.0</title>
             <pubDate>Thu, 26 Nov 2026 23:10:01 +0000</pubDate>
             <link>https://github.com/HolyMayhem/TorrServe-Silicon/releases/tag/v2.10</link>
