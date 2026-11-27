@@ -15,7 +15,7 @@ extension AppDelegate {
     // These selectors are fallback responders for the native Edit menu. Text
     // fields handle selectAll/copy/paste earlier in the responder chain.
     @objc func selectAll(_ sender: Any?) {
-        guard libraryCommandsAvailable, mainWindowModel.canStop else { return }
+        guard libraryCommandsAvailable, mainWindowModel.isServerAvailable else { return }
         libraryModel.selectAllVisibleTorrents()
     }
 
@@ -25,7 +25,7 @@ extension AppDelegate {
     }
 
     @objc func paste(_ sender: Any?) {
-        guard libraryCommandsAvailable, mainWindowModel.canStop, !libraryModel.isAdding,
+        guard libraryCommandsAvailable, mainWindowModel.isServerAvailable, !libraryModel.isAdding,
               let magnet = LibraryPasteboard.magnetLink(from: NSPasteboard.general.string(forType: .string)) else { return }
         libraryModel.magnetInput = magnet
         libraryModel.addMagnet(language: currentLanguage)
@@ -73,18 +73,18 @@ extension AppDelegate {
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         switch item.action {
         case #selector(selectAll(_:)):
-            return libraryCommandsAvailable && mainWindowModel.canStop && !libraryModel.filteredTorrents.isEmpty
+            return libraryCommandsAvailable && mainWindowModel.isServerAvailable && !libraryModel.filteredTorrents.isEmpty
         case #selector(copy(_:)):
             return libraryCommandsAvailable && libraryModel.selectedTorrent?.playableFiles.isEmpty == false
         case #selector(paste(_:)):
-            return libraryCommandsAvailable && mainWindowModel.canStop && !libraryModel.isAdding
+            return libraryCommandsAvailable && mainWindowModel.isServerAvailable && !libraryModel.isAdding
                 && LibraryPasteboard.magnetLink(from: NSPasteboard.general.string(forType: .string)) != nil
         case #selector(deselectLibraryItems(_:)):
             return libraryCommandsAvailable && !libraryModel.selectedTorrentIDs.isEmpty
         case #selector(refreshCurrentPage(_:)):
             guard NSApp.keyWindow === window, window?.attachedSheet == nil else { return false }
             if mainWindowModel.selectedSection == .library {
-                return mainWindowModel.canStop && !libraryModel.isRefreshing && libraryModel.alert == nil
+                return mainWindowModel.isServerAvailable && !libraryModel.isRefreshing && libraryModel.alert == nil
             }
             if mainWindowModel.selectedSection == .offline { return true }
             return true
@@ -93,7 +93,7 @@ extension AppDelegate {
         case #selector(showSearchFromMenu(_:)):
             return window?.attachedSheet == nil
         case #selector(addTorrentFromMenu(_:)), #selector(addMagnetFromMenu(_:)):
-            return mainWindowModel.canStop && !libraryModel.isAdding && window?.attachedSheet == nil
+            return mainWindowModel.isServerAvailable && !libraryModel.isAdding && window?.attachedSheet == nil
         default: return true
         }
     }

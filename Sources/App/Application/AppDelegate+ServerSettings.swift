@@ -7,7 +7,7 @@ extension AppDelegate {
         guard !mainWindowModel.isLoadingServerSettings,
               !mainWindowModel.isSavingServerSettings else { return }
 
-        guard processController.isRunning else {
+        guard processController.isAvailable else {
             mainWindowModel.hasLoadedServerSettings = false
             mainWindowModel.serverSettingsResult = DiagnosticResult(
                 kind: .warning,

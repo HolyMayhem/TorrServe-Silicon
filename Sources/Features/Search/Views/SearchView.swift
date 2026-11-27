@@ -323,7 +323,7 @@ struct SearchView: View {
                 model: model,
                 texts: texts,
                 language: mainModel.language,
-                serverIsRunning: mainModel.canStop
+                serverIsRunning: mainModel.isServerAvailable
             )
             .padding(16)
         } else {

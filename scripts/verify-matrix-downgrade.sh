@@ -10,6 +10,8 @@ trap 'rm -rf "$CHECK_DIR"' EXIT
 swiftc -swift-version 5 -parse-as-library \
   "$PROJECT_DIR/Sources/Core/Errors/AppError.swift" \
   "$PROJECT_DIR/Sources/Core/Configuration/AppConstants.swift" \
+  "$PROJECT_DIR/Sources/Core/TorrServer/TorrServerLocalLog.swift" \
+  "$PROJECT_DIR/Sources/Core/TorrServer/TorrServerVersion.swift" \
   "$PROJECT_DIR/Sources/Features/Server/Services/TorrServerReleaseChecker.swift" \
   "$PROJECT_DIR/Sources/Features/Server/Services/TorrServerDownloader.swift" \
   "$PROJECT_DIR/Sources/Features/Server/Services/TorrServerUpdateInstaller.swift" \

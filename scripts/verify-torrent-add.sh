@@ -16,7 +16,7 @@ cd "$PROJECT_DIR"
 sources=(
     Sources/App/Localization/AppLocalization.swift
     Sources/Core/Errors/{AppError,TorrentAddError}.swift
-    Sources/Core/TorrServer/{TorrServerModels,TorrServerNativeAPI,TorrentAddDiagnostics,TorrentFileValidator}.swift
+    Sources/Core/TorrServer/{TorrServerLocalLog,TorrServerModels,TorrServerNativeAPI,TorrServerVersion,TorrentAddDiagnostics,TorrentFileValidator}.swift
     Sources/Features/Search/Models/{JackettModels,TorrentSearchModels}.swift
     Sources/Features/Search/Parsing/{JackettTorznabParser,TorrentSearchResponseParser}.swift
     Sources/Features/Search/Services/{JackettClient,JackettRequestScope}.swift

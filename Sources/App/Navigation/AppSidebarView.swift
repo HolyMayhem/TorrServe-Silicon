@@ -221,7 +221,7 @@ struct ServerStatusSidebarView: View {
     private var texts: Texts { Texts(language: mainModel.language) }
 
     private var speedText: String {
-        guard mainModel.canStop else {
+        guard mainModel.isServerAvailable else {
             return SpeedFormatter.string(bytesPerSecond: 0, unit: mainModel.speedUnit)
         }
         return mainModel.currentSpeedText.isEmpty

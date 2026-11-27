@@ -75,6 +75,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     // Capture prior-install markers before Sparkle or the UI can persist new ones.
     let whatsNewController = WhatsNewWindowController()
     let processController = TorrServerProcessController()
+    var isCheckingBackendBeforeStart = false
     let downloader = TorrServerDownloader()
     let launchAtLoginController = LaunchAtLoginController()
     let speedMonitor = TorrServerSpeedMonitor()
@@ -193,11 +194,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             self?.currentLanguage.rawValue ?? "en"
         }
 
-        if UserDefaults.standard.bool(forKey: autoStartServerKey), hasExecutablePath {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                self.startServer(nil)
-            }
-        }
+        connectToTorrServer(startIfAbsent: UserDefaults.standard.bool(forKey: autoStartServerKey))
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

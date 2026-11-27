@@ -318,23 +318,43 @@ extension AppDelegate {
     }
 
     @objc func startServer(_ sender: Any?) {
-        saveCurrentPath()
+        connectToTorrServer(startIfAbsent: true, showErrors: true)
+    }
 
-        guard hasExecutablePath else {
-            showAlert(
-                title: texts.chooseTorrServerAlertTitle,
-                message: texts.chooseTorrServerAlertMessage
-            )
-            return
-        }
+    func connectToTorrServer(startIfAbsent: Bool, showErrors: Bool = false) {
+        guard !processController.isAvailable, !isCheckingBackendBeforeStart else { return }
+        isCheckingBackendBeforeStart = true
+        Task {
+            defer { isCheckingBackendBeforeStart = false }
+            if let version = try? await nativeTorrServerAPI.healthVersion() {
+                processController.attach(to: version)
+                return
+            }
+            guard !isPreparingForTermination else { return }
+            if TorrServerProcessController.isPortOccupied() {
+                TorrServerLocalLog.shared.record(.portCheck, error: TorrServerBackendError.portOccupied, event: .portInUse)
+                let message = currentLanguage == .russian
+                    ? "Порт 8090 занят, а MatriX API не отвечает. Откройте Web UI или остановите другой сервер и повторите запуск."
+                    : "Port 8090 is in use and the MatriX API did not respond. Open the Web UI or stop the other server and try again."
+                mainWindowModel.serverConnectionIssue = message
+                if showErrors { showAlert(title: texts.startFailedTitle, message: message) }
+                return
+            }
+            guard startIfAbsent, !isDownloading, !isActivatingTorrServerUpdate else { return }
+            guard hasExecutablePath else {
+                if showErrors {
+                    showAlert(title: texts.chooseTorrServerAlertTitle, message: texts.chooseTorrServerAlertMessage)
+                }
+                return
+            }
 
-        do {
-            try processController.start(executablePath: executablePath)
-        } catch {
-            showAlert(
-                title: texts.startFailedTitle,
-                message: error.localizedDescription
-            )
+            clearServerConnectionIssue()
+            saveCurrentPath()
+            do {
+                try processController.start(executablePath: executablePath)
+            } catch {
+                if showErrors { showAlert(title: texts.startFailedTitle, message: error.localizedDescription) }
+            }
         }
     }
 

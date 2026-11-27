@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "media-catalog-2.10",
-  "enabled": true,
+  "enabled": false,
   "showOnFreshInstall": true,
   "build": 43,
   "detailsURL": "https://github.com/HolyMayhem/TorrServe-Silicon/releases",

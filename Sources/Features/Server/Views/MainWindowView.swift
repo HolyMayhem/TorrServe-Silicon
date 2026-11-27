@@ -299,7 +299,7 @@ struct MainWindowView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                .disabled(model.isClearingCache || !model.canStop)
+                .disabled(model.isClearingCache || !model.isServerAvailable)
                 .popover(isPresented: $showsClearCacheConfirmation) {
                     clearCacheConfirmation
                 }

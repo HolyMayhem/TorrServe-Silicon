@@ -83,12 +83,26 @@ extension AppDelegate {
                 canEditPath: false,
                 menuStatus: texts.running(pid: pid)
             ))
-            refreshStorage()
-            offlineDownloadManager.resumePendingDownloadsIfPossible()
-            if settingsWindow?.isVisible == true,
-               !mainWindowModel.hasLoadedServerSettings {
-                loadTorrServerSettings()
-            }
+            refreshConnectedServer()
+
+        case .external(let version):
+            clearServerConnectionIssue()
+            let status = currentLanguage == .russian
+                ? "Подключено к \(version.displayName)"
+                : "Connected to \(version.displayName)"
+            applyUIState(ServerPresentationState(
+                dotColor: .systemGreen,
+                statusText: status,
+                statusTooltip: status,
+                canStart: false,
+                canStop: false,
+                canBrowse: true,
+                canDownload: true,
+                canOpenWeb: true,
+                canEditPath: true,
+                menuStatus: status
+            ))
+            refreshConnectedServer()
 
         case .stopping:
             clearServerConnectionIssue()
@@ -122,13 +136,22 @@ extension AppDelegate {
         }
     }
 
+    private func refreshConnectedServer() {
+        refreshStorage()
+        offlineDownloadManager.resumePendingDownloadsIfPossible()
+        if settingsWindow?.isVisible == true,
+           !mainWindowModel.hasLoadedServerSettings {
+            loadTorrServerSettings()
+        }
+    }
+
     func handleServerConnectionIssue(_ issue: String?) {
         guard let issue, !issue.isEmpty else {
             clearServerConnectionIssue()
             return
         }
 
-        guard processController.isRunning else {
+        guard processController.isAvailable else {
             clearServerConnectionIssue()
             return
         }
@@ -145,9 +168,10 @@ extension AppDelegate {
 
     func updateSpeedMonitor(for state: TorrServerProcessController.State) {
         let shouldRun: Bool
-        if case .running = state {
+        switch state {
+        case .running, .external:
             shouldRun = true
-        } else {
+        default:
             shouldRun = false
         }
 
@@ -181,7 +205,7 @@ extension AppDelegate {
     func recordSpeedSample(_ speed: Double?) {
         currentSpeedBytesPerSecond = speed
 
-        if processController.isRunning {
+        if processController.isAvailable {
             speedHistory.append(max(speed ?? 0, 0))
             if speedHistory.count > 30 {
                 speedHistory.removeFirst(speedHistory.count - 30)
@@ -222,7 +246,7 @@ extension AppDelegate {
             }
             hasAnnouncedRunningState = false
 
-        case .stopping:
+        case .stopping, .external:
             break
         }
     }
@@ -254,7 +278,7 @@ extension AppDelegate {
 
         popoverModel.statusKind = mainStatusKind(for: state.dotColor)
         popoverModel.statusText = state.menuStatus
-        popoverModel.isRunning = processController.isRunning
+        popoverModel.isRunning = processController.isAvailable
         if !popoverModel.isRunning { cancelMenuBarCacheRefresh() }
         popoverModel.canStart = state.canStart
         popoverModel.canStop = state.canStop
@@ -280,7 +304,7 @@ extension AppDelegate {
     func refreshSpeedDisplay() {
         guard statusItem != nil else { return }
 
-        let isServerRunning = processController.isRunning
+        let isServerRunning = processController.isAvailable
         let speedText = currentSpeedBytesPerSecond.map {
             SpeedFormatter.string(
                 bytesPerSecond: $0,
@@ -334,16 +358,7 @@ extension AppDelegate {
             withExtension: nil
         )?.path
 
-        guard let bundledPath else { return savedPath }
-        guard !savedPath.isEmpty else { return bundledPath }
-
-        let normalizedSavedPath = URL(fileURLWithPath: savedPath).standardizedFileURL.path
-        let oldManagedSuffix = "/Library/Application Support/TorrServer Manager/\(torrServerExecutableName)"
-        if normalizedSavedPath.hasSuffix(oldManagedSuffix)
-            || !FileManager.default.fileExists(atPath: normalizedSavedPath) {
-            return bundledPath
-        }
-        return normalizedSavedPath
+        return TorrServerExecutablePath.resolve(saved: savedPath, bundled: bundledPath)
     }
 
     func saveCurrentPath() {

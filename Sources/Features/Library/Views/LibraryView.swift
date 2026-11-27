@@ -113,7 +113,7 @@ struct LibraryView: View {
 
     private var torrentListPanel: some View {
         ZStack {
-            if !mainModel.canStop {
+            if !mainModel.isServerAvailable {
                 serverUnavailable
                     .padding(.top, compactHeaderOverlayHeight)
                     .padding(.bottom, compactFooterOverlayHeight)
@@ -242,7 +242,7 @@ struct LibraryView: View {
                         Image(systemName: "arrow.clockwise")
                     }
                     .buttonStyle(.plain)
-                    .disabled(model.isRefreshing || !mainModel.canStop)
+                    .disabled(model.isRefreshing || !mainModel.isServerAvailable)
                     .help(texts.refresh)
 
                     Menu {
@@ -263,7 +263,7 @@ struct LibraryView: View {
                     }
                     .menuStyle(.borderlessButton)
                     .fixedSize()
-                    .disabled(model.isAdding || !mainModel.canStop)
+                    .disabled(model.isAdding || !mainModel.isServerAvailable)
                 }
 
                 librarySearchField
@@ -335,7 +335,7 @@ struct LibraryView: View {
                     Image(systemName: "arrow.clockwise")
                 }
                 .buttonStyle(.plain)
-                .disabled(model.isRefreshing || !mainModel.canStop)
+                .disabled(model.isRefreshing || !mainModel.isServerAvailable)
 
                 Menu {
                     Button {
@@ -354,14 +354,14 @@ struct LibraryView: View {
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
-                .disabled(model.isAdding || !mainModel.canStop)
+                .disabled(model.isAdding || !mainModel.isServerAvailable)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 14)
 
             Divider()
 
-            if !mainModel.canStop {
+            if !mainModel.isServerAvailable {
                 serverUnavailable
             } else if model.filteredTorrents.isEmpty {
                 emptyLibrary
@@ -554,7 +554,7 @@ struct LibraryView: View {
                 } label: {
                     Label(texts.addTorrentFile, systemImage: "doc.badge.plus")
                 }
-                .disabled(model.isAdding || !mainModel.canStop)
+                .disabled(model.isAdding || !mainModel.isServerAvailable)
                 .help(texts.addTorrentFile)
 
                 Button {
@@ -562,7 +562,7 @@ struct LibraryView: View {
                 } label: {
                     Label(texts.addMagnet, systemImage: "link.badge.plus")
                 }
-                .disabled(model.isAdding || !mainModel.canStop)
+                .disabled(model.isAdding || !mainModel.isServerAvailable)
                 .help(texts.addMagnet)
             }
         }
@@ -615,11 +615,11 @@ struct LibraryView: View {
         guard !model.showsMagnetSheet, !model.showsPlayerSetup,
               model.pendingDeletionTorrents.isEmpty, model.alert == nil else { return false }
         switch command {
-        case .delete: return mainModel.canStop && handleDeleteKey()
+        case .delete: return mainModel.isServerAvailable && handleDeleteKey()
         case .play: return handleReturnKey()
         case .paste: return handlePaste()
         case .selectAll:
-            guard mainModel.canStop else { return false }
+            guard mainModel.isServerAvailable else { return false }
             model.selectAllVisibleTorrents()
         case .deselectAll, .escape:
             model.clearSelection()
@@ -651,7 +651,7 @@ struct LibraryView: View {
     }
 
     private func handlePaste() -> Bool {
-        guard mainModel.canStop,
+        guard mainModel.isServerAvailable,
               !model.isAdding,
               !model.showsMagnetSheet,
               model.pendingDeletionTorrents.isEmpty,

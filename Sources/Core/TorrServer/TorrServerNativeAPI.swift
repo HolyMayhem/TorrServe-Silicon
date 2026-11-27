@@ -85,8 +85,8 @@ final class NativeTorrServerAPI: TorrServerServing {
     }
 
     func listTorrents() async throws -> [NativeTorrent] {
-        let data = try await postTorrents(["action": "list"])
-        return try decoder.decode([NativeTorrent].self, from: data)
+        let response = try await postTorrents(["action": "list"])
+        return try decode(response, endpoint: .torrents) { try decoder.decode([NativeTorrent].self, from: $0) }
             .sorted { left, right in
                 if left.isActive != right.isActive {
                     return left.isActive
@@ -96,11 +96,11 @@ final class NativeTorrServerAPI: TorrServerServing {
     }
 
     func torrent(hash: String) async throws -> NativeTorrent {
-        let data = try await postTorrents([
+        let response = try await postTorrents([
             "action": "get",
             "hash": hash
         ])
-        return try decoder.decode(NativeTorrent.self, from: data)
+        return try decode(response, endpoint: .torrents) { try decoder.decode(NativeTorrent.self, from: $0) }
     }
 
     func addMagnet(
@@ -109,7 +109,7 @@ final class NativeTorrServerAPI: TorrServerServing {
         poster: String = "",
         category: String = ""
     ) async throws -> NativeTorrent {
-        let data = try await post(path: "torrents", body: [
+        let response = try await post(path: "torrents", body: [
             "action": "add",
             "link": magnet,
             "title": title,
@@ -117,7 +117,7 @@ final class NativeTorrServerAPI: TorrServerServing {
             "category": category,
             "save_to_db": true
         ], additionLink: "magnet")
-        guard let torrent = try addedTorrents(from: data).first else {
+        guard let torrent = try decode(response, endpoint: .torrents, using: addedTorrents).first else {
             throw TorrentAddError.noAddedTorrent
         }
         return torrent
@@ -138,17 +138,17 @@ final class NativeTorrServerAPI: TorrServerServing {
     }
 
     func cacheState(hash: String) async throws -> TorrServerCacheState {
-        let data = try await post(
+        let response = try await post(
             path: "cache",
             body: ["action": "get", "hash": hash],
             timeout: 8
         )
-        return try decoder.decode(TorrServerCacheState.self, from: data)
+        return try decode(response, endpoint: .cache) { try decoder.decode(TorrServerCacheState.self, from: $0) }
     }
 
     func settings() async throws -> TorrServerStorageSettings {
-        let data = try await post(path: "settings", body: ["action": "get"])
-        return try TorrServerStorageSettings(data: data)
+        let response = try await post(path: "settings", body: ["action": "get"])
+        return try decode(response, endpoint: .settings, using: TorrServerStorageSettings.init(data:))
     }
 
     func updateSettings(
@@ -165,9 +165,21 @@ final class NativeTorrServerAPI: TorrServerServing {
     }
 
     func checkHealth() async throws {
+        _ = try await healthVersion()
+    }
+
+    func healthVersion() async throws -> TorrServerVersion {
         var request = URLRequest(url: baseURL.appendingPathComponent("echo"))
         request.timeoutInterval = 3
-        _ = try await perform(request)
+        let response = try await perform(request)
+        return try decode(response, endpoint: .echo) { data in
+            guard let text = String(data: data, encoding: .utf8),
+                  let version = TorrServerVersion(releaseTag: text.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+                throw TorrServerBackendError.unexpectedVersion
+            }
+            TorrServerLocalLog.shared.record(.http, endpoint: .echo, status: response.status, event: .connected)
+            return version
+        }
     }
 
     func uploadTorrent(at fileURL: URL) async throws -> [NativeTorrent] {
@@ -213,8 +225,8 @@ final class NativeTorrServerAPI: TorrServerServing {
         body.append("--\(boundary)--\r\n")
         request.httpBody = body
 
-        let data = try await perform(request, additionLink: "torrent")
-        return try addedTorrents(from: data)
+        let response = try await perform(request, additionLink: "torrent")
+        return try decode(response, endpoint: .upload, using: addedTorrents)
     }
 
     private func addedTorrents(from data: Data) throws -> [NativeTorrent] {
@@ -278,7 +290,23 @@ final class NativeTorrServerAPI: TorrServerServing {
         _ = try? await session.data(for: request)
     }
 
-    private func postTorrents(_ body: [String: Any]) async throws -> Data {
+    private struct Response {
+        let data: Data
+        let status: Int
+    }
+
+    private func decode<T>(
+        _ response: Response, endpoint: TorrServerLocalLog.Endpoint, using parse: (Data) throws -> T
+    ) throws -> T {
+        do {
+            return try parse(response.data)
+        } catch {
+            TorrServerLocalLog.shared.record(.decode, endpoint: endpoint, status: response.status, error: error)
+            throw error
+        }
+    }
+
+    private func postTorrents(_ body: [String: Any]) async throws -> Response {
         try await post(path: "torrents", body: body)
     }
 
@@ -287,7 +315,7 @@ final class NativeTorrServerAPI: TorrServerServing {
         body: [String: Any],
         timeout: TimeInterval = 15,
         additionLink: String? = nil
-    ) async throws -> Data {
+    ) async throws -> Response {
         var request = URLRequest(url: baseURL.appendingPathComponent(path))
         request.httpMethod = "POST"
         request.timeoutInterval = timeout
@@ -296,22 +324,32 @@ final class NativeTorrServerAPI: TorrServerServing {
         return try await perform(request, additionLink: additionLink)
     }
 
-    private func perform(_ request: URLRequest, additionLink: String? = nil) async throws -> Data {
+    private func perform(_ request: URLRequest, additionLink: String? = nil) async throws -> Response {
+        let endpoint = request.url.flatMap { TorrServerLocalLog.Endpoint(rawValue: $0.lastPathComponent) }
         let data: Data
         let response: URLResponse
         do {
             (data, response) = try await session.data(for: request)
         } catch {
+            if !Task.isCancelled {
+                TorrServerLocalLog.shared.record(.http, endpoint: endpoint, error: error)
+            }
             guard additionLink != nil else { throw error }
             try Task.checkCancellation()
             throw TorrentAddError.transferNetwork((error as NSError).code)
         }
 
+        let status = (response as? HTTPURLResponse)?.statusCode
+        if status.map({ !(200..<300).contains($0) }) ?? true {
+            TorrServerLocalLog.shared.record(
+                .http, endpoint: endpoint, status: status, error: TorrServerBackendError.invalidHTTPResponse
+            )
+        }
         if let additionLink {
             guard let http = response as? HTTPURLResponse else { throw TorrentAddError.unexpectedResponse }
             TorrentAddDiagnostics.event(stage: "transfer", source: "TorrServer", link: additionLink, status: http.statusCode)
             guard 200..<300 ~= http.statusCode else { throw TorrentAddError.transferHTTP(http.statusCode) }
-            return data
+            return Response(data: data, status: http.statusCode)
         }
         guard
             let httpResponse = response as? HTTPURLResponse,
@@ -326,7 +364,7 @@ final class NativeTorrServerAPI: TorrServerServing {
                     : "TorrServer returned HTTP \(status)."
             )
         }
-        return data
+        return Response(data: data, status: httpResponse.statusCode)
     }
 }
 

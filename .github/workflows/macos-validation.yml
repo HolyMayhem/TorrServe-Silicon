@@ -66,6 +66,9 @@ jobs:
       - name: MatriX downgrade checks
         if: ${{ !cancelled() }}
         run: ./scripts/verify-matrix-downgrade.sh
+      - name: Backend connection regression checks
+        if: ${{ !cancelled() }}
+        run: ./scripts/verify-backend-connection.sh
       - name: Native settings search UI checks
         if: ${{ !cancelled() }}
         run: ./scripts/verify-settings-search-ui.sh

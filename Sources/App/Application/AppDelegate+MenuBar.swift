@@ -162,7 +162,7 @@ extension AppDelegate {
     }
 
     func refreshPopoverMaterial() {
-        guard processController.isRunning else {
+        guard processController.isAvailable else {
             currentTorrents = []
             popoverModel.isLoadingMaterial = false
             updatePopoverMaterial(with: [])
@@ -174,11 +174,12 @@ extension AppDelegate {
         guard !popoverModel.isLoadingMaterial else { return }
         popoverModel.isLoadingMaterial = true
         let pid = processController.runningPID
+        let wasExternal = processController.isExternal
         Task {
             defer { popoverModel.isLoadingMaterial = false }
             do {
                 let torrents = try await nativeTorrServerAPI.listTorrents()
-                guard processController.runningPID == pid else { return }
+                guard processController.runningPID == pid, processController.isExternal == wasExternal else { return }
                 currentTorrents = torrents
                 updatePopoverMaterial(with: torrents)
                 refreshMenuBarCache(torrents: torrents)
@@ -186,13 +187,16 @@ extension AppDelegate {
                     libraryModel.applyServerSnapshot(torrents)
                 }
             } catch {
-                guard processController.runningPID == pid else { return }
+                guard processController.runningPID == pid, processController.isExternal == wasExternal else { return }
                 currentTorrents = []
                 updatePopoverMaterial(with: [])
                 popoverModel.activeTorrentCount = nil
                 cancelMenuBarCacheRefresh()
                 if libraryModel.isPollingActive {
                     libraryModel.applyServerFailure(error)
+                }
+                if wasExternal, (try? await nativeTorrServerAPI.healthVersion()) == nil {
+                    processController.detach()
                 }
             }
             synchronizePopoverLayout()
@@ -227,7 +231,7 @@ extension AppDelegate {
 
     func refreshMenuBarCache(torrents: [NativeTorrent]) {
         guard statusPopover.isShown, popoverModel.preferences.showsCache,
-              processController.isRunning else {
+              processController.isAvailable else {
             cancelMenuBarCacheRefresh()
             return
         }

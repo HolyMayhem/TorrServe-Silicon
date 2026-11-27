@@ -1,10 +1,43 @@
 import Darwin
 import Foundation
 
+enum TorrServerExecutablePath {
+    static func resolve(saved: String, bundled: String?) -> String {
+        guard let bundled else { return saved }
+        let expanded = NSString(string: saved).expandingTildeInPath
+        guard !expanded.isEmpty else {
+            TorrServerLocalLog.shared.record(.executablePath, event: .bundled)
+            return bundled
+        }
+        let url = URL(fileURLWithPath: expanded).standardizedFileURL
+        let oldManagedSuffix = "/Library/Application Support/TorrServer Manager/\(torrServerExecutableName)"
+        let bundledSuffix = "/Contents/Resources/\(torrServerExecutableName)"
+        if url.path.hasSuffix(bundledSuffix) {
+            let oldBundle = url.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            let currentBundle = URL(fileURLWithPath: bundled).deletingLastPathComponent()
+                .deletingLastPathComponent().deletingLastPathComponent()
+            if url.path == bundled || Bundle(url: oldBundle)?.bundleIdentifier == Bundle(url: currentBundle)?.bundleIdentifier,
+               Bundle(url: currentBundle)?.bundleIdentifier != nil {
+                TorrServerLocalLog.shared.record(.executablePath, event: url.path == bundled ? .bundled : .bundlePathRelocated)
+                return bundled
+            }
+        }
+        var isDirectory: ObjCBool = false
+        if url.path.hasSuffix(oldManagedSuffix)
+            || !FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) || isDirectory.boolValue {
+            TorrServerLocalLog.shared.record(.executablePath, event: .savedUnavailable)
+            return bundled
+        }
+        TorrServerLocalLog.shared.record(.executablePath, event: .saved)
+        return url.path
+    }
+}
+
 final class TorrServerProcessController {
     enum State {
         case stopped
         case running(pid: Int32)
+        case external(TorrServerVersion)
         case stopping
         case failed(String)
     }
@@ -28,9 +61,70 @@ final class TorrServerProcessController {
         return task.processIdentifier
     }
 
-    func start(executablePath: String) throws {
-        guard !isRunning else { return }
+    var isAvailable: Bool {
+        isRunning || isExternal
+    }
 
+    var isExternal: Bool {
+        if case .external = state { return true }
+        return false
+    }
+
+    func attach(to version: TorrServerVersion) {
+        guard !isRunning else { return }
+        state = .external(version)
+    }
+
+    func detach() {
+        if isExternal { state = .stopped }
+    }
+
+    // Check both loopback families without starting or stopping anyone else's process.
+    static func isPortOccupied(_ port: UInt16 = 8090) -> Bool {
+        for host in ["127.0.0.1", "::1"] {
+            var hints = addrinfo()
+            hints.ai_flags = AI_NUMERICHOST | AI_NUMERICSERV
+            hints.ai_socktype = SOCK_STREAM
+            var address: UnsafeMutablePointer<addrinfo>?
+            guard getaddrinfo(host, String(port), &hints, &address) == 0, let address else { continue }
+            defer { freeaddrinfo(address) }
+            let info = address.pointee
+            let fd = socket(info.ai_family, info.ai_socktype, info.ai_protocol)
+            guard fd >= 0 else { continue }
+            defer { close(fd) }
+            guard bind(fd, info.ai_addr, info.ai_addrlen) == -1, errno == EADDRINUSE else { continue }
+            // A closed connection can still reserve the address in TIME_WAIT.
+            // SO_REUSEADDR would also mask live wildcard listeners on macOS.
+            guard fcntl(fd, F_SETFL, O_NONBLOCK) != -1 else { return true }
+            if connect(fd, info.ai_addr, info.ai_addrlen) == 0 { return true }
+            if errno == ECONNREFUSED { continue }
+            guard errno == EINPROGRESS else { return true }
+            var event = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
+            guard poll(&event, 1, 100) > 0 else { return true }
+            var error: Int32 = 0
+            var length = socklen_t(MemoryLayout<Int32>.size)
+            guard getsockopt(fd, SOL_SOCKET, SO_ERROR, &error, &length) == 0 else { return true }
+            if error != ECONNREFUSED { return true }
+        }
+        return false
+    }
+
+    func start(executablePath: String) throws {
+        guard !isAvailable else { return }
+        do {
+            if Self.isPortOccupied() {
+                TorrServerLocalLog.shared.record(.portCheck, error: TorrServerBackendError.portOccupied, event: .portInUse)
+                throw TorrServerBackendError.portOccupied
+            }
+            try launch(executablePath: executablePath)
+        } catch {
+            TorrServerLocalLog.shared.record(.processLaunch, error: error)
+            state = .failed(error.localizedDescription)
+            throw AppError("Не удалось запустить TorrServer: \(error.localizedDescription)")
+        }
+    }
+
+    private func launch(executablePath: String) throws {
         let expandedPath = NSString(string: executablePath)
             .expandingTildeInPath
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -41,6 +135,7 @@ final class TorrServerProcessController {
             atPath: executableURL.path,
             isDirectory: &isDirectory
         ), !isDirectory.boolValue else {
+            TorrServerLocalLog.shared.record(.executablePath, error: CocoaError(.fileNoSuchFile))
             throw AppError("Файл TorrServer не найден. Выберите его заново.")
         }
 
@@ -49,8 +144,12 @@ final class TorrServerProcessController {
         let newTask = Process()
         newTask.executableURL = executableURL
         newTask.currentDirectoryURL = try serverDataDirectoryURL()
-        newTask.standardOutput = FileHandle.nullDevice
-        newTask.standardError = FileHandle.nullDevice
+        let stdout = Pipe()
+        let stderr = Pipe()
+        newTask.standardOutput = stdout
+        newTask.standardError = stderr
+        TorrServerLocalLog.shared.capture(stdout, stage: .processStdout)
+        TorrServerLocalLog.shared.capture(stderr, stage: .processStderr)
         newTask.terminationHandler = { [weak self] finishedTask in
             DispatchQueue.main.async {
                 self?.handleTermination(finishedTask)
@@ -59,13 +158,14 @@ final class TorrServerProcessController {
 
         do {
             try newTask.run()
-            task = newTask
-            state = .running(pid: newTask.processIdentifier)
         } catch {
-            task = nil
-            state = .failed(error.localizedDescription)
-            throw AppError("Не удалось запустить TorrServer: \(error.localizedDescription)")
+            stdout.fileHandleForReading.readabilityHandler = nil
+            stderr.fileHandleForReading.readabilityHandler = nil
+            throw error
         }
+        task = newTask
+        TorrServerLocalLog.shared.record(.processLaunch, event: .started)
+        state = .running(pid: newTask.processIdentifier)
     }
 
     func stop(completion: (() -> Void)? = nil) {
@@ -115,8 +215,11 @@ final class TorrServerProcessController {
         }
 
         if wasStopping || finishedTask.terminationStatus == 0 {
+            TorrServerLocalLog.shared.record(.processExit, event: .stopped)
             state = .stopped
         } else {
+            let error = NSError(domain: "TorrServe.Backend", code: Int(finishedTask.terminationStatus))
+            TorrServerLocalLog.shared.record(.processExit, error: error)
             state = .failed("Процесс завершился с кодом \(finishedTask.terminationStatus)")
         }
         finishStopCompletions()

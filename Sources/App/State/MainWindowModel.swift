@@ -93,6 +93,7 @@ final class MainWindowModel: ObservableObject {
 
     @Published var canStart = false
     @Published var canStop = false
+    var isServerAvailable: Bool { statusKind == .running }
     @Published var canBrowse = true
     @Published var canDownload = true
     @Published var canOpenWeb = true

@@ -33,13 +33,21 @@ final class TorrServerSpeedMonitor {
         var request = URLRequest(url: statURL)
         request.timeoutInterval = 1.5
 
-        URLSession.shared.dataTask(with: request) { [weak self] data, _, _ in
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
             guard let self else { return }
 
             let now = Date()
-            let bytes = data
+            let status = (response as? HTTPURLResponse)?.statusCode
+            let bytes = (status == 200 ? data : nil)
                 .flatMap { String(data: $0, encoding: .utf8) }
                 .flatMap(Self.extractReadDataBytes)
+            if let error {
+                TorrServerLocalLog.shared.record(.http, endpoint: .stat, status: status, error: error)
+            } else if status != 200 {
+                TorrServerLocalLog.shared.record(
+                    .http, endpoint: .stat, status: status, error: TorrServerBackendError.invalidHTTPResponse
+                )
+            }
 
             DispatchQueue.main.async {
                 self.isRequestInFlight = false

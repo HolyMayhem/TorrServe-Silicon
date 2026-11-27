@@ -30,7 +30,10 @@ SWIFT_LINKER_PLATFORM_FLAGS=(
   -Xlinker "$MACOS_SDK_VERSION"
 )
 TORRSERVER_ASSET_NAME="TorrServer-darwin-arm64"
-TORRSERVER_DOWNLOAD_URL="https://github.com/YouROK/TorrServer/releases/latest/download/$TORRSERVER_ASSET_NAME"
+# The native client uses the MatriX API. Upstream "latest" can be Silo.
+TORRSERVER_RELEASE="MatriX.147.1"
+TORRSERVER_SHA256="37f4de5158f2d1b68293b5d8bb3277da06bc3e85f1a019fa79a2941a5a8a1c8d"
+TORRSERVER_DOWNLOAD_URL="https://github.com/YouROK/TorrServer/releases/download/$TORRSERVER_RELEASE/$TORRSERVER_ASSET_NAME"
 TORRSERVER_CACHE_DIR="$GENERATED_DIR/TorrServer"
 TORRSERVER_CACHE_PATH="$TORRSERVER_CACHE_DIR/$TORRSERVER_ASSET_NAME"
 SIGNING_DIR="$(mktemp -d /tmp/torrserver-app-sign.XXXXXX)"
@@ -87,32 +90,29 @@ if [[ -n "${TORRSERVER_EXECUTABLE:-}" ]]; then
     echo "TORRSERVER_EXECUTABLE does not point to a file: $TORRSERVER_EXECUTABLE" >&2
     exit 1
   fi
-  cp "$TORRSERVER_EXECUTABLE" "$TORRSERVER_CACHE_PATH"
+  TORRSERVER_INPUT="$TORRSERVER_EXECUTABLE"
 else
-  TORRSERVER_TEMP_PATH="$TORRSERVER_CACHE_PATH.download"
-  rm -f "$TORRSERVER_TEMP_PATH"
-  if curl \
-    --fail \
-    --location \
-    --silent \
-    --show-error \
-    --retry 3 \
-    --output "$TORRSERVER_TEMP_PATH" \
-    "$TORRSERVER_DOWNLOAD_URL"; then
+  TORRSERVER_INPUT="$TORRSERVER_CACHE_PATH"
+  if ! printf '%s  %s\n' "$TORRSERVER_SHA256" "$TORRSERVER_CACHE_PATH" | shasum -a 256 --check --status 2>/dev/null; then
+    TORRSERVER_TEMP_PATH="$SIGNING_DIR/$TORRSERVER_ASSET_NAME.download"
+    curl --fail --location --silent --show-error --retry 3 \
+      --output "$TORRSERVER_TEMP_PATH" "$TORRSERVER_DOWNLOAD_URL"
+    printf '%s  %s\n' "$TORRSERVER_SHA256" "$TORRSERVER_TEMP_PATH" | shasum -a 256 --check --status
     mv "$TORRSERVER_TEMP_PATH" "$TORRSERVER_CACHE_PATH"
-  elif [[ ! -f "$TORRSERVER_CACHE_PATH" ]]; then
-    echo "Could not download the bundled TorrServer executable." >&2
-    exit 1
-  else
-    echo "Warning: using the cached TorrServer executable." >&2
   fi
 fi
 
-if ! file "$TORRSERVER_CACHE_PATH" | grep -Eq 'Mach-O.*arm64'; then
+if ! file "$TORRSERVER_INPUT" | grep -Eq 'Mach-O.*arm64'; then
   echo "The bundled TorrServer executable is not a macOS arm64 binary." >&2
   exit 1
 fi
-chmod 755 "$TORRSERVER_CACHE_PATH"
+TORRSERVER_STAGING_PATH="$SIGNING_DIR/$TORRSERVER_ASSET_NAME"
+cp "$TORRSERVER_INPUT" "$TORRSERVER_STAGING_PATH"
+chmod 755 "$TORRSERVER_STAGING_PATH"
+if ! "$TORRSERVER_STAGING_PATH" --version 2>&1 | grep -Eq '^TorrServer MatriX\.[0-9]+(\.[0-9]+)*$'; then
+  echo "The bundled TorrServer executable must support the MatriX API." >&2
+  exit 1
+fi
 
 DEVELOPER_DIR="$XCODE_DEVELOPER_DIR" "$ACTOOL" \
   --compile "$COMPILED_ICON_DIR" \
@@ -138,7 +138,7 @@ if [[ -d "$PROJECT_DIR/Resources/ThirdPartyLicenses" ]]; then
 fi
 cp "$COMPILED_ICON_DIR/AppIcon.icns" "$RESOURCES_DIR/AppIcon.icns"
 cp "$COMPILED_ICON_DIR/Assets.car" "$RESOURCES_DIR/Assets.car"
-cp "$TORRSERVER_CACHE_PATH" "$RESOURCES_DIR/$TORRSERVER_ASSET_NAME"
+cp "$TORRSERVER_STAGING_PATH" "$RESOURCES_DIR/$TORRSERVER_ASSET_NAME"
 ditto --norsrc "$SPARKLE_FRAMEWORK_PATH" "$FRAMEWORKS_DIR/Sparkle.framework"
 chmod 755 "$RESOURCES_DIR/$TORRSERVER_ASSET_NAME"
 

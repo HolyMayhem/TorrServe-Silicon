@@ -2,17 +2,6 @@ import CryptoKit
 import Foundation
 
 final class TorrServerDownloader {
-    private struct Release: Decodable {
-        struct Asset: Decodable {
-            let name: String
-            let browser_download_url: URL
-            let size: Int64
-            let digest: String?
-        }
-        let tag_name: String
-        let assets: [Asset]
-    }
-
     private let latestReleaseURL: URL
     private let session: URLSession
     private let destinationDirectory: URL?
@@ -21,7 +10,7 @@ final class TorrServerDownloader {
 
     init(
         session: URLSession = .shared,
-        latestReleaseURL: URL = URL(string: "https://api.github.com/repos/YouROK/TorrServer/releases/latest")!,
+        latestReleaseURL: URL = TorrServerReleaseChecker.latestReleaseURL,
         destinationDirectory: URL? = nil,
         validateVersion: @escaping (URL, TorrServerVersion) async throws -> Void = TorrServerDownloader.validateVersion
     ) {
@@ -35,7 +24,7 @@ final class TorrServerDownloader {
         onProgress: @escaping (Double) -> Void = { _ in },
         completion: @escaping (Result<URL, Error>) -> Void
     ) {
-        downloadRelease(at: latestReleaseURL, expectedTag: nil, onProgress: onProgress, completion: completion)
+        downloadRelease(expectedTag: nil, onProgress: onProgress, completion: completion)
     }
 
     func downloadDarwinArm64(
@@ -43,53 +32,52 @@ final class TorrServerDownloader {
         onProgress: @escaping (Double) -> Void = { _ in },
         completion: @escaping (Result<URL, Error>) -> Void
     ) {
-        let releaseURL = URL(string: "https://api.github.com/repos/YouROK/TorrServer/releases/tags")!
-            .appendingPathComponent(releaseTag)
-        downloadRelease(at: releaseURL, expectedTag: releaseTag, onProgress: onProgress, completion: completion)
+        downloadRelease(expectedTag: releaseTag, onProgress: onProgress, completion: completion)
     }
 
     private func downloadRelease(
-        at url: URL,
         expectedTag: String?,
         onProgress: @escaping (Double) -> Void,
         completion: @escaping (Result<URL, Error>) -> Void
     ) {
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 20
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        session.dataTask(with: request) { data, response, error in
+        Task {
             do {
-                if let error { throw error }
-                try Self.validateHTTPResponse(response)
-                guard let data else { throw AppError("GitHub не вернул данные релиза.") }
-                let release = try JSONDecoder().decode(Release.self, from: data)
-                if let expectedTag, release.tag_name != expectedTag {
-                    throw AppError("GitHub вернул другую версию TorrServer. Исполняемый файл не изменён.")
+                let release: TorrServerReleaseChecker.GitHubRelease
+                if let expectedTag {
+                    release = try await TorrServerReleaseChecker.fetchTaggedRelease(expectedTag, session: session)
+                } else {
+                    release = try await TorrServerReleaseChecker.fetchCompatibleRelease(
+                        session: session, latestURL: latestReleaseURL
+                    )
                 }
-                guard let version = TorrServerVersion(release.tag_name),
-                      let asset = release.assets.first(where: { $0.name == torrServerExecutableName }),
-                      asset.size > 32 else {
+                guard let version = release.matrixVersion, let asset = release.armAsset,
+                      let assetURL = asset.browserDownloadURL, assetURL.scheme == "https" else {
+                    TorrServerLocalLog.shared.record(.releaseSelection, error: TorrServerBackendError.missingAsset)
                     throw AppError("В релизе не найден корректный файл TorrServer для Apple Silicon.")
                 }
-                self.downloadAsset(asset, version: version, onProgress: onProgress, completion: completion)
+                downloadAsset(asset, from: assetURL, version: version, onProgress: onProgress, completion: completion)
             } catch {
-                self.finishDownload(.failure(error), completion: completion)
+                finishDownload(.failure(error), completion: completion)
             }
-        }.resume()
+        }
     }
 
     private func downloadAsset(
-        _ asset: Release.Asset,
+        _ asset: TorrServerReleaseChecker.GitHubRelease.Asset,
+        from assetURL: URL,
         version: TorrServerVersion,
         onProgress: @escaping (Double) -> Void,
         completion: @escaping (Result<URL, Error>) -> Void
     ) {
-        let task = session.downloadTask(with: asset.browser_download_url) { temporaryURL, response, error in
+        let task = session.downloadTask(with: assetURL) { temporaryURL, response, error in
             var stagingDirectory: URL?
+            let status = (response as? HTTPURLResponse)?.statusCode
+            var stage: TorrServerLocalLog.Stage = .assetDownload
             do {
                 if let error { throw error }
                 try Self.validateHTTPResponse(response)
                 guard let temporaryURL else { throw AppError("Загрузка завершилась без файла.") }
+                stage = .assetInstall
 
                 // Each version gets its own directory. Never overwrite the executable
                 // that may still be serving the current playback session.
@@ -99,20 +87,26 @@ final class TorrServerDownloader {
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
                 let stagedFile = destination.appendingPathExtension("download")
                 try FileManager.default.moveItem(at: temporaryURL, to: stagedFile)
-                try Self.validateExecutable(at: stagedFile, expectedSize: asset.size, digest: asset.digest)
+                try Self.validateExecutable(at: stagedFile, expectedSize: asset.size, digest: asset.digest, status: status)
                 try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: stagedFile.path)
 
                 Task {
+                    var stage: TorrServerLocalLog.Stage = .assetVersion
                     do {
                         try await self.validateVersion(stagedFile, version)
+                        stage = .assetInstall
                         try FileManager.default.moveItem(at: stagedFile, to: destination)
                         self.finishDownload(.success(destination), completion: completion)
                     } catch {
+                        TorrServerLocalLog.shared.record(stage, status: status, error: error)
                         try? FileManager.default.removeItem(at: destination.deletingLastPathComponent())
                         self.finishDownload(.failure(error), completion: completion)
                     }
                 }
             } catch {
+                if stage != .assetInstall || !(error is TorrServerBackendError) {
+                    TorrServerLocalLog.shared.record(stage, status: status, error: error)
+                }
                 if let stagingDirectory { try? FileManager.default.removeItem(at: stagingDirectory) }
                 self.finishDownload(.failure(error), completion: completion)
             }
@@ -133,26 +127,33 @@ final class TorrServerDownloader {
         }
     }
 
-    static func validateExecutable(at url: URL, expectedSize: Int64, digest: String? = nil) throws {
+    static func validateExecutable(
+        at url: URL, expectedSize: Int64, digest: String? = nil, status: Int? = nil
+    ) throws {
         let data = try Data(contentsOf: url, options: .mappedIfSafe)
-        guard Int64(data.count) == expectedSize, data.count >= 32,
-              Array(data.prefix(4)) == [0xcf, 0xfa, 0xed, 0xfe],
+        guard Int64(data.count) == expectedSize, data.count >= 32 else {
+            TorrServerLocalLog.shared.record(.assetSize, status: status, error: TorrServerBackendError.invalidSize)
+            throw TorrServerBackendError.invalidSize
+        }
+        if let digest {
+            let actual = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+            guard digest.lowercased() == "sha256:\(actual)" else {
+                TorrServerLocalLog.shared.record(.assetChecksum, status: status, error: TorrServerBackendError.invalidChecksum)
+                throw TorrServerBackendError.invalidChecksum
+            }
+        }
+        guard Array(data.prefix(4)) == [0xcf, 0xfa, 0xed, 0xfe],
               Array(data[4..<8]) == [0x0c, 0x00, 0x00, 0x01],
               Array(data[12..<16]) == [0x02, 0x00, 0x00, 0x00] else {
-            throw AppError("Скачанный файл не является полной исполняемой сборкой TorrServer для Apple Silicon.")
-        }
-        if let digest, digest.lowercased().hasPrefix("sha256:") {
-            let actual = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-            guard actual == digest.dropFirst("sha256:".count).lowercased() else {
-                throw AppError("Контрольная сумма скачанного TorrServer не совпадает с релизом.")
-            }
+            TorrServerLocalLog.shared.record(.assetArchitecture, status: status, error: TorrServerBackendError.invalidArchitecture)
+            throw TorrServerBackendError.invalidArchitecture
         }
     }
 
     private static func validateVersion(at url: URL, expected: TorrServerVersion) async throws {
-        let version = await TorrServerReleaseChecker().installedVersion(executablePath: url.path)
+        let version = try await TorrServerReleaseChecker.readInstalledVersion(at: url.path)
         guard version == expected else {
-            throw AppError("Скачанный TorrServer не прошёл проверку версии. Предыдущая версия сохранена.")
+            throw TorrServerBackendError.versionMismatch
         }
     }
 

@@ -7,54 +7,6 @@ struct TorrServerAvailableUpdate: Equatable {
     let releaseURL: URL
 }
 
-struct TorrServerVersion: Comparable {
-    let displayName: String
-    private let components: [Int]
-
-    init?(_ text: String) {
-        let pattern = #"(?i)matrix\.([0-9]+(?:\.[0-9]+)*)"#
-        guard let expression = try? NSRegularExpression(pattern: pattern),
-              let match = expression.firstMatch(
-                in: text,
-                range: NSRange(text.startIndex..., in: text)
-              ),
-              let versionRange = Range(match.range(at: 1), in: text) else {
-            return nil
-        }
-
-        let versionNumber = String(text[versionRange])
-        let parsedComponents = versionNumber.split(separator: ".").compactMap {
-            Int($0)
-        }
-        guard !parsedComponents.isEmpty else { return nil }
-
-        displayName = "MatriX.\(versionNumber)"
-        components = parsedComponents
-    }
-
-    static func == (lhs: TorrServerVersion, rhs: TorrServerVersion) -> Bool {
-        compare(lhs.components, rhs.components) == .orderedSame
-    }
-
-    static func < (lhs: TorrServerVersion, rhs: TorrServerVersion) -> Bool {
-        compare(lhs.components, rhs.components) == .orderedAscending
-    }
-
-    private static func compare(
-        _ lhs: [Int],
-        _ rhs: [Int]
-    ) -> ComparisonResult {
-        let count = max(lhs.count, rhs.count)
-        for index in 0..<count {
-            let left = index < lhs.count ? lhs[index] : 0
-            let right = index < rhs.count ? rhs[index] : 0
-            if left < right { return .orderedAscending }
-            if left > right { return .orderedDescending }
-        }
-        return .orderedSame
-    }
-}
-
 struct TorrServerDowngradeRelease: Equatable, Identifiable {
     let tagName: String
     let version: String
@@ -62,17 +14,33 @@ struct TorrServerDowngradeRelease: Equatable, Identifiable {
 }
 
 final class TorrServerReleaseChecker {
-    private struct GitHubRelease: Decodable {
+    struct GitHubRelease: Decodable {
         struct Asset: Decodable {
             let name: String
             let size: Int64
+            let browserDownloadURL: URL?
+            let digest: String?
+
+            enum CodingKeys: String, CodingKey {
+                case name, size, digest
+                case browserDownloadURL = "browser_download_url"
+            }
         }
 
         let tagName: String
-        let htmlURL: URL
+        let htmlURL: URL?
         let assets: [Asset]
-        let draft: Bool
-        let prerelease: Bool
+        let draft: Bool?
+        let prerelease: Bool?
+
+        var matrixVersion: TorrServerVersion? {
+            guard draft != true, prerelease != true else { return nil }
+            return TorrServerVersion(releaseTag: tagName)
+        }
+
+        var armAsset: Asset? {
+            assets.first { $0.name == torrServerExecutableName && $0.size > 32 }
+        }
 
         enum CodingKeys: String, CodingKey {
             case tagName = "tag_name"
@@ -81,9 +49,11 @@ final class TorrServerReleaseChecker {
         }
     }
 
-    private let latestReleaseURL = URL(
+    static let latestReleaseURL = URL(
         string: "https://api.github.com/repos/YouROK/TorrServer/releases/latest"
     )!
+    // GitHub's latest release can point to Silo, whose API is incompatible with MatriX.
+    static let compatibleReleaseTag = "MatriX.147.1"
     private let session: URLSession
 
     init(session: URLSession = .shared) {
@@ -91,15 +61,14 @@ final class TorrServerReleaseChecker {
     }
 
     func installedVersion(executablePath: String) async -> TorrServerVersion? {
-        await Self.installedVersion(at: executablePath)
+        try? await Self.readInstalledVersion(at: executablePath)
     }
 
     func availableUpdate(
         installedVersion installed: TorrServerVersion
     ) async throws -> TorrServerAvailableUpdate? {
-        let release = try await fetchLatestRelease()
-        guard release.assets.contains(where: { $0.name == torrServerExecutableName }),
-              let latest = TorrServerVersion(release.tagName),
+        let release = try await Self.fetchCompatibleRelease(session: session)
+        guard let latest = release.matrixVersion, let url = release.htmlURL,
               installed < latest else {
             return nil
         }
@@ -107,7 +76,7 @@ final class TorrServerReleaseChecker {
         return TorrServerAvailableUpdate(
             installedVersion: installed.displayName,
             latestVersion: latest.displayName,
-            releaseURL: release.htmlURL
+            releaseURL: url
         )
     }
 
@@ -139,9 +108,8 @@ final class TorrServerReleaseChecker {
         let releases = try JSONDecoder().decode([GitHubRelease].self, from: data)
         var seen = Set<String>()
         return releases.compactMap { release -> TorrServerDowngradeRelease? in
-            guard !release.draft, !release.prerelease,
-                  let version = TorrServerVersion(release.tagName), version < installed,
-                  release.assets.contains(where: { $0.name == torrServerExecutableName && $0.size > 32 }),
+            guard let version = release.matrixVersion, version < installed,
+                  release.armAsset != nil,
                   seen.insert(version.displayName).inserted else { return nil }
             return TorrServerDowngradeRelease(tagName: release.tagName, version: version.displayName)
         }.sorted {
@@ -150,9 +118,34 @@ final class TorrServerReleaseChecker {
         }
     }
 
-    private func fetchLatestRelease() async throws -> GitHubRelease {
+    static func url(forTag tag: String) -> URL {
+        URL(string: "https://api.github.com/repos/YouROK/TorrServer/releases/tags")!
+            .appendingPathComponent(tag)
+    }
+
+    static func fetchCompatibleRelease(
+        session: URLSession,
+        latestURL: URL = latestReleaseURL
+    ) async throws -> GitHubRelease {
+        let release = try await fetchRelease(at: latestURL, session: session)
+        if release.matrixVersion != nil, release.armAsset?.browserDownloadURL != nil { return release }
+
+        TorrServerLocalLog.shared.record(.releaseSelection, event: .compatibleReleaseFallback)
+        return try await fetchTaggedRelease(compatibleReleaseTag, session: session)
+    }
+
+    static func fetchTaggedRelease(_ tag: String, session: URLSession) async throws -> GitHubRelease {
+        let release = try await fetchRelease(at: url(forTag: tag), session: session)
+        guard release.tagName == tag, release.matrixVersion != nil else {
+            TorrServerLocalLog.shared.record(.releaseSelection, error: TorrServerBackendError.invalidRelease)
+            throw AppError("GitHub не вернул совместимый релиз TorrServer MatriX.")
+        }
+        return release
+    }
+
+    private static func fetchRelease(at url: URL, session: URLSession) async throws -> GitHubRelease {
         var request = URLRequest(
-            url: latestReleaseURL,
+            url: url,
             cachePolicy: .reloadRevalidatingCacheData,
             timeoutInterval: 12
         )
@@ -160,21 +153,30 @@ final class TorrServerReleaseChecker {
         request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
         request.setValue("TorrServerManager", forHTTPHeaderField: "User-Agent")
 
-        let (data, response) = try await session.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 else {
-            throw AppError("GitHub не вернул последний релиз TorrServer.")
+        var status: Int?
+        do {
+            let (data, response) = try await session.data(for: request)
+            status = (response as? HTTPURLResponse)?.statusCode
+            guard status == 200 else {
+                throw TorrServerBackendError.invalidHTTPResponse
+            }
+            return try JSONDecoder().decode(GitHubRelease.self, from: data)
+        } catch {
+            TorrServerLocalLog.shared.record(.releaseMetadata, status: status, error: error)
+            if let status, status != 200 {
+                throw AppError("GitHub не вернул релиз TorrServer (HTTP \(status)).")
+            }
+            throw error
         }
-        return try JSONDecoder().decode(GitHubRelease.self, from: data)
     }
 
-    private static func installedVersion(at executablePath: String) async -> TorrServerVersion? {
-        await Task.detached(priority: .utility) {
+    static func readInstalledVersion(at executablePath: String) async throws -> TorrServerVersion {
+        try await Task.detached(priority: .utility) {
             let expandedPath = NSString(string: executablePath)
                 .expandingTildeInPath
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             guard FileManager.default.isExecutableFile(atPath: expandedPath) else {
-                return nil
+                throw CocoaError(.fileReadNoPermission)
             }
 
             let process = Process()
@@ -184,28 +186,38 @@ final class TorrServerReleaseChecker {
             process.standardOutput = output
             process.standardError = output
 
-            do {
-                try process.run()
-            } catch {
-                return nil
+            let fd = output.fileHandleForReading.fileDescriptor
+            guard fcntl(fd, F_SETFL, O_NONBLOCK) != -1 else {
+                throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
             }
+            try process.run()
 
+            var data = Data()
+            var buffer = [UInt8](repeating: 0, count: 4096)
             let deadline = Date().addingTimeInterval(2)
-            while process.isRunning, Date() < deadline {
-                usleep(50_000)
+            while Date() < deadline, data.count < buffer.count {
+                let count = Darwin.read(fd, &buffer, buffer.count - data.count)
+                if count > 0 {
+                    data.append(contentsOf: buffer.prefix(count))
+                } else if !process.isRunning {
+                    break
+                } else {
+                    usleep(20_000)
+                }
             }
-
             if process.isRunning {
                 process.terminate()
                 usleep(200_000)
-            }
-            if process.isRunning {
-                Darwin.kill(process.processIdentifier, SIGKILL)
+                if process.isRunning { Darwin.kill(process.processIdentifier, SIGKILL) }
+                throw POSIXError(.ETIMEDOUT)
             }
 
-            let data = output.fileHandleForReading.readDataToEndOfFile()
-            let text = String(data: data, encoding: .utf8) ?? ""
-            return TorrServerVersion(text)
+            guard process.terminationStatus == 0,
+                  let text = String(data: data, encoding: .utf8),
+                  let version = TorrServerVersion(text) else {
+                throw TorrServerBackendError.versionMismatch
+            }
+            return version
         }.value
     }
 }
